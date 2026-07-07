@@ -479,6 +479,13 @@ function clearStorage() {
   }
 }
 
+function clearAllData() {
+  if (confirm("⚠️ УВАГА! Це видалить абсолютно всі дані:\n\n• Усі завдання та вкладки\n• API ключ Gemini\n• Google акаунт\n• Базу виконавців\n• Дані Штату\n• Оперативну область\n• Топ-сайти\n• Тему, шпалери, налаштування\n• Пароль блокування екрана\n\nПісля скидання сторінка перезавантажиться.\n\nПРОДОВЖИТИ?")) {
+    localStorage.clear();
+    window.location.reload();
+  }
+}
+
 function clearTasks() {
   const ws = getActiveWorkspace();
   if (!ws) {
@@ -500,7 +507,7 @@ function clearTasks() {
 
 // ---- Google OAuth ----
 function getStoredClientId() {
-  return localStorage.getItem(CLIENT_ID_KEY) || '207818480419-i6a9cdvenaiqstq67724qdjso47qn4nr.apps.googleusercontent.com';
+  return localStorage.getItem(CLIENT_ID_KEY) || '';
 }
 
 function saveClientId(clientId) {
@@ -561,6 +568,10 @@ function initGisClient() {
     return;
   }
   const clientId = getStoredClientId();
+  if (!clientId) {
+    console.log('[Auth] No Client ID configured — skipping GIS init');
+    return;
+  }
   gisTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
     scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
@@ -2129,7 +2140,6 @@ function startTimers() {
 
 // ---- Календар ----
 let calYear, calMonth;
-let modalCalYear, modalCalMonth; // окремий стан для календаря в модалці
 
 function updateCalendarVisibility() {
   const section = document.getElementById('calendar-section');
@@ -2309,93 +2319,6 @@ function showDayEvents(dateStr) {
   listEl.classList.add('active');
 }
 
-// ---- Календар у модалці додавання ----
-function renderAddModalCalendar() {
-  const grid = document.getElementById('modal-calendar-grid');
-  const title = document.getElementById('modal-cal-title');
-  if (!grid || !title) return;
-
-  const now = new Date();
-  if (modalCalYear === undefined) { modalCalYear = now.getFullYear(); modalCalMonth = now.getMonth(); }
-
-  const monthNames = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
-                      'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
-  title.textContent = `${monthNames[modalCalMonth]} ${modalCalYear}`;
-
-  const dayNames = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
-  let html = dayNames.map(d => `<div class="cal-dow">${d}</div>`).join('');
-
-  const firstDay = new Date(modalCalYear, modalCalMonth, 1);
-  let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
-
-  const daysInMonth = new Date(modalCalYear, modalCalMonth + 1, 0).getDate();
-  const daysInPrev = new Date(modalCalYear, modalCalMonth, 0).getDate();
-
-  // Збираємо дедлайни для підсвітки
-  const deadlineMap = new Map();
-  const urgentSet = new Set();
-  const nowDate = new Date();
-  const allItems = getActiveItems();
-  allItems.filter(i => !i.done).forEach(item => {
-    const key = item.deadline;
-    deadlineMap.set(key, (deadlineMap.get(key) || 0) + 1);
-    const end = getDeadlineEnd(item.deadline, item.deadlineTime);
-    if (end < nowDate || (end - nowDate) < 86400000) urgentSet.add(key);
-  });
-
-  const todayStr = now.toISOString().split('T')[0];
-  const selectedDate = document.getElementById('quick-task-date').value;
-
-  // Попередній місяць
-  for (let i = startDow - 1; i >= 0; i--) {
-    const d = daysInPrev - i;
-    html += `<div class="cal-cell other-month">${d}</div>`;
-  }
-
-  // Поточний місяць
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${modalCalYear}-${String(modalCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    let cls = 'cal-cell';
-    if (dateStr === todayStr) cls += ' today';
-    if (dateStr === selectedDate) cls += ' selected';
-    const count = deadlineMap.get(dateStr) || 0;
-    let barHtml = '';
-    if (count > 0) {
-      cls += ' has-events';
-      if (urgentSet.has(dateStr)) barHtml = '<span class="dot urgent"></span>';
-      else barHtml = '<span class="dot normal"></span>';
-    }
-    html += `<div class="${cls}" data-date="${dateStr}" onclick="pickModalDate('${dateStr}')">${d}${barHtml}</div>`;
-  }
-
-  // Наступний місяць
-  const totalCells = startDow + daysInMonth;
-  const remaining = totalCells % 7 ? 7 - (totalCells % 7) : 0;
-  for (let d = 1; d <= remaining; d++) {
-    html += `<div class="cal-cell other-month">${d}</div>`;
-  }
-
-  grid.innerHTML = html;
-}
-
-function pickModalDate(dateStr) {
-  document.getElementById('quick-task-date').value = dateStr;
-  renderAddModalCalendar(); // перемалювати щоб показати вибір
-
-  // Підсвітка вибраної комірки
-  setTimeout(() => {
-    const grid = document.getElementById('modal-calendar-grid');
-    if (grid) {
-      grid.querySelectorAll('.cal-cell.selected').forEach(c => c.classList.remove('selected'));
-      const cell = grid.querySelector(`.cal-cell[data-date="${dateStr}"]`);
-      if (cell) cell.classList.add('selected');
-    }
-  }, 10);
-
-  // Фокус на поле опису
-  document.getElementById('quick-task-text').focus();
-}
-
 function quickAddTask() {
   const text = document.getElementById('quick-task-text').value.trim();
   const date = document.getElementById('quick-task-date').value;
@@ -2510,11 +2433,6 @@ function openModal() {
   document.getElementById('quick-task-assignee').value = '';
   document.getElementById('quick-task-repeat').value = 'none';
 
-  // Скинути календар на поточний місяць
-  const now = new Date();
-  modalCalYear = now.getFullYear();
-  modalCalMonth = now.getMonth();
-
   // Скинути перемикач ШІ на дефолт (вимкнено = швидке додавання)
   const aiToggle = document.getElementById('ai-mode-toggle');
   if (aiToggle) {
@@ -2524,9 +2442,6 @@ function openModal() {
 
   document.getElementById('addModal').classList.add('active');
   updateAddButton();
-
-  // Рендерим календар після показу модалки
-  setTimeout(() => renderAddModalCalendar(), 50);
 }
 
 function applyAiModeVisibility() {
@@ -4830,6 +4745,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('api-key').addEventListener('input', saveApiKey);
   document.getElementById('clear-storage-btn').addEventListener('click', clearStorage);
   document.getElementById('clear-tasks-btn').addEventListener('click', clearTasks);
+  const clearAllBtn = document.getElementById('clear-all-btn');
+  if (clearAllBtn) clearAllBtn.addEventListener('click', clearAllData);
   document.getElementById('modal-close-btn').addEventListener('click', closeModal);
   document.getElementById('settings-btn').addEventListener('click', openSettings);
   document.getElementById('settings-close-btn').addEventListener('click', closeSettings);
@@ -4988,22 +4905,6 @@ document.addEventListener('DOMContentLoaded', () => {
       calMonth++;
       if (calMonth > 11) { calMonth = 0; calYear++; }
       renderCalendar();
-    });
-  }
-
-  // Modal calendar navigation
-  const modalCalPrev = document.getElementById('modal-cal-prev');
-  const modalCalNext = document.getElementById('modal-cal-next');
-  if (modalCalPrev && modalCalNext) {
-    modalCalPrev.addEventListener('click', () => {
-      modalCalMonth--;
-      if (modalCalMonth < 0) { modalCalMonth = 11; modalCalYear--; }
-      renderAddModalCalendar();
-    });
-    modalCalNext.addEventListener('click', () => {
-      modalCalMonth++;
-      if (modalCalMonth > 11) { modalCalMonth = 0; modalCalYear++; }
-      renderAddModalCalendar();
     });
   }
 

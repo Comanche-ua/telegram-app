@@ -1454,23 +1454,6 @@
   .ai-toggle-label { font-size: 13px; font-weight: 500; color: var(--text2); }
   .ai-toggle-row input:checked ~ .ai-toggle-label { color: var(--text); font-weight: 600; }
 
-  .add-modal-columns {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    gap: 20px;
-  }
-  .add-col-right {
-    border-left: 1px solid var(--border);
-    padding-left: 20px;
-  }
-  .add-col-right .cal-grid { gap: 1px; }
-  .add-col-right .cal-cell { font-size: 10px; padding: 3px 0; }
-  .add-col-right .cal-dow { font-size: 8px; }
-  @media (max-width: 750px) {
-    .add-modal-columns { grid-template-columns: 1fr; }
-    .add-col-right { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 16px; }
-    .modal-content { max-width: 95vw !important; }
-  }
 
 
   /* Visual refresh: tactile controls and custom glyph language */
@@ -2762,14 +2745,6 @@
     font-size: 14px;
   }
 
-  /* Add modal: single column */
-  .add-modal-columns { grid-template-columns: 1fr !important; }
-  .add-col-right {
-    border-left: none !important;
-    padding-left: 0 !important;
-    border-top: 1px solid var(--border);
-    padding-top: 14px;
-  }
   #addModal .modal-content { max-width: 96% !important; }
   .workspace-select-row {
     flex-direction: column;
@@ -3105,7 +3080,7 @@
 
 
 <div class="modal-overlay" id="addModal">
-  <div class="modal-content" style="max-width: 850px;">
+  <div class="modal-content" style="max-width: 520px;">
     <div class="modal-header">
       <div class="modal-title">Додати завдання</div>
       <button class="modal-close" id="modal-close-btn" aria-label="Закрити"></button>
@@ -3122,15 +3097,13 @@
       <span class="ai-toggle-label">🤖 Розпізнавати текст за допомогою ШІ (декілька завдань зі списку одразу)</span>
     </label>
 
-    <div class="add-modal-columns">
-      <div class="add-col-left">
-        <div id="quick-mode-fields">
-          <div class="input-box" style="margin-bottom: 0; padding: 0; border: none; background: transparent;">
-            <label>⚡ Швидке додавання завдання</label>
-            <input type="text" id="quick-task-text" placeholder="Опис завдання..." style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px 12px; border-radius:var(--radius-sm); outline:none; font-family:'Inter',sans-serif; font-size:14px; margin-bottom:10px;">
-            <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap: wrap;">
-              <div style="flex:1; min-width:130px;">
-                <label style="font-size: 12px; color: var(--text2); display:block; margin-bottom: 4px;">📅 Дедлайн (або виберіть у календарі):</label>
+    <div id="quick-mode-fields">
+      <div class="input-box" style="margin-bottom: 0; padding: 0; border: none; background: transparent;">
+        <label>⚡ Швидке додавання завдання</label>
+        <input type="text" id="quick-task-text" placeholder="Опис завдання..." style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px 12px; border-radius:var(--radius-sm); outline:none; font-family:'Inter',sans-serif; font-size:14px; margin-bottom:10px;">
+        <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap: wrap;">
+          <div style="flex:1; min-width:130px;">
+            <label style="font-size: 12px; color: var(--text2); display:block; margin-bottom: 4px;">📅 Дедлайн:</label>
                 <input type="date" id="quick-task-date" style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px; border-radius:6px; outline:none; font-family:'Inter',sans-serif; font-size:13px;">
               </div>
               <div style="flex:0.7; min-width:100px;">
@@ -3192,21 +3165,6 @@
             </div>
           </div>
         </div>
-      </div>
-      
-      <div class="add-col-right">
-        <div class="quick-add-calendar">
-          <h4 style="font-size:13px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:flex; align-items:center; gap:6px;">📅 Календар</h4>
-          <div class="cal-header" style="margin-bottom: 6px;">
-            <button id="modal-cal-prev" style="background:none; border:1px solid var(--border); border-radius:20px; color:var(--text2); cursor:pointer; font-size:12px; padding:2px 8px;" aria-label="Попередній місяць"></button>
-            <span id="modal-cal-title" style="font-size:13px; font-weight:700; color:var(--text);"></span>
-            <button id="modal-cal-next" style="background:none; border:1px solid var(--border); border-radius:20px; color:var(--text2); cursor:pointer; font-size:12px; padding:2px 8px;" aria-label="Наступний місяць"></button>
-          </div>
-          <div id="modal-calendar-grid" class="cal-grid" style="margin-bottom: 8px;"></div>
-          <div style="font-size:11px; color:var(--text3); text-align:center; margin-top:6px; line-height:1.5;">Клік на дату підставляє дедлайн у форму зліва</div>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -3350,11 +3308,18 @@
           <div class="settings-section">
             <h3>🔑 Gemini API Key</h3>
             <div class="api-block" style="margin-bottom: 0; flex-wrap: wrap;">
-              <input type="password" id="api-key" placeholder="AIza..." style="flex: 1; min-width: 160px;">
+              <input type="password" id="api-key" placeholder="Вставте ключ..." style="flex: 1; min-width: 160px;">
               <span class="api-status" id="api-status">не збережено</span>
-              <button class="btn-secondary" id="clear-storage-btn" style="padding:6px 14px;">🗑 Скинути дані</button>
-              <button class="btn-secondary" id="clear-tasks-btn" style="padding:6px 14px;">Очистити завдання</button>
             </div>
+          </div>
+          <div class="settings-section">
+            <h3>🗑 Управління даними</h3>
+            <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+              <button class="btn-secondary" id="clear-tasks-btn" style="flex:1; min-width:140px;">Очистити завдання</button>
+              <button class="btn-secondary" id="clear-storage-btn" style="flex:1; min-width:140px;">Скинути завдання + ключ</button>
+            </div>
+            <button class="btn-secondary" id="clear-all-btn" style="width:100%; border-color: var(--red); color: var(--red); padding:10px 16px; font-weight:700; margin-top:4px;">⚠️ Скинути ВСІ дані (повне очищення)</button>
+            <div style="font-size:11px; color:var(--text3); margin-top:8px; line-height:1.5;">Повне очищення видаляє всі завдання, вкладки, ключі, налаштування, дані Штату, топ-сайти, тему оформлення та перезавантажує сторінку.</div>
           </div>
           <div class="settings-section">
             <h3>Резервне копіювання</h3>
