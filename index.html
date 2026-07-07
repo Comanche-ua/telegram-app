@@ -846,6 +846,92 @@
   .lock-top-sites .site-icon-wrapper { width: 44px; height: 44px; }
   .lock-top-sites .site-icon-wrapper img { width: 22px; height: 22px; }
 
+  /* Install Banner (PWA / Add to Home Screen) */
+  .install-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 500;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+    animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(12px);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .install-banner-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+    width: 42px; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--blue-bg);
+    border-radius: 10px;
+  }
+  .install-banner-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .install-banner-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .install-banner-sub {
+    font-size: 12px;
+    color: var(--text2);
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+  .install-banner-btn {
+    flex-shrink: 0;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .install-banner-btn:hover {
+    background: #1D4ED8;
+    transform: translateY(-1px);
+  }
+  .install-banner-close {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    transition: color 0.15s;
+  }
+  .install-banner-close:hover { color: var(--text); }
+  @media (max-width: 600px) {
+    .install-banner { padding: 10px 12px; gap: 8px; }
+    .install-banner-icon { font-size: 24px; width: 36px; height: 36px; border-radius: 8px; }
+    .install-banner-title { font-size: 13px; }
+    .install-banner-sub { font-size: 11px; }
+    .install-banner-btn { padding: 7px 14px; font-size: 12px; }
+  }
+
   .fab-lock {
     background: var(--surface2);
     color: var(--text2);
@@ -2921,6 +3007,17 @@
       <div class="lock-topsites-title">Часто відвідувані сайти</div>
       <div id="lock-top-sites" class="top-sites lock-top-sites"></div>
     </div>
+  </div>
+
+  <!-- Install Prompt Banner -->
+  <div class="install-banner" id="install-banner" style="display:none;">
+    <div class="install-banner-icon">📋</div>
+    <div class="install-banner-text">
+      <div class="install-banner-title" id="install-banner-title">Додайте на головний екран</div>
+      <div class="install-banner-sub" id="install-banner-sub">Для швидкого доступу до дедлайнів</div>
+    </div>
+    <button class="install-banner-btn" id="install-banner-btn">Встановити</button>
+    <button class="install-banner-close" id="install-banner-close" aria-label="Закрити">✕</button>
   </div>
 
   <div class="topbar">

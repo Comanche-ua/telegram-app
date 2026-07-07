@@ -4879,6 +4879,126 @@ document.addEventListener('DOMContentLoaded', () => {
   const shareBtnEl = document.getElementById('share-btn');
   if (shareBtnEl) shareBtnEl.addEventListener('click', shareActiveTasks);
 
+  // ===== Install / Add to Home Screen =====
+  (function initInstallPrompt() {
+    const INSTALL_DISMISSED_KEY = 'install_banner_dismissed';
+    const banner = document.getElementById('install-banner');
+    const bannerTitle = document.getElementById('install-banner-title');
+    const bannerSub = document.getElementById('install-banner-sub');
+    const bannerBtn = document.getElementById('install-banner-btn');
+    const bannerClose = document.getElementById('install-banner-close');
+    if (!banner) return;
+
+    let deferredPrompt = null;
+
+    // 1. Відловлюємо beforeinstallprompt (Android Chrome / Samsung / Edge)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      // Показуємо банер тільки якщо його ще не закривали
+      if (localStorage.getItem(INSTALL_DISMISSED_KEY)) return;
+      showInstallBanner('android');
+    });
+
+    // 2. Відловлюємо успішну установку
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      hideBanner();
+      console.log('[PWA] App installed successfully');
+    });
+
+    // 3. Визначаємо платформу і показуємо банер
+    function detectPlatform() {
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isAndroid = /Android/.test(ua);
+      const isTelegram = /Telegram/i.test(ua) || (window.Telegram && window.Telegram.WebApp);
+      return { isIOS, isAndroid, isTelegram };
+    }
+
+    function showInstallBanner(trigger) {
+      const { isIOS, isAndroid, isTelegram } = detectPlatform();
+
+      // Якщо вже показували і закрили — не турбуємо
+      if (localStorage.getItem(INSTALL_DISMISSED_KEY)) return;
+
+      if (isTelegram) {
+        // У Telegram: iOS-style інструкція для обох платформ
+        if (isIOS) {
+          bannerTitle.textContent = 'На головний екран iPhone';
+          bannerSub.textContent = 'Натисніть ⋯ → «На екрані “Дім”» або поділіться через Share';
+        } else {
+          bannerTitle.textContent = 'На головний екран';
+          bannerSub.textContent = 'Натисніть ⋮ → «Додати на головний екран» для швидкого доступу';
+        }
+        bannerBtn.textContent = 'Як це зробити?';
+        bannerBtn.onclick = () => {
+          if (isIOS) {
+            alert('📱 Як додати на головний екран iPhone:\n\n1. Натисніть кнопку «Поділитися» (квадрат зі стрілкою) внизу екрана\n2. Гортайте вниз і виберіть «На екрані “Дім”»\n3. Натисніть «Додати»\n\nПісля цього іконка зʼявиться на головному екрані!');
+          } else {
+            alert('📱 Як додати на головний екран Android:\n\n1. Натисніть ⋮ (три крапки) вгорі справа\n2. Виберіть «Додати на головний екран»\n3. Натисніть «Додати»\n\nПісля цього іконка зʼявиться на головному екрані!');
+          }
+        };
+        banner.style.display = 'flex';
+      } else if (trigger === 'android' && deferredPrompt) {
+        // Android Chrome: стандартний PWA install prompt
+        bannerTitle.textContent = 'Встановити додаток';
+        bannerSub.textContent = 'Швидкий доступ до дедлайнів без браузера';
+        bannerBtn.textContent = 'Встановити';
+        bannerBtn.onclick = async () => {
+          try {
+            await deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log('[PWA] User choice:', outcome);
+            deferredPrompt = null;
+            if (outcome === 'accepted') {
+              hideBanner();
+            }
+          } catch (e) {
+            console.warn('[PWA] Install prompt failed:', e);
+          }
+        };
+        banner.style.display = 'flex';
+      } else if (isIOS && !isTelegram) {
+        // iOS Safari: показуємо інструкцію
+        bannerTitle.textContent = 'Додайте на головний екран';
+        bannerSub.textContent = 'Натисніть кнопку «Поділитися» → «На екрані “Дім”»';
+        bannerBtn.textContent = 'Детальніше';
+        bannerBtn.onclick = () => {
+          alert('📱 Як додати на головний екран iPhone:\n\n1. Натисніть кнопку «Поділитися» (квадрат зі стрілкою) внизу екрана Safari\n2. Гортайте вниз і виберіть «На екрані “Дім”»\n3. Натисніть «Додати»\n\nПісля цього іконка зʼявиться на головному екрані!');
+        };
+        banner.style.display = 'flex';
+      }
+    }
+
+    function hideBanner() {
+      banner.style.display = 'none';
+    }
+
+    // Закриття банера
+    if (bannerClose) {
+      bannerClose.addEventListener('click', () => {
+        hideBanner();
+        localStorage.setItem(INSTALL_DISMISSED_KEY, 'true');
+      });
+    }
+
+    // Авто-показ через 3 секунди (якщо не було beforeinstallprompt)
+    setTimeout(() => {
+      if (!deferredPrompt && !localStorage.getItem(INSTALL_DISMISSED_KEY)) {
+        const { isIOS, isTelegram } = detectPlatform();
+        if (isIOS || isTelegram) {
+          showInstallBanner('auto');
+        }
+      }
+    }, 3000);
+
+    // Якщо користувач вже встановив (відкрито з PWA) — не показуємо
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      hideBanner();
+    }
+  })();
+
   // ===== Screen lock (password protect) =====
   try { initLockScreen(); } catch (e) { console.warn('LockScreen unavailable:', e); }
   const lockUnlockBtn = document.getElementById('lock-unlock-btn');
