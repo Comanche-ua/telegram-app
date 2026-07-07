@@ -1923,7 +1923,7 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const timerTextWrap = document.createElement('div');
       timerTextWrap.style = 'display:flex; flex-direction:column; align-items:flex-end;';
       const timerTextSpan = document.createElement('span');
-      timerTextSpan.id = `txt_${wsId}_${wsIdx}`;
+      timerTextSpan.id = `txt_${wsId}_${viewKey}`;
       timerTextSpan.className = `timer-text ${cls}`;
       timerTextSpan.textContent = str;
       const timerLabel = document.createElement('span');
