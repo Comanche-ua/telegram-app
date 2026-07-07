@@ -1937,7 +1937,51 @@
   .ops-progress-fill { height:100%; width:var(--value,0%); background:linear-gradient(90deg,var(--blue),var(--accent-2,#0EA5A4)); border-radius:inherit; }
   .ops-progress-value { color:var(--text3); font:800 11px/1 'JetBrains Mono',monospace; }
   @media (max-width:1100px) { .ops-shell,.ops-hero { grid-template-columns:1fr; } .ops-rail { position:static; } .ops-module-grid { grid-template-columns:1fr; } }
-  @media (max-width:760px) { .app-mode-switch { order:5; width:100%; margin-left:0; } .app-mode-btn { flex:1; } .ops-ledger { grid-template-columns:1fr 1fr; } .ops-workspace { padding:14px; } }
+  @media (max-width:600px) {
+    .app-mode-switch { order: unset; width: auto; margin-left: auto; }
+    .app-mode-btn { flex: unset; font-size: 10px; padding: 5px 7px; }
+    .ops-workspace { padding: 8px; }
+    .ops-ledger { grid-template-columns:1fr; gap:6px; }
+    .ops-ledger-cell { padding: 10px; }
+    .ops-ledger-value { font-size: 16px; }
+    .ops-title { font-size: 18px; }
+    .ops-subtitle { font-size: 12px; }
+    .ops-title-row { flex-direction: column; gap: 8px; }
+    .ops-action-row { justify-content: flex-start; }
+    .ops-kicker { font-size: 10px; }
+    /* Shtat table: горизонтальний скрол */
+    .shtat-workspace { padding: 10px; margin: 0 4px 10px; border-radius: 12px; }
+    .shtat-hero { margin-bottom: 12px; }
+    .shtat-title { font-size: 16px; }
+    .shtat-subtitle { font-size: 11px; }
+    .shtat-title-row { flex-direction: column; gap: 8px; }
+    .shtat-action-row { flex-wrap: wrap; gap: 4px; }
+    .shtat-soft-btn { font-size: 10px; padding: 6px 10px; }
+    .shtat-subnav { gap: 1px; padding: 2px; border-radius: 8px; width: 100%; overflow-x: auto; }
+    .shtat-subtab { font-size: 10px; padding: 6px 10px; }
+    .shtat-table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
+    }
+    .shtat-table { font-size: 11px; min-width: 900px; }
+    .shtat-table th { font-size: 9px; padding: 6px 4px; }
+    .shtat-table td { padding: 5px 3px; }
+    .shtat-table input { width: 48px; font-size: 11px; padding: 3px 2px; }
+    .shtat-summary-row { gap: 10px; font-size: 10px; flex-wrap: wrap; }
+    .shtat-th-unit { min-width: 130px; }
+    .shtat-pos-editor { padding: 6px 8px 10px; }
+    .shtat-pos-table { font-size: 10px; }
+    .shtat-pos-table input { width: 48px; font-size: 10px; }
+    .shtat-unit-name { font-size: 11px; }
+  }
+  @media (max-width:400px) {
+    .ops-ledger { grid-template-columns:1fr; }
+    .ops-ledger-value { font-size: 14px; }
+    .shtat-table { min-width: 800px; font-size: 10px; }
+    .shtat-workspace { padding: 6px; margin: 0 2px 6px; }
+    .shtat-soft-btn { font-size: 9px; padding: 5px 7px; }
+  }
 
 
 
@@ -2447,6 +2491,441 @@
   .shtat-del-col-btn:hover {
     color: var(--red);
   }
+/* ═══════════════════════════════════════════════════════════════
+   📱 МОБІЛЬНА АДАПТАЦІЯ — Telegram Mini App (phone ≤600px)
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+
+  /* ── Глобальний reset ── */
+  body {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    padding: 8px 10px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    min-height: 48px;
+  }
+  .topbar-icon {
+    width: 28px; height: 28px;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .topbar-title {
+    font-size: 13px;
+    flex-shrink: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar-sub { display: none; }
+  #top-sites { display: none !important; }
+  #top-sites.top-sites { display: none !important; }
+
+  /* Mode switch: компакт */
+  .app-mode-switch {
+    margin-left: auto;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .app-mode-btn {
+    font-size: 10px;
+    padding: 5px 7px;
+    border-radius: 6px;
+    letter-spacing: 0;
+  }
+
+  /* Share кнопка */
+  #share-btn {
+    padding: 4px 7px;
+    font-size: 16px;
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+
+  /* Auth секція */
+  .auth-section {
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+  .auth-btn {
+    padding: 4px 10px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .auth-btn svg { width: 14px; height: 14px; }
+  .user-name { display: none; }
+  .user-avatar { width: 26px; height: 26px; }
+  .user-profile { padding: 2px 6px 2px 2px; gap: 4px; }
+
+  /* ── Tab Bar ── */
+  .tab-bar {
+    padding: 4px 6px;
+    top: 48px;
+    gap: 3px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE */
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-list {
+    flex-wrap: nowrap;
+    gap: 3px;
+    padding: 1px 0;
+    flex-shrink: 0;
+  }
+  .tab-item {
+    padding: 4px 7px;
+    font-size: 11px;
+    gap: 3px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .tab-item .tab-name { max-width: 80px; }
+  .tab-item .tab-count {
+    font-size: 9px;
+    padding: 1px 5px;
+    min-width: 16px;
+  }
+  .tab-item .tab-close { display: none !important; }
+  .tab-add-btn {
+    width: 26px; height: 26px;
+    border-radius: 8px;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .required-toggle-btn {
+    font-size: 10px;
+    padding: 6px 8px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── Main Content ── */
+  .main { padding: 12px 8px; }
+  .dash-layout {
+    padding: 8px;
+    gap: 10px;
+    grid-template-columns: 1fr !important;
+  }
+  .dash-sidebar {
+    position: static !important;
+    max-height: none !important;
+    gap: 8px;
+    padding-right: 0;
+    order: -1; /* Sidebar ПЕРЕД картками */
+  }
+  .dash-main { min-width: 0; }
+
+  /* ── Cards (основне!) ── */
+  .card {
+    min-height: auto;
+    flex-direction: column;
+    border-radius: 10px;
+    overflow: visible;
+  }
+  .card-body {
+    padding: 10px 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    min-width: 0;
+  }
+  .card-num {
+    font-size: 10px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+  .card-text {
+    font-size: 13px;
+    line-height: 1.35;
+    flex: 1 1 100%;
+    min-width: 0;
+    word-break: break-word;
+    order: 1;
+  }
+  .card-meta {
+    order: 2;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .card-date, .assignee-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  /* Timer section: компактний, справа */
+  .timer-section {
+    padding-right: 0;
+    gap: 4px;
+    order: 3;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  canvas.timer-canvas {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .timer-text {
+    font-size: 13px;
+    min-width: 55px;
+  }
+  .timer-label { font-size: 7px; }
+
+  /* Action buttons: завжди видно на мобілі */
+  .task-action-btn,
+  .delete-task-btn {
+    opacity: 0.85 !important;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    z-index: 5;
+  }
+  .delete-task-btn, .task-action-delete { right: 6px; }
+  .task-action-complete { right: 38px; }
+  .task-action-edit { right: 70px; }
+  .card:hover .task-action-btn,
+  .card:hover .delete-task-btn { opacity: 0.85 !important; }
+
+  /* Remove left border accent on mobile (экономия места) */
+  .card::before { width: 2px; }
+
+  /* Empty state */
+  .empty {
+    padding: 40px 16px;
+    font-size: 13px;
+  }
+
+  /* ── Section Headers ── */
+  .section-header {
+    top: 92px;
+    padding: 4px 2px 8px;
+    gap: 4px;
+  }
+  .section-title { font-size: 11px; letter-spacing: 0.2px; }
+  .section-count { font-size: 10px; padding: 1px 6px; }
+
+  /* ── Calendar Widget ── */
+  .dash-widget { padding: 10px 12px; border-radius: 10px; }
+  .dash-widget h4 { font-size: 11px; margin-bottom: 8px; }
+
+  /* Stats grid: 2x2 зберігається */
+  .stats-grid { gap: 6px; }
+  .stat-card { padding: 8px 10px; }
+  .stat-card .stat-num { font-size: 16px; }
+  .stat-card .stat-label { font-size: 9px; }
+
+  .cal-cell { font-size: 10px; padding: 3px 0; }
+  .cal-dow { font-size: 8px; }
+
+  /* ── FAB Buttons ── */
+  .fab-container {
+    bottom: 12px;
+    right: 12px;
+    gap: 8px;
+  }
+  .fab-add {
+    width: 50px; height: 50px;
+    font-size: 24px;
+  }
+  .fab-settings {
+    width: 40px; height: 40px;
+    font-size: 18px;
+  }
+  .fab-lock {
+    width: 38px; height: 38px;
+    font-size: 15px;
+  }
+
+  /* ── Modals ── */
+  .modal-content {
+    width: 96%;
+    max-width: none;
+    padding: 16px;
+    border-radius: 12px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-title { font-size: 15px; }
+  .modal-close {
+    top: 8px; right: 8px;
+    width: 26px; height: 26px;
+    font-size: 14px;
+  }
+
+  /* Add modal: single column */
+  .add-modal-columns { grid-template-columns: 1fr !important; }
+  .add-col-right {
+    border-left: none !important;
+    padding-left: 0 !important;
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  #addModal .modal-content { max-width: 96% !important; }
+  .workspace-select-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  /* Quick add form: date+time stack */
+  #quick-mode-fields .input-box > div {
+    flex-direction: column;
+    gap: 6px;
+  }
+  #quick-mode-fields input,
+  #quick-mode-fields select {
+    width: 100% !important;
+  }
+  .btn-row { flex-direction: column; gap: 8px; }
+  .btn-primary, .btn-secondary { width: 100%; justify-content: center; padding: 10px 16px; font-size: 13px; }
+  .status { margin-left: 0; text-align: center; width: 100%; justify-content: center; }
+
+  /* Edit modal: date fields stack */
+  #editModal .input-box > div {
+    flex-direction: column;
+    gap: 8px;
+  }
+  #editModal input, #editModal select { width: 100% !important; min-width: 0 !important; }
+
+  /* ── Settings ── */
+  #settingsModal .modal-content {
+    max-height: 92vh;
+    border-radius: 12px 12px 0 0;
+    margin-top: auto;
+    width: 100%;
+  }
+  .settings-body { flex-direction: column; }
+  .settings-nav {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px 6px;
+    gap: 4px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-nav-item {
+    font-size: 11px;
+    padding: 7px 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-radius: 6px;
+  }
+  .settings-panels { padding: 12px 14px; }
+
+  /* API key block: wrap */
+  .api-block {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .api-block input { width: 100%; min-width: 0; }
+
+  /* ── Lock Screen ── */
+  .lock-box {
+    padding: 24px 20px;
+    max-width: 300px;
+    gap: 4px;
+  }
+  .lock-icon { font-size: 28px; }
+  .lock-title { font-size: 15px; }
+  .lock-sub { font-size: 12px; margin-bottom: 12px; }
+  .lock-input-row { gap: 6px; }
+  .lock-input-row input { padding: 8px 10px; font-size: 13px; }
+  .lock-input-row .btn-primary { padding: 8px 12px; font-size: 12px; }
+  .lock-topsites-wrap { gap: 8px; }
+  .lock-topsites-title { font-size: 10px; }
+  .lock-top-sites { gap: 8px; max-width: 280px; }
+  .lock-top-sites .site-icon-wrapper { width: 36px; height: 36px; }
+
+  /* ── Theme grid, wallpaper grid ── */
+  .theme-grid, .wp-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 6px; }
+  .theme-option, .wp-option { height: 44px; font-size: 11px; }
+
+  /* ── Inputs & touch targets ── */
+  input[type="text"],
+  input[type="password"],
+  input[type="date"],
+  input[type="time"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px !important; /* Щоб iOS не зумив */
+    min-height: 38px;
+  }
+  textarea { font-size: 14px !important; }
+
+  /* Switch toggle: більший */
+  .ai-toggle-row { padding: 8px 12px; gap: 8px; }
+  .ai-toggle-switch { width: 34px; height: 20px; }
+  .ai-toggle-switch::after { width: 16px; height: 16px; }
+  .ai-toggle-label { font-size: 12px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   📱 МАЛЕНЬКИЙ ТЕЛЕФОН (≤400px) — iPhone SE, Galaxy S5, etc.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 400px) {
+
+  /* Topbar: ще компактніше */
+  .topbar { padding: 6px 6px; gap: 4px; }
+  .topbar-title { font-size: 12px; }
+  .app-mode-btn { font-size: 9px; padding: 4px 5px; letter-spacing: -0.2px; }
+  #share-btn { font-size: 14px; padding: 3px 5px; }
+
+  /* Картки: максимальна компактність */
+  .card-body { padding: 8px 10px; gap: 4px; }
+  .card-text { font-size: 12px; line-height: 1.3; }
+  .card-num { font-size: 9px; padding: 1px 4px; }
+  .card-date, .assignee-badge { font-size: 9px; padding: 1px 4px; }
+
+  /* Timer: зовсім маленький */
+  canvas.timer-canvas {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .timer-text {
+    font-size: 11px;
+    min-width: 48px;
+  }
+  .timer-label { font-size: 7px; }
+
+  /* Action buttons: тісніші */
+  .task-action-btn, .delete-task-btn {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+  }
+  .delete-task-btn, .task-action-delete { right: 4px; }
+  .task-action-complete { right: 32px; }
+  .task-action-edit { right: 60px; }
+
+  /* Секції */
+  .section-header { top: 86px; padding: 2px 0 6px; }
+  .section-title { font-size: 10px; }
+
+  /* FAB */
+  .fab-container { bottom: 8px; right: 8px; gap: 6px; }
+  .fab-add { width: 44px; height: 44px; }
+  .fab-settings { width: 36px; height: 36px; }
+
+  /* Modals */
+  .modal-content { padding: 12px; }
+  .modal-title { font-size: 14px; }
+
+  /* Stats grid */
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 4px; }
+  .stat-card .stat-num { font-size: 14px; }
+}
 
 </style>
 </head>
