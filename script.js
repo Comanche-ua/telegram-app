@@ -18,13 +18,6 @@ const EDIT_MODE_KEY = 'ui_edit_mode_enabled';
 // ===== Штат State =====
 const SHTAT_KEY = 'shtat_data';
 const SHTAT_CUSTOM_KEY = 'shtat_custom_cols';
-const SHTAT_IMPORTED_KEY = 'shtat_imported_personnel';
-const DEFAULT_SHTAT_UNITS = [
-  '1-й відділ', '2-й відділ', '3-й відділ', '4-й відділ', '5-й відділ',
-  '6-й відділ', '7-й відділ', '8-й відділ', '9-й відділ', '10-й відділ',
-  '11-й відділ', '12-й відділ', '13-й відділ', '14-й відділ', '15-й відділ',
-  '16-й відділ', '17-й відділ', '18-й відділ', 'Інші підрозділи'
-];
 
 // ---- Screen Lock (privacy protect) ----
 const LOCK_HASH_KEY = 'screen_lock_hash';
@@ -2869,7 +2862,7 @@ function setAppMode(mode) {
   if (fabLock) fabLock.style.display = isLockEnabled() ? 'flex' : 'none';
 
   if (activeAppMode === 'ops') renderOpsWorkspace();
-  else if (activeAppMode === 'shtat') renderShtatWorkspace();
+  else if (activeAppMode === 'shtat') initShtatMode();
   else updateAddButton();
 }
 
@@ -2956,1794 +2949,17 @@ function initOpsWorkspace() {
   saveOpsData(loadOpsData());
 }
 
-// ===== Штат Functions =====
+// ===== Штат Dashboard =====
+const SHTAT_IMPORTED_KEY = 'shtat_imported_data';
 
-// Транслітерація кирилиці (укр + рос) в латиницю для генерації стабільних uid
-const UNIT_SLUG_MAP = {
-  'а':'a','б':'b','в':'v','г':'h','ґ':'g','д':'d','е':'e','є':'ie','ж':'zh','з':'z',
-  'и':'y','і':'i','ї':'i','й':'i','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p',
-  'р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch','ш':'sh','щ':'shch',
-  'ь':'','ю':'iu','я':'ia','ъ':'','ы':'y','э':'e',
-  'А':'A','Б':'B','В':'V','Г':'H','Ґ':'G','Д':'D','Е':'E','Є':'IE','Ж':'ZH','З':'Z',
-  'И':'Y','І':'I','Ї':'I','Й':'I','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P',
-  'Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'KH','Ц':'TS','Ч':'CH','Ш':'SH','Щ':'SHCH',
-  'Ь':'','Ю':'IU','Я':'IA','Ъ':'','Ы':'Y','Э':'E'
-};
-
-function slugifyUnitName(name) {
-  if (!name) return '';
-  let slug = '';
-  for (const ch of String(name)) {
-    slug += (ch in UNIT_SLUG_MAP) ? UNIT_SLUG_MAP[ch] : ch;
-  }
-  // Замінити пробели та дефіси на підкреслення
-  slug = slug.replace(/[\s\-]+/g, '_');
-  // Забрати всі символи що не a-zA-Z0-9_
-  slug = slug.replace(/[^a-zA-Z0-9_]/g, '');
-  // Схлопнути повторні підкреслення
-  slug = slug.replace(/_+/g, '_').replace(/^_+|_+$/g, '');
-  return slug || 'unit_' + Date.now().toString(36);
+function loadImportedStaff() {
+  try { return JSON.parse(localStorage.getItem(SHTAT_IMPORTED_KEY)) || { units: [], totalPositions: 0 }; }
+  catch(e) { return { units: [], totalPositions: 0 }; }
 }
+function saveImportedStaff(data) { localStorage.setItem(SHTAT_IMPORTED_KEY, JSON.stringify(data)); }
 
-// Забезпечити наявність unitOrder (порядок відображення підрозділів)
-function ensureUnitOrder(data) {
-  if (!Array.isArray(data.unitOrder)) {
-    // Створити unitOrder з усіх ключів, крім службових
-    data.unitOrder = Object.keys(data).filter(k => k !== 'unitOrder');
-  } else {
-    // Додати нові підрозділи, яких ще немає в order
-    const allIds = Object.keys(data).filter(k => k !== 'unitOrder');
-    allIds.forEach(id => {
-      if (!data.unitOrder.includes(id)) data.unitOrder.push(id);
-    });
-    // Прибрати з order видалені підрозділи
-    data.unitOrder = data.unitOrder.filter(id => data[id]);
-  }
-}
-
-// Отримати масив ID підрозділів в правильному порядку
-function getUnitIds(data) {
-  if (Array.isArray(data.unitOrder) && data.unitOrder.length) {
-    // Перевірити що всі ID існують
-    return data.unitOrder.filter(id => data[id]);
-  }
-  return Object.keys(data).filter(k => k !== 'unitOrder');
-}
-
-// Викликати після рендеру штату — робить зебру на видимих рядках
-function applyShtatZebra() {
-  const tbody = document.getElementById('shtat-tbody');
-  if (!tbody) return;
-  const rows = tbody.querySelectorAll('.shtat-unit-row');
-  rows.forEach((r, i) => r.classList.toggle('shtat-row-even', i % 2 === 0));
-}
-
-// ---- Drag & Drop для пересортування підрозділів ----
-let shtatDragUnitId = null;
-
-function onShtatDragStart(e) {
-  const handle = e.target.closest('.shtat-drag-handle');
-  if (!handle) return;
-  shtatDragUnitId = handle.dataset.unit;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', shtatDragUnitId);
-  const row = handle.closest('tr.shtat-unit-row');
-  if (row) row.classList.add('shtat-dragging');
-}
-
-function onShtatDragOver(e) {
-  const row = e.target.closest('tr.shtat-unit-row');
-  if (!row || !shtatDragUnitId || row.dataset.unitId === shtatDragUnitId) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  const rect = row.getBoundingClientRect();
-  const midY = rect.top + rect.height / 2;
-  row.classList.remove('shtat-drop-before', 'shtat-drop-after');
-  row.classList.add(e.clientY < midY ? 'shtat-drop-before' : 'shtat-drop-after');
-}
-
-function onShtatDragLeave(e) {
-  const row = e.target.closest('tr.shtat-unit-row');
-  if (row) row.classList.remove('shtat-drop-before', 'shtat-drop-after');
-}
-
-function onShtatDrop(e) {
-  const targetRow = e.target.closest('tr.shtat-unit-row');
-  if (!targetRow || !shtatDragUnitId) return;
-  e.preventDefault();
-  const targetId = targetRow.dataset.unitId;
-  if (targetId === shtatDragUnitId) return;
-
-  const rect = targetRow.getBoundingClientRect();
-  const position = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-
-  const data = loadShtatData();
-  ensureUnitOrder(data);
-  const fromIdx = data.unitOrder.indexOf(shtatDragUnitId);
-  const toIdx = data.unitOrder.indexOf(targetId);
-  if (fromIdx === -1 || toIdx === -1) { cleanupDrag(); return; }
-
-  data.unitOrder.splice(fromIdx, 1);
-  const adjustedToIdx = data.unitOrder.indexOf(targetId);
-  data.unitOrder.splice(position === 'before' ? adjustedToIdx : adjustedToIdx + 1, 0, shtatDragUnitId);
-
-  saveShtatData(data);
-  cleanupDrag();
-  renderShtatWorkspace();
-}
-
-function onShtatDragEnd(e) {
-  cleanupDrag();
-}
-
-function cleanupDrag() {
-  document.querySelectorAll('.shtat-dragging, .shtat-drop-before, .shtat-drop-after')
-    .forEach(el => el.classList.remove('shtat-dragging', 'shtat-drop-before', 'shtat-drop-after'));
-  shtatDragUnitId = null;
-}
-
-function loadShtatData() {
-  try {
-    const raw = localStorage.getItem(SHTAT_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      ensureUnitOrder(data);
-      return data;
-    }
-  } catch(e) {}
-  // Порожній штат за замовчуванням (користувач імпортує дані сам)
-  const data = {};
-  ensureUnitOrder(data);
-  return data;
-}
-
-function createDefaultUnit(id, name) {
-  const positions = {};
-  SHTAT_POSITIONS.forEach(p => { positions[p.id] = { shtat: '', fakt: '' }; });
-  const unit = {
-    id, name,
-    personnelShtat: '', personnelFakt: '',
-    equipmentShtat: '', equipmentFakt: '',
-    operationalEquipment: '',
-    motorPumps: '',
-    radioStations: '',
-    computers: '',
-    positions,
-    custom: {}
-  };
-  ensureEquipmentItems(unit);
-  return unit;
-}
-
-// Кількість рядків техніки (марка + номер + статуси) у кожному підрозділі
-const EQUIPMENT_ROWS_COUNT = 8;
-// Статуси техніки — галочки
-const EQUIPMENT_STATUSES = [
-  { key: 'opRozr',     label: 'опер. розр.' },
-  { key: 'repair',     label: 'ремонт' },
-  { key: 'reserve',    label: 'резерв' },
-  { key: 'zvedZagin',  label: 'зведений загін' }
-];
-
-// Створити порожній слот техніки
-function blankEquipmentSlot() {
-  const slot = { mark: '', number: '' };
-  EQUIPMENT_STATUSES.forEach(s => { slot[s.key] = false; });
-  return slot;
-}
-
-// Мігратор: гарантує що в підрозділі є масив equipmentItems з 8 слотів
-function ensureEquipmentItems(unit) {
-  if (!Array.isArray(unit.equipmentItems)) unit.equipmentItems = [];
-  while (unit.equipmentItems.length < EQUIPMENT_ROWS_COUNT) {
-    unit.equipmentItems.push(blankEquipmentSlot());
-  }
-  // Скинути зайві (на випадок якщо раніше було більше рядків)
-  if (unit.equipmentItems.length > EQUIPMENT_ROWS_COUNT) {
-    unit.equipmentItems.length = EQUIPMENT_ROWS_COUNT;
-  }
-  // Гарантувати наявність усіх полів статусів
-  unit.equipmentItems.forEach(slot => {
-    if (!slot || typeof slot !== 'object') slot = {};
-    if (typeof slot.mark !== 'string') slot.mark = '';
-    if (typeof slot.number !== 'string') slot.number = '';
-    EQUIPMENT_STATUSES.forEach(s => {
-      if (typeof slot[s.key] !== 'boolean') slot[s.key] = false;
-    });
-  });
-}
-
-// Підрахунок заповнених рядків техніки у підрозділі
-// Рядок вважається заповненим якщо є марка АБО номер
-function countEquipmentItems(unit) {
-  if (!Array.isArray(unit.equipmentItems)) return 0;
-  return unit.equipmentItems.filter(slot => slot && ((slot.mark && slot.mark.trim()) || (slot.number && slot.number.trim()))).length;
-}
-
-function ensureUnitPositions(unit) {
-  if (!unit.positions) unit.positions = {};
-  SHTAT_POSITIONS.forEach(p => {
-    if (!unit.positions[p.id]) unit.positions[p.id] = { shtat: '', fakt: '' };
-  });
-}
-
-function saveShtatData(data) {
-  localStorage.setItem(SHTAT_KEY, JSON.stringify(data));
-}
-
-function loadShtatCustomCols() {
-  try {
-    const raw = localStorage.getItem(SHTAT_CUSTOM_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return []; // [{ id, label }]
-}
-
-function saveShtatCustomCols(cols) {
-  localStorage.setItem(SHTAT_CUSTOM_KEY, JSON.stringify(cols));
-}
-
-function getShtatData() {
-  const data = loadShtatData();
-  const customCols = loadShtatCustomCols();
-  return { units: data, customCols };
-}
-
-let activeShtatTab = 'personnel'; // 'personnel' | 'equipment' | 'hardware' | 'custom'
-
-// Position categories for personnel
-const SHTAT_POSITIONS = [
-  { id: 'brigade_chief', label: 'Начальник загону' },
-  { id: 'brigade_deputy', label: 'Заступник начальника загону' },
-  { id: 'brigade_deputy_ns', label: 'Заступник начальника загону з реагування на НС' },
-  { id: 'chief', label: 'Начальник частини' },
-  { id: 'deputy', label: 'Заступник начальника частини' },
-  { id: 'post_chief', label: 'Начальник поста' },
-  { id: 'guard_chief', label: 'Начальник караулу' },
-  { id: 'dept_chief', label: 'Начальник відділення' },
-  { id: 'squad_com', label: 'Командир відділення' },
-  { id: 'firefighter', label: 'Пожежний-рятувальник' },
-  { id: 'senior_driver', label: 'Старший водій' },
-  { id: 'driver', label: 'Водій' },
-  { id: 'squad_driver', label: 'Командир відділення-водій' },
-  { id: 'vehicle_driver', label: 'Водій автотранспортних засобів' },
-  { id: 'dprz_chief', label: 'Начальник відділення організації реагування на НС' },
-  { id: 'dprz_spec', label: 'Фахівець відділення організації реагування на НС' },
-  { id: 'dprz_instr', label: 'Фахівець-інструктор відділення організації реагування на НС' },
-  { id: 'res_chief', label: 'Начальник відділення ресурсного забезпечення' },
-  { id: 'res_spec', label: 'Фахівець відділення ресурсного забезпечення' },
-  { id: 'proc_head', label: 'Завідувач групи закупівель' },
-  { id: 'proc_spec', label: 'Фахівець групи закупівель' },
-  { id: 'legal_head', label: 'Завідувач юридичної групи' },
-  { id: 'legal_spec', label: 'Фахівець юридичної групи' },
-  { id: 'dept_op', label: 'Начальник відділення-оператор' },
-  { id: 'operator', label: 'Оператор' }
-];
-
-// Sub-tab column definitions
-const SHTAT_TABS = {
-  personnel: {
-    label: '👤 Особовий склад',
-    columns: [
-      { key: 'personnelShtat', label: 'штат', cls: 'shtat-col-shtat shtat-input-shtat' },
-      { key: 'personnelFakt', label: 'факт', cls: 'shtat-col-fakt shtat-input-fakt' }
-    ],
-    isShtatFakt: true
-  },
-  equipment: {
-    label: '🚛 Техніка',
-    columns: [
-      { key: 'equipmentShtat', label: 'штат', cls: 'shtat-col-shtat shtat-input-shtat' },
-      { key: 'equipmentFakt', label: 'факт', cls: 'shtat-col-fakt shtat-input-fakt' },
-      { key: 'operationalEquipment', label: 'в опер.розр.', cls: '' }
-    ],
-    isShtatFakt: true
-  },
-  hardware: {
-    label: '📦 Обладнання',
-    columns: [
-      { key: 'motorPumps', label: 'мотопомпи', cls: '' },
-      { key: 'radioStations', label: 'радіостанції', cls: '' },
-      { key: 'computers', label: 'комп\'ютери', cls: '' }
-    ]
-  },
-  custom: {
-    label: '➕ Додатково',
-    columns: [] // filled from customCols
-  }
-};
-
-function setActiveShtatTab(tab) {
-  activeShtatTab = tab;
-  document.querySelectorAll('.shtat-subtab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.shtatTab === tab);
-  });
-  // Show/hide add-category button only on custom tab
-  const addColBtn = document.getElementById('shtat-add-col-btn');
-  if (addColBtn) addColBtn.style.display = tab === 'custom' ? '' : 'none';
-  renderShtatWorkspace();
-}
-
-function buildShtatThead(tabDef, customCols) {
-  let html = '<tr><th class="shtat-th-unit">Підрозділ</th>';
-  const subLabels = [];
-  tabDef.columns.forEach(col => {
-    html += `<th class="shtat-th-cat">${col.label}</th>`;
-    subLabels.push('од.');
-  });
-  // Custom columns on custom tab
-  if (activeShtatTab === 'custom') {
-    customCols.forEach(col => {
-      html += `<th class="shtat-th-cat shtat-th-custom">${escHtml(col.label)}<span class="shtat-del-col-btn" data-del-custom="${col.id}" title="Видалити категорію">✕</span></th>`;
-      subLabels.push('од.');
-    });
-  }
-  html += '</tr><tr><th class="shtat-th-sub"></th>';
-  subLabels.forEach(l => { html += `<th class="shtat-th-sub">${l}</th>`; });
-  html += '</tr>';
-  return html;
-}
-
-function getDiffClass(val1, val2) {
-  return (parseFloat(val1) || 0) !== (parseFloat(val2) || 0) ? 'shtat-input-diff' : '';
-}
-
-function renderShtatWorkspace() {
-  const { units, customCols } = getShtatData();
-  const tabDef = SHTAT_TABS[activeShtatTab] || SHTAT_TABS.personnel;
-  const thead = document.getElementById('shtat-thead');
-  const tbody = document.getElementById('shtat-tbody');
-  const tfoot = document.getElementById('shtat-tfoot');
-  const summary = document.getElementById('shtat-summary');
-  if (!tbody || !tfoot || !thead) return;
-
-  // Ensure all units have positions data
-  Object.values(units).forEach(u => ensureUnitPositions(u));
-
-  // ---- PERSONNEL TAB: special rendering with positions ----
-  if (activeShtatTab === 'personnel') {
-    renderPersonnelTab(units, thead, tbody, tfoot, summary);
-    return;
-  }
-  if (activeShtatTab === 'equipment') {
-    renderEquipmentTab(units, thead, tbody, tfoot, summary);
-    return;
-  }
-
-  // ---- OTHER TABS: column-based rendering ----
-  thead.innerHTML = buildShtatThead(tabDef, customCols);
-  thead.querySelectorAll('.shtat-del-col-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteShtatCustomCol(btn.dataset.delCustom);
-    });
-  });
-
-  const totals = {};
-  tabDef.columns.forEach(c => { totals[c.key] = 0; });
-  const totCustom = {};
-
-  let rowsHtml = '';
-  const unitIds = getUnitIds(units);
-  unitIds.forEach(uid => {
-    const u = units[uid];
-    let diffClass = '';
-    if (tabDef.isShtatFakt && tabDef.columns.length >= 2) {
-      const v1 = tabDef.columns[0].key;
-      const v2 = tabDef.columns[1].key;
-      diffClass = getDiffClass(u[v1], u[v2]);
-    }
-
-    rowsHtml += `<tr data-unit-id="${uid}">
-      <td>
-        <span class="shtat-drag-handle" draggable="true" data-unit="${uid}" title="Перетягніть для зміни порядку">⠿</span>
-        <span class="shtat-unit-name" data-rename-unit="${uid}" title="Подвійний клік — редагувати назву">${escHtml(u.name)}</span>
-        <span class="shtat-edit-unit" data-rename-unit="${uid}" title="Редагувати назву">✎</span>
-        <span class="shtat-delete-unit" data-del-unit="${uid}" title="Видалити підрозділ">✕</span>
-      </td>`;
-
-    tabDef.columns.forEach(col => {
-      const val = u[col.key] || '';
-      const num = parseFloat(val) || 0;
-      totals[col.key] = (totals[col.key] || 0) + num;
-      const cls = col.cls || '';
-      const isFakt = col.key.includes('Fakt');
-      const rowCls = (isFakt && diffClass) ? diffClass : cls;
-      rowsHtml += `<td><input type="number" class="${rowCls}" data-unit="${uid}" data-field="${col.key}" value="${escHtml(String(val))}" placeholder="0"></td>`;
-    });
-
-    if (activeShtatTab === 'custom') {
-      customCols.forEach(col => {
-        const val = (u.custom && u.custom[col.id]) ? u.custom[col.id] : '';
-        rowsHtml += `<td><input type="number" data-unit="${uid}" data-custom="${col.id}" value="${escHtml(String(val))}" placeholder="0"></td>`;
-        if (!totCustom[col.id]) totCustom[col.id] = 0;
-        totCustom[col.id] += parseFloat(val) || 0;
-      });
-    }
-
-    rowsHtml += '</tr>';
-  });
-
-  tbody.innerHTML = rowsHtml;
-
-  let footHtml = '<tr><td><strong>ВСЬОГО</strong></td>';
-  tabDef.columns.forEach(col => { footHtml += `<td><strong>${totals[col.key] || ''}</strong></td>`; });
-  if (activeShtatTab === 'custom') {
-    customCols.forEach(col => { footHtml += `<td><strong>${totCustom[col.id] || ''}</strong></td>`; });
-  }
-  footHtml += '</tr>';
-  tfoot.innerHTML = footHtml;
-
-  const unitCount = unitIds.length;
-  let summaryHtml = `<span>Підрозділів: <strong>${unitCount}</strong></span>`;
-  tabDef.columns.forEach(col => { summaryHtml += `<span>${col.label}: <strong>${totals[col.key] || 0}</strong></span>`; });
-  if (activeShtatTab === 'custom' && customCols.length) {
-    customCols.forEach(col => { summaryHtml += `<span>${escHtml(col.label)}: <strong>${totCustom[col.id] || 0}</strong></span>`; });
-  }
-  if (summary) summary.innerHTML = summaryHtml;
-
-  if (activeShtatTab === 'custom' && !customCols.length) {
-    tbody.innerHTML = `<tr><td colspan="2" style="padding:32px;text-align:center;color:var(--text3);">Немає додаткових категорій. Натисніть «Додати категорію» щоб створити.</td></tr>`;
-    tfoot.innerHTML = '';
-  }
-
-  attachShtatRowListeners(tbody);
-}
-
-// ---- Shared row listeners ----
-function attachShtatRowListeners(tbody) {
-  tbody.querySelectorAll('input').forEach(inp => {
-    inp.addEventListener('change', onShtatCellChange);
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    });
-  });
-  tbody.querySelectorAll('.shtat-edit-unit').forEach(icon => {
-    icon.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startRenameShtatUnit(icon.dataset.renameUnit);
-    });
-  });
-  tbody.querySelectorAll('.shtat-unit-name').forEach(span => {
-    span.addEventListener('dblclick', () => startRenameShtatUnit(span.dataset.renameUnit));
-  });
-  tbody.querySelectorAll('.shtat-delete-unit').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteShtatUnit(btn.dataset.delUnit);
-    });
-  });
-  // Drag & drop handlers
-  tbody.querySelectorAll('.shtat-drag-handle').forEach(h => {
-    h.addEventListener('dragstart', onShtatDragStart);
-    h.addEventListener('dragend', onShtatDragEnd);
-  });
-  tbody.addEventListener('dragover', onShtatDragOver);
-  tbody.addEventListener('dragleave', onShtatDragLeave);
-  tbody.addEventListener('drop', onShtatDrop);
-  applyShtatZebra();
-}
-
-// ---- Legacy personnel tab: ручне редагування позицій ----
-function renderPersonnelTabLegacy(units, thead, tbody, tfoot, summary) {
-  const unitIds = getUnitIds(units);
-
-  // Auto-sum positions into unit totals
-  let grandS = 0, grandF = 0;
-  const posTotals = {};
-  SHTAT_POSITIONS.forEach(p => { posTotals[p.id] = { shtat: 0, fakt: 0 }; });
-
-  unitIds.forEach(uid => {
-    const u = units[uid];
-    ensureUnitPositions(u);
-    let sumS = 0, sumF = 0;
-    SHTAT_POSITIONS.forEach(p => {
-      const ps = parseFloat(u.positions[p.id]?.shtat) || 0;
-      const pf = parseFloat(u.positions[p.id]?.fakt) || 0;
-      sumS += ps; sumF += pf;
-      posTotals[p.id].shtat += ps;
-      posTotals[p.id].fakt += pf;
-    });
-    u.personnelShtat = sumS || '';
-    u.personnelFakt = sumF || '';
-    grandS += sumS; grandF += sumF;
-  });
-
-  // ---- Main table: units as rows ----
-  thead.innerHTML = `<tr>
-    <th class="shtat-th-unit">Підрозділ</th>
-    <th class="shtat-th-cat shtat-col-shtat">штат</th>
-    <th class="shtat-th-cat shtat-col-fakt">факт</th>
-    <th class="shtat-th-cat">±</th>
-    <th class="shtat-th-cat" style="text-align:left;min-width:200px;">⚠ не вистачає</th>
-  </tr>`;
-
-  let rowsHtml = '';
-  unitIds.forEach(uid => {
-    const u = units[uid];
-    const s = parseFloat(u.personnelShtat) || 0;
-    const f = parseFloat(u.personnelFakt) || 0;
-    const diff = s - f;
-    const diffStr = diff > 0 ? '+' + diff : diff < 0 ? String(diff) : '0';
-    const diffCls = diff > 0 ? 'color:var(--amber);' : diff < 0 ? 'color:var(--red);' : 'color:var(--green);';
-    const sCls = s !== f ? 'shtat-input-diff' : '';
-
-    // Calculate shortages (штат > факт) and surpluses (факт > штат)
-    const shortages = [];
-    SHTAT_POSITIONS.forEach(p => {
-      const ps = parseFloat(u.positions[p.id]?.shtat) || 0;
-      const pf = parseFloat(u.positions[p.id]?.fakt) || 0;
-      if (ps > pf) shortages.push({ label: p.label, short: ps - pf });
-    });
-    const shortStr = shortages.length
-      ? shortages.map(sh => `<span style="color:var(--red);font-weight:600;white-space:nowrap;">${escHtml(sh.label)} −${sh.short}</span>`).join(', ')
-      : '<span style="color:var(--green);font-size:11px;">✓ укомплектовано</span>';
-
-    // Unit row (clickable to expand) + hidden position detail row
-    rowsHtml += `<tr class="shtat-unit-row" data-unit-id="${uid}" data-toggle="unit" style="cursor:pointer;">
-      <td>
-        <span class="shtat-drag-handle" draggable="true" data-unit="${uid}" title="Перетягніть для зміни порядку">⠿</span>
-        <span class="shtat-unit-toggle">▶</span>
-        <span class="shtat-unit-name" data-rename-unit="${uid}" title="Подвійний клік — редагувати назву">${escHtml(u.name)}</span>
-        <span class="shtat-edit-unit" data-rename-unit="${uid}" title="Редагувати назву">✎</span>
-        <span class="shtat-delete-unit" data-del-unit="${uid}" title="Видалити підрозділ">✕</span>
-      </td>
-      <td><strong style="color:var(--blue);">${s || '—'}</strong></td>
-      <td><strong style="color:var(--green);" class="${sCls}">${f || '—'}</strong></td>
-      <td><strong style="${diffCls}">${diffStr}</strong></td>
-      <td style="text-align:left;font-size:11px;line-height:1.4;max-width:300px;">${shortStr}</td>
-    </tr>
-    <tr class="shtat-pos-detail" data-unit-detail="${uid}" style="display:none;">
-      <td colspan="5" style="padding:0;">
-        <div class="shtat-pos-editor">
-          <table class="shtat-table shtat-pos-table">
-            <thead><tr><th>Посада</th><th class="shtat-col-shtat">штат</th><th class="shtat-col-fakt">факт</th></tr></thead>
-            <tbody>`;
-
-    SHTAT_POSITIONS.forEach(p => {
-      const ps = u.positions[p.id]?.shtat || '';
-      const pf = u.positions[p.id]?.fakt || '';
-      const pdiff = (parseFloat(ps)||0) !== (parseFloat(pf)||0) ? 'shtat-input-diff' : '';
-      rowsHtml += `<tr>
-        <td>${escHtml(p.label)}</td>
-        <td><input type="number" class="shtat-input-shtat shtat-pos-input" data-unit="${uid}" data-pos="${p.id}" data-pos-field="shtat" value="${escHtml(String(ps))}" placeholder="0"></td>
-        <td><input type="number" class="shtat-input-fakt shtat-pos-input ${pdiff}" data-unit="${uid}" data-pos="${p.id}" data-pos-field="fakt" value="${escHtml(String(pf))}" placeholder="0"></td>
-      </tr>`;
-    });
-
-    rowsHtml += `</tbody></table></div></td></tr>`;
-  });
-
-  tbody.innerHTML = rowsHtml;
-
-  // Footer
-  const gDiff = grandS - grandF;
-  const gDiffStr = gDiff > 0 ? '+' + gDiff : gDiff < 0 ? String(gDiff) : '0';
-  const totalShortages = [];
-  SHTAT_POSITIONS.forEach(p => {
-    if (posTotals[p.id].shtat > posTotals[p.id].fakt) {
-      totalShortages.push({ label: p.label, short: posTotals[p.id].shtat - posTotals[p.id].fakt });
-    }
-  });
-  const totalShortStr = totalShortages.length
-    ? totalShortages.map(sh => `<span style="color:var(--red);font-weight:600;white-space:nowrap;">${escHtml(sh.label)} −${sh.short}</span>`).join(', ')
-    : '<span style="color:var(--green);">✓</span>';
-
-  tfoot.innerHTML = `<tr>
-    <td><strong>ВСЬОГО</strong></td>
-    <td><strong style="color:var(--blue);">${grandS || '—'}</strong></td>
-    <td><strong style="color:var(--green);">${grandF || '—'}</strong></td>
-    <td><strong>${gDiffStr}</strong></td>
-    <td style="text-align:left;font-size:11px;">${totalShortStr}</td>
-  </tr>`;
-
-  // Summary
-  let summaryHtml = `<span>Підрозділів: <strong>${unitIds.length}</strong></span>
-    <span>Посад: <strong>${SHTAT_POSITIONS.length}</strong></span>
-    <span>Загальний штат: <strong>${grandS}</strong></span>
-    <span>Загальний факт: <strong>${grandF}</strong></span>`;
-  // Compact position totals
-  const hasPosData = Object.values(posTotals).some(p => p.shtat > 0 || p.fakt > 0);
-  if (hasPosData) {
-    summaryHtml += `<span style="margin-left:8px;color:var(--text3);">|</span>`;
-    SHTAT_POSITIONS.forEach(p => {
-      if (posTotals[p.id].shtat > 0 || posTotals[p.id].fakt > 0) {
-        summaryHtml += `<span style="font-size:11px;">${escHtml(p.label)}: <strong>${posTotals[p.id].shtat}/${posTotals[p.id].fakt}</strong></span>`;
-      }
-    });
-  }
-  if (summary) summary.innerHTML = summaryHtml;
-
-  // Attach toggle listeners
-  tbody.querySelectorAll('[data-toggle="unit"]').forEach(row => {
-    row.addEventListener('click', (e) => {
-      // Don't toggle if clicking edit/delete/move buttons
-      if (e.target.closest('.shtat-edit-unit') || e.target.closest('.shtat-delete-unit') || e.target.closest('.shtat-drag-handle')) return;
-      const uid = row.dataset.unitId;
-      const detail = tbody.querySelector(`[data-unit-detail="${uid}"]`);
-      const toggle = row.querySelector('.shtat-unit-toggle');
-      if (detail) {
-        const isOpen = detail.style.display !== 'none';
-        detail.style.display = isOpen ? 'none' : '';
-        if (toggle) toggle.textContent = isOpen ? '▶' : '▼';
-      }
-    });
-  });
-
-  // Attach position input listeners
-  tbody.querySelectorAll('.shtat-pos-input').forEach(inp => {
-    inp.addEventListener('change', onShtatPositionChange);
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    });
-  });
-
-  // Rename + delete listeners
-  tbody.querySelectorAll('.shtat-edit-unit').forEach(icon => {
-    icon.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startRenameShtatUnit(icon.dataset.renameUnit);
-    });
-  });
-  tbody.querySelectorAll('.shtat-unit-name').forEach(span => {
-    span.addEventListener('dblclick', () => startRenameShtatUnit(span.dataset.renameUnit));
-  });
-  tbody.querySelectorAll('.shtat-delete-unit').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteShtatUnit(btn.dataset.delUnit);
-    });
-  });
-  // Drag & drop handlers
-  tbody.querySelectorAll('.shtat-drag-handle').forEach(h => {
-    h.addEventListener('dragstart', onShtatDragStart);
-    h.addEventListener('dragend', onShtatDragEnd);
-  });
-  tbody.addEventListener('dragover', onShtatDragOver);
-  tbody.addEventListener('dragleave', onShtatDragLeave);
-  tbody.addEventListener('drop', onShtatDrop);
-  applyShtatZebra();
-}
-
-
-function onShtatPositionChange(e) {
-  const inp = e.target;
-  const unitId = inp.dataset.unit;
-  const posId = inp.dataset.pos;
-  const field = inp.dataset.posField;
-  const data = loadShtatData();
-  if (!data[unitId]) return;
-  ensureUnitPositions(data[unitId]);
-  data[unitId].positions[posId][field] = inp.value.trim();
-  // Auto-update unit totals
-  let sumS = 0, sumF = 0;
-  SHTAT_POSITIONS.forEach(p => {
-    sumS += parseFloat(data[unitId].positions[p.id]?.shtat) || 0;
-    sumF += parseFloat(data[unitId].positions[p.id]?.fakt) || 0;
-  });
-  data[unitId].personnelShtat = sumS || '';
-  data[unitId].personnelFakt = sumF || '';
-  saveShtatData(data);
-
-  // Update unit row cells inline (no full re-render)
-  const unitRow = document.querySelector(`tr.shtat-unit-row[data-unit-id="${unitId}"]`);
-  if (unitRow) {
-    const cells = unitRow.querySelectorAll('td');
-    if (cells[1]) cells[1].innerHTML = `<strong style="color:var(--blue);">${sumS || '—'}</strong>`;
-    const diff = sumS - sumF;
-    const diffStr = diff > 0 ? '+' + diff : diff < 0 ? String(diff) : '0';
-    const diffCls = diff > 0 ? 'color:var(--amber);' : diff < 0 ? 'color:var(--red);' : 'color:var(--green);';
-    if (cells[2]) cells[2].innerHTML = `<strong style="color:var(--green);" class="${sumS !== sumF ? 'shtat-input-diff' : ''}">${sumF || '—'}</strong>`;
-    if (cells[3]) cells[3].innerHTML = `<strong style="${diffCls}">${diffStr}</strong>`;
-    // Update shortages column
-    if (cells[4]) {
-      const shortages = [];
-      const unitData = data[unitId];
-      SHTAT_POSITIONS.forEach(p => {
-        const ps = parseFloat(unitData.positions[p.id]?.shtat) || 0;
-        const pf = parseFloat(unitData.positions[p.id]?.fakt) || 0;
-        if (ps > pf) shortages.push({ label: p.label, short: ps - pf });
-      });
-      cells[4].innerHTML = shortages.length
-        ? shortages.map(sh => `<span style="color:var(--red);font-weight:600;white-space:nowrap;">${escHtml(sh.label)} −${sh.short}</span>`).join(', ')
-        : '<span style="color:var(--green);font-size:11px;">✓ укомплектовано</span>';
-    }
-  }
-
-  // Update totals: recalc from all units
-  const allUnits = Object.values(data);
-  let grandS = 0, grandF = 0;
-  const posTotals = {};
-  SHTAT_POSITIONS.forEach(p => { posTotals[p.id] = { shtat: 0, fakt: 0 }; });
-  allUnits.forEach(u => {
-    ensureUnitPositions(u);
-    SHTAT_POSITIONS.forEach(p => {
-      posTotals[p.id].shtat += parseFloat(u.positions[p.id]?.shtat) || 0;
-      posTotals[p.id].fakt += parseFloat(u.positions[p.id]?.fakt) || 0;
-    });
-    grandS += parseFloat(u.personnelShtat) || 0;
-    grandF += parseFloat(u.personnelFakt) || 0;
-  });
-
-  // Update footer
-  const tfoot = document.getElementById('shtat-tfoot');
-  if (tfoot) {
-    const gDiff = grandS - grandF;
-    const gDiffStr = gDiff > 0 ? '+' + gDiff : gDiff < 0 ? String(gDiff) : '0';
-    tfoot.innerHTML = `<tr>
-      <td><strong>ВСЬОГО</strong></td>
-      <td><strong style="color:var(--blue);">${grandS || '—'}</strong></td>
-      <td><strong style="color:var(--green);">${grandF || '—'}</strong></td>
-      <td><strong>${gDiffStr}</strong></td>
-    </tr>`;
-  }
-
-  // Update summary
-  const summary = document.getElementById('shtat-summary');
-  if (summary) {
-    let html = `<span>Підрозділів: <strong>${allUnits.length}</strong></span>
-      <span>Посад: <strong>${SHTAT_POSITIONS.length}</strong></span>
-      <span>Загальний штат: <strong>${grandS}</strong></span>
-      <span>Загальний факт: <strong>${grandF}</strong></span>`;
-    const hasData = Object.values(posTotals).some(p => p.shtat > 0 || p.fakt > 0);
-    if (hasData) {
-      html += `<span style="margin-left:8px;color:var(--text3);">|</span>`;
-      SHTAT_POSITIONS.forEach(p => {
-        if (posTotals[p.id].shtat > 0 || posTotals[p.id].fakt > 0) {
-          html += `<span style="font-size:11px;">${escHtml(p.label)}: <strong>${posTotals[p.id].shtat}/${posTotals[p.id].fakt}</strong></span>`;
-        }
-      });
-    }
-    summary.innerHTML = html;
-  }
-}
-
-// ---- Equipment tab: per-unit view with equipment items ----
-function renderEquipmentTab(units, thead, tbody, tfoot, summary) {
-  const unitIds = getUnitIds(units);
-
-  // Auto-sum equipment into unit totals
-  let grandTotalEquipment = 0;
-  const grandStatusTotals = {};
-  EQUIPMENT_STATUSES.forEach(s => { grandStatusTotals[s.key] = 0; });
-
-  unitIds.forEach(uid => {
-    const u = units[uid];
-    ensureEquipmentItems(u);
-    let unitEquipmentCount = countEquipmentItems(u);
-    u.equipmentFakt = unitEquipmentCount || ''; // FAKT = number of filled rows
-    u.equipmentShtat = EQUIPMENT_ROWS_COUNT; // SHTAT = max allowed rows
-    grandTotalEquipment += unitEquipmentCount;
-
-    EQUIPMENT_STATUSES.forEach(s => {
-      grandStatusTotals[s.key] += u.equipmentItems.filter(item => item[s.key]).length;
-    });
-  });
-
-  // ---- Main table: units as rows ----
-  thead.innerHTML = `<tr>
-    <th class="shtat-th-unit">Підрозділ</th>
-    <th class="shtat-th-cat shtat-col-shtat">Штат</th>
-    <th class="shtat-th-cat shtat-col-fakt">Факт</th>
-    <th class="shtat-th-cat">В опер.розр.</th>
-    <th class="shtat-th-cat">В ремонті</th>
-    <th class="shtat-th-cat">В резерві</th>
-    <th class="shtat-th-cat">Звед.загін</th>
-  </tr>`;
-
-  let rowsHtml = '';
-  unitIds.forEach(uid => {
-    const u = units[uid];
-    const s = u.equipmentShtat || 0;
-    const f = u.equipmentFakt || 0;
-
-    // Calculate equipment status counts for this unit
-    const unitStatusCounts = {};
-    EQUIPMENT_STATUSES.forEach(sDef => {
-      unitStatusCounts[sDef.key] = u.equipmentItems.filter(item => item[sDef.key]).length;
-    });
-
-    rowsHtml += `<tr class="shtat-unit-row" data-unit-id="${uid}" data-toggle="equipment-unit" style="cursor:pointer;">
-      <td>
-        <span class="shtat-drag-handle" draggable="true" data-unit="${uid}" title="Перетягніть для зміни порядку">⠿</span>
-        <span class="shtat-unit-toggle">▶</span>
-        <span class="shtat-unit-name" data-rename-unit="${uid}" title="Подвійний клік — редагувати назву">${escHtml(u.name)}</span>
-        <span class="shtat-edit-unit" data-rename-unit="${uid}" title="Редагувати назву">✎</span>
-        <span class="shtat-delete-unit" data-del-unit="${uid}" title="Видалити підрозділ">✕</span>
-      </td>
-      <td><strong style="color:var(--blue);">${s || '—'}</strong></td>
-      <td><strong style="color:var(--green);">${f || '—'}</strong></td>
-      <td><strong>${unitStatusCounts.opRozr || '0'}</strong></td>
-      <td><strong>${unitStatusCounts.repair || '0'}</strong></td>
-      <td><strong>${unitStatusCounts.reserve || '0'}</strong></td>
-      <td><strong>${unitStatusCounts.zvedZagin || '0'}</strong></td>
-    </tr>
-    <tr class="shtat-pos-detail shtat-equipment-detail" data-unit-detail="${uid}" style="display:none;">
-      <td colspan="7" style="padding:0;">
-        <div class="shtat-pos-editor">
-          <table class="shtat-table shtat-equipment-table">
-            <thead>
-              <tr>
-                <th>№</th>
-                <th style="width:30%;">Марка</th>
-                <th style="width:30%;">Номер</th>
-                <th class="shtat-checkbox-col">${EQUIPMENT_STATUSES[0].label}</th>
-                <th class="shtat-checkbox-col">${EQUIPMENT_STATUSES[1].label}</th>
-                <th class="shtat-checkbox-col">${EQUIPMENT_STATUSES[2].label}</th>
-                <th class="shtat-checkbox-col">${EQUIPMENT_STATUSES[3].label}</th>
-              </tr>
-            </thead>
-            <tbody>`;
-
-    u.equipmentItems.forEach((item, idx) => {
-      rowsHtml += `<tr class="shtat-equipment-item-row">
-        <td>${idx + 1}.</td>
-        <td><input type="text" class="shtat-input-text" data-unit="${uid}" data-eq-idx="${idx}" data-eq-field="mark" value="${escHtml(item.mark)}" placeholder="Марка"></td>
-        <td><input type="text" class="shtat-input-text" data-unit="${uid}" data-eq-idx="${idx}" data-eq-field="number" value="${escHtml(item.number)}" placeholder="Номер"></td>`;
-      EQUIPMENT_STATUSES.forEach(sDef => {
-        rowsHtml += `<td class="shtat-checkbox-col"><input type="checkbox" data-unit="${uid}" data-eq-idx="${idx}" data-eq-field="${sDef.key}" ${item[sDef.key] ? 'checked' : ''}></td>`;
-      });
-      rowsHtml += `</tr>`;
-    });
-
-    rowsHtml += `</tbody></table></div></td></tr>`;
-  });
-
-  tbody.innerHTML = rowsHtml;
-
-  // Footer (totals)
-  tfoot.innerHTML = `<tr>
-    <td><strong>ВСЬОГО</strong></td>
-    <td><strong style="color:var(--blue);">${EQUIPMENT_ROWS_COUNT * unitIds.length || '—'}</strong></td>
-    <td><strong style="color:var(--green);">${grandTotalEquipment || '—'}</strong></td>
-    <td><strong>${grandStatusTotals.opRozr || '0'}</strong></td>
-    <td><strong>${grandStatusTotals.repair || '0'}</strong></td>
-    <td><strong>${grandStatusTotals.reserve || '0'}</strong></td>
-    <td><strong>${grandStatusTotals.zvedZagin || '0'}</strong></td>
-  </tr>`;
-
-  // Summary (top summary row)
-  let summaryHtml = `<span>Підрозділів: <strong>${unitIds.length}</strong></span>
-    <span>Всього слотів техніки: <strong>${EQUIPMENT_ROWS_COUNT * unitIds.length}</strong></span>
-    <span>Заповнено слотів: <strong>${grandTotalEquipment}</strong></span>`;
-  EQUIPMENT_STATUSES.forEach(sDef => {
-    if (grandStatusTotals[sDef.key] > 0) {
-      summaryHtml += `<span style="margin-left:8px;color:var(--text3);">|</span><span style="font-size:11px;">${sDef.label}: <strong>${grandStatusTotals[sDef.key]}</strong></span>`;
-    }
-  });
-  if (summary) summary.innerHTML = summaryHtml;
-
-  // Attach toggle listeners
-  tbody.querySelectorAll('[data-toggle="equipment-unit"]').forEach(row => {
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.shtat-edit-unit') || e.target.closest('.shtat-delete-unit') || e.target.closest('.shtat-drag-handle')) return;
-      const uid = row.dataset.unitId;
-      const detail = tbody.querySelector(`[data-unit-detail="${uid}"]`);
-      const toggle = row.querySelector('.shtat-unit-toggle');
-      if (detail) {
-        const isOpen = detail.style.display !== 'none';
-        detail.style.display = isOpen ? 'none' : '';
-        if (toggle) toggle.textContent = isOpen ? '▶' : '▼';
-      }
-    });
-  });
-
-  // Attach equipment item input listeners
-  tbody.querySelectorAll('.shtat-equipment-table input').forEach(inp => {
-    inp.addEventListener('change', onEquipmentItemChange);
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    });
-  });
-
-  // Rename + delete listeners (shared with personnel)
-  tbody.querySelectorAll('.shtat-edit-unit').forEach(icon => {
-    icon.addEventListener('click', (e) => {
-      e.stopPropagation();
-      startRenameShtatUnit(icon.dataset.renameUnit);
-    });
-  });
-  tbody.querySelectorAll('.shtat-unit-name').forEach(span => {
-    span.addEventListener('dblclick', () => startRenameShtatUnit(span.dataset.renameUnit));
-  });
-  tbody.querySelectorAll('.shtat-delete-unit').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteShtatUnit(btn.dataset.delUnit);
-    });
-  });
-  // Drag & drop handlers
-  tbody.querySelectorAll('.shtat-drag-handle').forEach(h => {
-    h.addEventListener('dragstart', onShtatDragStart);
-    h.addEventListener('dragend', onShtatDragEnd);
-  });
-  tbody.addEventListener('dragover', onShtatDragOver);
-  tbody.addEventListener('dragleave', onShtatDragLeave);
-  tbody.addEventListener('drop', onShtatDrop);
-  applyShtatZebra();
-}
-
-
-function onShtatCellChange(e) {
-  const inp = e.target;
-  const unitId = inp.dataset.unit;
-  const field = inp.dataset.field;
-  const customCol = inp.dataset.custom;
-  const data = loadShtatData();
-
-  if (!data[unitId]) return;
-
-  const val = inp.value.trim();
-
-  if (field) {
-    data[unitId][field] = val;
-  } else if (customCol) {
-    if (!data[unitId].custom) data[unitId].custom = {};
-    data[unitId].custom[customCol] = val;
-  }
-
-  saveShtatData(data);
-  renderShtatWorkspace(); // re-render for diff highlighting
-}
-
-function onEquipmentItemChange(e) {
-  const inp = e.target;
-  const unitId = inp.dataset.unit;
-  const eqIdx = parseInt(inp.dataset.eqIdx, 10);
-  const field = inp.dataset.eqField;
-  const data = loadShtatData();
-
-  if (!data[unitId] || !Array.isArray(data[unitId].equipmentItems) || !data[unitId].equipmentItems[eqIdx]) return;
-
-  const item = data[unitId].equipmentItems[eqIdx];
-  if (inp.type === 'checkbox') {
-    item[field] = inp.checked;
-  } else {
-    item[field] = inp.value.trim();
-  }
-
-  saveShtatData(data);
-  renderShtatWorkspace(); // re-render to update totals
-}
-
-function addShtatUnit() {
-  const name = prompt('Назва підрозділу:');
-  if (!name || !name.trim()) return;
-  const id = slugifyUnitName(name.trim());
-  const data = loadShtatData();
-  if (data[id]) { alert('Такий підрозділ вже існує'); return; }
-  data[id] = createDefaultUnit(id, name.trim());
-  saveShtatData(data);
-  renderShtatWorkspace();
-}
-
-function deleteShtatUnit(unitId) {
-  const data = loadShtatData();
-  if (!data[unitId]) return;
-  const name = data[unitId].name;
-  if (!confirm(`Видалити підрозділ "${name}"?`)) return;
-  delete data[unitId];
-  saveShtatData(data);
-  renderShtatWorkspace();
-}
-
-function startRenameShtatUnit(unitId) {
-  const data = loadShtatData();
-  if (!data[unitId]) return;
-  const span = document.querySelector(`.shtat-unit-name[data-rename-unit="${unitId}"]`);
-  if (!span) return;
-  const oldName = data[unitId].name;
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = oldName;
-  input.className = 'shtat-rename-input';
-  input.style.cssText = 'width:160px; text-align:left; font-weight:600; font-size:13px;';
-  span.replaceWith(input);
-  input.focus();
-  input.select();
-  const save = () => {
-    const newName = input.value.trim();
-    if (newName && newName !== oldName) {
-      const fresh = loadShtatData();
-      if (fresh[unitId]) {
-        fresh[unitId].name = newName;
-        saveShtatData(fresh);
-      }
-    }
-    renderShtatWorkspace();
-  };
-  input.addEventListener('blur', save);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') { input.value = oldName; input.blur(); }
-  });
-}
-
-function addShtatCustomCol() {
-  const label = prompt('Назва нової категорії (наприклад: "Дрони", "Планшети"):');
-  if (!label || !label.trim()) return;
-  const id = slugifyUnitName(label.trim());
-  const cols = loadShtatCustomCols();
-  if (cols.some(c => c.id === id)) { alert('Така категорія вже існує'); return; }
-  cols.push({ id, label: label.trim() });
-  saveShtatCustomCols(cols);
-  renderShtatWorkspace();
-}
-
-function exportShtatData() {
-  const data = loadShtatData();
-  const unitIds = getUnitIds(data);
-  if (!unitIds.length) { alert('Немає даних для експорту.'); return; }
-
-  // Calculate grand totals for personnel
-  let grandS = 0, grandF = 0;
-  Object.values(data).forEach(u => {
-    ensureUnitPositions(u);
-    SHTAT_POSITIONS.forEach(p => {
-      grandS += parseFloat(u.positions[p.id]?.shtat) || 0;
-      grandF += parseFloat(u.positions[p.id]?.fakt) || 0;
-    });
-  });
-
-  // Build ODS content.xml rows
-  let rowsXml = '';
-  // Header Row for ODS
-  rowsXml += `<table:table-row>
-<table:table-cell office:value-type="string"><text:p>Підрозділ</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Категорія / Позиція</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Штат / Марка</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Факт / Номер</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${EQUIPMENT_STATUSES[0].label}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${EQUIPMENT_STATUSES[1].label}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${EQUIPMENT_STATUSES[2].label}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${EQUIPMENT_STATUSES[3].label}</text:p></table:table-cell>
-</table:table-row>\n`;
-
-  unitIds.forEach(uid => {
-    const u = data[uid];
-    ensureUnitPositions(u);
-    ensureEquipmentItems(u);
-
-    // Personnel data
-    SHTAT_POSITIONS.forEach(p => {
-      const s = parseFloat(u.positions[p.id]?.shtat) || 0;
-      const f = parseFloat(u.positions[p.id]?.fakt) || 0;
-      rowsXml += `<table:table-row>
-<table:table-cell office:value-type="string"><text:p>${escXml(u.name)}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${escXml(p.label)}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${s || 0}"><text:p>${s || ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${f || 0}"><text:p>${f || ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-</table:table-row>\n`;
-    });
-
-    // Equipment data
-    u.equipmentItems.forEach((item, idx) => {
-      if (item.mark || item.number) { // Only export filled items
-        rowsXml += `<table:table-row>
-<table:table-cell office:value-type="string"><text:p>${escXml(u.name)}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Техніка №${idx + 1}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${escXml(item.mark)}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>${escXml(item.number)}</text:p></table:table-cell>
-<table:table-cell office:value-type="boolean" office:value="${item.opRozr}"><text:p>${item.opRozr ? '+' : ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="boolean" office:value="${item.repair}"><text:p>${item.repair ? '+' : ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="boolean" office:value="${item.reserve}"><text:p>${item.reserve ? '+' : ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="boolean" office:value="${item.zvedZagin}"><text:p>${item.zvedZagin ? '+' : ''}</text:p></table:table-cell>
-</table:table-row>\n`;
-      }
-    });
-  });
-
-  // Grand totals for personnel
-  rowsXml += `<table:table-row>
-<table:table-cell office:value-type="string"><text:p>ЗАГАЛОМ</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Особовий склад (штат/факт)</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandS || 0}"><text:p>${grandS || ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandF || 0}"><text:p>${grandF || ''}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-</table:table-row>\n`;
-
-  // Grand totals for equipment
-  const grandTotalEquipment = Object.values(data).reduce((acc, u) => acc + countEquipmentItems(u), 0);
-  const grandStatusTotals = {};
-  EQUIPMENT_STATUSES.forEach(s => { grandStatusTotals[s.key] = 0; });
-  Object.values(data).forEach(u => {
-    ensureEquipmentItems(u);
-    EQUIPMENT_STATUSES.forEach(s => {
-      grandStatusTotals[s.key] += u.equipmentItems.filter(item => item[s.key]).length;
-    });
-  });
-
-  rowsXml += `<table:table-row>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Техніка (заповнено слотів)</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandTotalEquipment}"><text:p>${grandTotalEquipment}</text:p></table:table-cell>
-<table:table-cell office:value-type="string"></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandStatusTotals.opRozr}"><text:p>${grandStatusTotals.opRozr}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandStatusTotals.repair}"><text:p>${grandStatusTotals.repair}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandStatusTotals.reserve}"><text:p>${grandStatusTotals.reserve}</text:p></table:table-cell>
-<table:table-cell office:value-type="float" office:value="${grandStatusTotals.zvedZagin}"><text:p>${grandStatusTotals.zvedZagin}</text:p></table:table-cell>
-</table:table-row>\n`;
-
-  const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
-<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
- xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
- xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
- office:version="1.2">
-<office:body><office:spreadsheet>
-<table:table table:name="Штат">
-<table:table-column table:number-columns-repeated="8"/>
-<table:table-header-rows>
-<table:table-row>
-<table:table-cell office:value-type="string"><text:p>Підрозділ</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Категорія / Позиція</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Штат / Марка</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Факт / Номер</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>В опер.розр.</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>В ремонті</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>В резерві</text:p></table:table-cell>
-<table:table-cell office:value-type="string"><text:p>Звед.загін</text:p></table:table-cell>
-</table:table-row>
-</table:table-header-rows>
-${rowsXml}
-</table:table>
-</office:spreadsheet></office:body>
-</office:document-content>`;
-
-  const manifestXml = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
-<manifest:file-entry manifest:full-path="/" manifest:version="1.2" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>
-<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
-</manifest:manifest>`;
-
-  const dateFile = new Date().toISOString().slice(0, 10);
-  buildAndDownloadOds(`Штат_${dateFile}.ods`, contentXml, manifestXml);
-}
-
-// ---- ODS (ZIP) packer ----
-function buildAndDownloadOds(filename, contentXml, manifestXml) {
-  const enc = new TextEncoder();
-  const now = new Date();
-  const dosTime = (now.getSeconds() >> 1) | (now.getMinutes() << 5) | (now.getHours() << 11);
-  const dosDate = now.getDate() | ((now.getMonth() + 1) << 5) | ((now.getFullYear() - 1980) << 9);
-
-  const files = [
-    { name: 'mimetype', bytes: enc.encode('application/vnd.oasis.opendocument.spreadsheet') },
-    { name: 'content.xml', bytes: enc.encode(contentXml) },
-    { name: 'META-INF/manifest.xml', bytes: enc.encode(manifestXml) }
-  ];
-
-  // Calculate all CRCs and build sections
-  const localHeaders = [];
-  const cdEntries = [];
-  let dataOffset = 0;
-  const allParts = [];
-
-  files.forEach(f => {
-    const crc = crc32(f.bytes);
-    const nameBytes = enc.encode(f.name);
-    // Local file header: 30 + nameLen + extraLen
-    const locHeader = new Uint8Array(30 + nameBytes.length);
-    const lv = new DataView(locHeader.buffer);
-    lv.setUint32(0, 0x04034b50, true);  // signature
-    lv.setUint16(4, 20, true);           // version needed
-    lv.setUint16(6, 0, true);            // flags
-    lv.setUint16(8, 0, true);            // method (stored)
-    lv.setUint16(10, dosTime, true);     // mod time
-    lv.setUint16(12, dosDate, true);     // mod date
-    lv.setUint32(14, crc, true);         // crc32
-    lv.setUint32(18, f.bytes.length, true); // compressed size
-    lv.setUint32(22, f.bytes.length, true); // uncompressed size
-    lv.setUint16(26, nameBytes.length, true);
-    lv.setUint16(28, 0, true);           // extra field length
-    locHeader.set(nameBytes, 30);
-
-    allParts.push(locHeader);
-    allParts.push(f.bytes);
-    dataOffset += locHeader.length + f.bytes.length;
-
-    cdEntries.push({ name: f.name, nameBytes, crc, size: f.bytes.length, offset: dataOffset - f.bytes.length - locHeader.length });
-  });
-
-  const cdStart = dataOffset;
-
-  // Central directory
-  cdEntries.forEach(cd => {
-    const cdHeader = new Uint8Array(46 + cd.nameBytes.length);
-    const cv = new DataView(cdHeader.buffer);
-    cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(4, 20, true);  // version made by
-    cv.setUint16(6, 20, true);  // version needed
-    cv.setUint16(8, 0, true);   // flags
-    cv.setUint16(10, 0, true);  // method
-    cv.setUint16(12, dosTime, true);
-    cv.setUint16(14, dosDate, true);
-    cv.setUint32(16, cd.crc, true);
-    cv.setUint32(20, cd.size, true);
-    cv.setUint32(24, cd.size, true);
-    cv.setUint16(28, cd.nameBytes.length, true);
-    cv.setUint16(30, 0, true);  // extra len
-    cv.setUint16(32, 0, true);  // comment len
-    cv.setUint16(34, 0, true);  // disk start
-    cv.setUint16(36, 0, true);  // internal attrs
-    cv.setUint32(38, 0, true);  // external attrs
-    cv.setUint32(42, cd.offset, true);
-    cdHeader.set(cd.nameBytes, 46);
-    allParts.push(cdHeader);
-  });
-
-  const cdSize = allParts.reduce((s, p) => s + p.length, 0) - cdStart;
-  const cdCount = cdEntries.length;
-
-  // EOCD
-  const eocd = new Uint8Array(22);
-  const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(4, 0, true);   // disk number
-  ev.setUint16(6, 0, true);   // disk with CD
-  ev.setUint16(8, cdCount, true);
-  ev.setUint16(10, cdCount, true);
-  ev.setUint32(12, cdSize, true);
-  ev.setUint32(16, cdStart, true);
-  ev.setUint16(20, 0, true);  // comment len
-  allParts.push(eocd);
-
-  const blob = new Blob(allParts, { type: 'application/vnd.oasis.opendocument.spreadsheet' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function crc32(data) {
-  let crc = 0xFFFFFFFF;
-  if (!crc32.table) {
-    crc32.table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      crc32.table[i] = c;
-    }
-  }
-  for (let i = 0; i < data.length; i++) {
-    crc = crc32.table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function escXml(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function importShtatData(file) {
-  const isOds = file.name && file.name.toLowerCase().endsWith('.ods');
-  if (isOds) {
-    importOdsViaZipJs(file);
-  } else {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        if (text.trim().startsWith('{')) {
-          importShtatJson(text);
-        } else {
-          let best = 0;
-          const tryParse = (fn) => { const c = fn(text); if (c > best) best = c; return c; };
-          if (tryParse(importShtatCsv) === 0) {
-            if (tryParse(importShtatHtml) === 0) {
-              alert('Не вдалося знайти дані у файлі.');
-            }
-          }
-        }
-      } catch(err) { alert('Помилка читання: ' + err.message); }
-    };
-    reader.readAsText(file);
-  }
-}
-
-function importOdsViaZipJs(file) {
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const bytes = new Uint8Array(e.target.result);
-    const xml = await readOdsContentXml(bytes);
-    if (xml) { importShtatOds(xml); }
-    else { alert('Не вдалося прочитати .ods файл.'); }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-async function readOdsContentXml(bytes) {
-  const get16 = (i) => bytes[i] | (bytes[i+1] << 8);
-  const get32 = (i) => (bytes[i] | (bytes[i+1]<<8) | (bytes[i+2]<<16) | (bytes[i+3]<<24)) >>> 0;
-  const textAt = (off, len) => new TextDecoder().decode(bytes.slice(off, off + len));
-
-  // 1. Find EOCD
-  let eocd = -1;
-  for (let i = bytes.length - 22; i >= 0 && i > bytes.length - 66000; i--) {
-    if (get32(i) === 0x06054b50) { eocd = i; break; }
-  }
-
-  let entryOffset = -1;
-
-  if (eocd >= 0) {
-    // 2. Read Central Directory
-    const cdOff = get32(eocd + 16);
-    const total = get16(eocd + 8);
-    let pos = cdOff;
-    for (let i = 0; i < total && pos + 46 < bytes.length; i++) {
-      if (get32(pos) !== 0x02014b50) break;
-      const nLen = get16(pos + 28);
-      const eLen = get16(pos + 30);
-      const cLen = get16(pos + 32);
-      const name = textAt(pos + 46, nLen);
-      if (name === 'content.xml') {
-        entryOffset = get32(pos + 42);
-        break;
-      }
-      pos += 46 + nLen + eLen + cLen;
-    }
-  }
-
-  // 3. Fallback: scan all local headers
-  if (entryOffset < 0) {
-    let pos = 0;
-    while (pos < bytes.length - 30) {
-      if (get32(pos) === 0x04034b50) {
-        const nLen = get16(pos + 26);
-        const eLen = get16(pos + 28);
-        const cSize = get32(pos + 18);
-        const name = textAt(pos + 30, nLen);
-        if (name === 'content.xml') { entryOffset = pos; break; }
-        pos += 30 + nLen + eLen + cSize;
-      } else { pos++; }
-    }
-  }
-
-  if (entryOffset < 0) {
-    // Last resort: search raw text
-    const text = new TextDecoder().decode(bytes);
-    const idx = text.indexOf('<table:table-row');
-    if (idx > 0) {
-      const start = Math.max(0, text.lastIndexOf('<?xml', idx));
-      return text.substring(start > 0 ? start : idx - 200);
-    }
-    return null;
-  }
-
-  // 4. Read local header
-  const p = entryOffset;
-  const method = get16(p + 8);
-  const flags = get16(p + 6);
-  const nLen = get16(p + 26);
-  const eLen = get16(p + 28);
-  let cSize = get32(p + 18);
-  let dataOff = p + 30 + nLen + eLen;
-
-  // Handle data descriptor (bit 3)
-  if ((flags & 8) && cSize === 0) {
-    let scan = dataOff;
-    while (scan < bytes.length - 4) {
-      const sig = get32(scan);
-      if (sig === 0x08074b50 || sig === 0x04034b50 || sig === 0x02014b50) {
-        cSize = scan - dataOff;
-        break;
-      }
-      scan++;
-    }
-  }
-
-  if (dataOff + cSize > bytes.length) return null;
-
-  // 5. Extract
-  if (method === 0) return textAt(dataOff, cSize);
-  if (method === 8) {
-    const raw = bytes.slice(dataOff, dataOff + cSize);
-    return await inflateRaw(raw);
-  }
-  return null;
-}
-
-async function inflateRaw(compressed) {
-  const data = new Uint8Array(compressed);
-  for (const fmt of ['deflate-raw', 'deflate']) {
-    try {
-      const blob = new Blob([data]);
-      const decompressed = blob.stream().pipeThrough(new DecompressionStream(fmt));
-      const buf = await new Response(decompressed).arrayBuffer();
-      const text = new TextDecoder().decode(buf);
-      if (text.includes('<table:table') || text.includes('<?xml')) return text;
-    } catch(e) {}
-  }
-  return null;
-}
-
-function importShtatOds(xml) {
-  // Try DOMParser first
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, 'text/xml');
-  // Check for parse error
-  if (doc.querySelector('parsererror')) {
-    // Fallback: regex-based extraction
-    importShtatOdsFallback(xml);
-    return;
-  }
-
-  // Try multiple selector patterns (with/without namespace prefixes)
-  let rows = doc.querySelectorAll('table\\:table-row, table-row');
-  if (!rows.length) rows = doc.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:table:1.0', 'table-row');
-  if (!rows.length) rows = doc.getElementsByTagName('table-row');
-
-  if (!rows.length) {
-    importShtatOdsFallback(xml);
-    return;
-  }
-
-  const data = loadShtatData();
-  const posLabelToId = {};
-  SHTAT_POSITIONS.forEach(p => { posLabelToId[p.label] = p.id; });
-  let imported = 0;
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    let cells = row.querySelectorAll('table\\:table-cell, table-cell');
-    if (!cells.length) cells = row.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:table:1.0', 'table-cell');
-    if (!cells.length) cells = row.getElementsByTagName('table-cell');
-
-    if (cells.length < 3) continue;
-
-    const getText = (cell) => {
-      let p = cell.querySelector('text\\:p, p');
-      if (!p) p = cell.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:text:1.0', 'p')[0];
-      if (!p) p = cell.getElementsByTagName('p')[0];
-      return p ? p.textContent.trim() : cell.textContent.trim();
-    };
-
-    const unitName = getText(cells[0]);
-    const posLabel = getText(cells[1]);
-    const col2 = getText(cells[2]); // штат або марка
-    const col3 = cells[3] ? getText(cells[3]) : ''; // факт або номер
-
-    if (!unitName || unitName === 'Підрозділ' || unitName === 'ЗАГАЛОМ') continue;
-    if (posLabel === 'Посада' || posLabel === 'Категорія / Підрозділ' || posLabel === 'ВСЬОГО' || posLabel === 'Особовий склад (штат/факт)' || posLabel === 'Техніка (заповнено слотів)') continue;
-
-    let unitId = Object.keys(data).find(uid => data[uid].name === unitName);
-    if (!unitId) {
-      unitId = slugifyUnitName(unitName);
-      if (!data[unitId]) data[unitId] = createDefaultUnit(unitId, unitName);
-    }
-    ensureUnitPositions(data[unitId]);
-
-    // Якщо це рядок техніки (posLabel починається з "Техніка №")
-    const eqMatch = posLabel.match(/^Техніка\s*№\s*(\d+)/i);
-    if (eqMatch) {
-      ensureEquipmentItems(data[unitId]);
-      const eqIdx = parseInt(eqMatch[1], 10) - 1;
-      if (eqIdx >= 0 && eqIdx < data[unitId].equipmentItems.length) {
-        const item = data[unitId].equipmentItems[eqIdx];
-        item.mark = col2 || item.mark;
-        item.number = col3 || item.number;
-        // галочки в колонках 4-7 (індекси 4,5,6,7)
-        ['opRozr','repair','reserve','zvedZagin'].forEach((key, kIdx) => {
-          const cellIdx = 4 + kIdx;
-          if (cells[cellIdx]) {
-            const val = getText(cells[cellIdx]);
-            if (val === '+' || val === 'true' || val === '+') item[key] = true;
-            else if (val === '-' || val === 'false' || val === '') item[key] = false;
-            else item[key] = !!val;
-          }
-        });
-        imported++;
-      }
-      continue;
-    }
-
-    // Звичайний рядок позиції особового складу
-    if (!col2 && !col3) continue;
-    const posId = posLabelToId[posLabel];
-    if (posId) {
-      data[unitId].positions[posId].shtat = col2;
-      data[unitId].positions[posId].fakt = col3;
-      imported++;
-    }
-  }
-
-  if (imported > 0) {
-    recalcAndSaveShtat(data);
-    alert(`Імпортовано ${imported} записів (ODS).`);
-  } else {
-    alert('Не знайдено даних для імпорту в .ods файлі.');
-  }
-}
-
-function importShtatOdsFallback(xml) {
-  // Regex-based extraction: find table-row blocks with table-cell content
-  const rowRegex = /<table:table-row[^>]*>([\s\S]*?)<\/table:table-row>/gi;
-  const cellRegex = /<table:table-cell[^>]*>([\s\S]*?)<\/table:table-cell>/gi;
-  const textRegex = /<text:p[^>]*>([\s\S]*?)<\/text:p>/gi;
-
-  const rows = [];
-  let rowMatch;
-  while ((rowMatch = rowRegex.exec(xml)) !== null) {
-    const cells = [];
-    let cellMatch;
-    while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
-      let text = '';
-      let textMatch;
-      while ((textMatch = textRegex.exec(cellMatch[1])) !== null) {
-        text += textMatch[1];
-      }
-      if (!text) text = cellMatch[1].replace(/<[^>]+>/g, '').trim();
-      cells.push(text.trim());
-    }
-    if (cells.length >= 3) rows.push(cells);
-  }
-
-  if (!rows.length) { alert('Не знайдено рядків в .ods файлі.'); return; }
-
-  const data = loadShtatData();
-  const posLabelToId = {};
-  SHTAT_POSITIONS.forEach(p => { posLabelToId[p.label] = p.id; });
-  let imported = 0;
-
-  rows.forEach(cells => {
-    const unitName = cells[0];
-    const posLabel = cells[1];
-    const col2 = cells[2]; // штат або марка
-    const col3 = cells[3] || ''; // факт або номер
-
-    if (!unitName || unitName === 'Підрозділ' || unitName === 'ЗАГАЛОМ') return;
-    if (posLabel === 'Посада' || posLabel === 'Категорія / Підрозділ' || posLabel === 'ВСЬОГО' || posLabel === 'Особовий склад (штат/факт)' || posLabel === 'Техніка (заповнено слотів)') return;
-
-    let unitId = Object.keys(data).find(uid => data[uid].name === unitName);
-    if (!unitId) {
-      unitId = slugifyUnitName(unitName);
-      if (!data[unitId]) data[unitId] = createDefaultUnit(unitId, unitName);
-    }
-    ensureUnitPositions(data[unitId]);
-
-    // Якщо це рядок техніки (posLabel починається з "Техніка №")
-    const eqMatch = posLabel.match(/^Техніка\s*№\s*(\d+)/i);
-    if (eqMatch) {
-      ensureEquipmentItems(data[unitId]);
-      const eqIdx = parseInt(eqMatch[1], 10) - 1;
-      if (eqIdx >= 0 && eqIdx < data[unitId].equipmentItems.length) {
-        const item = data[unitId].equipmentItems[eqIdx];
-        item.mark = col2 || item.mark;
-        item.number = col3 || item.number;
-        // галочки в колонках 4-7 (індекси 4,5,6,7)
-        ['opRozr','repair','reserve','zvedZagin'].forEach((key, kIdx) => {
-          const cellIdx = 4 + kIdx;
-          if (cells.length > cellIdx) {
-            const val = cells[cellIdx];
-            if (val === '+' || val === 'true' || val === '+') item[key] = true;
-            else if (val === '-' || val === 'false' || val === '') item[key] = false;
-            else item[key] = !!val;
-          }
-        });
-        imported++;
-      }
-      return;
-    }
-
-    // Звичайний рядок позиції особового складу
-    if (!col2 && !col3) return;
-    const posId = posLabelToId[posLabel];
-    if (posId) {
-      data[unitId].positions[posId].shtat = col2;
-      data[unitId].positions[posId].fakt = col3;
-      imported++;
-    }
-  });
-
-  if (imported > 0) {
-    recalcAndSaveShtat(data);
-    alert(`Імпортовано ${imported} записів (ODS).`);
-  } else {
-    alert('Не знайдено даних для імпорту в .ods файлі.');
-  }
-}
-
-function importShtatHtml(text) {
-  const tmp = document.createElement('div');
-  tmp.innerHTML = text;
-  let table = tmp.querySelector('table');
-  if (!table) {
-    const trs = tmp.querySelectorAll('tr');
-    if (trs.length >= 2) {
-      table = document.createElement('table');
-      trs.forEach(tr => table.appendChild(tr.cloneNode(true)));
-    }
-  }
-  if (!table) return 0;
-
-  const rows = table.querySelectorAll('tr');
-  if (rows.length < 2) return 0;
-
-  const data = loadShtatData();
-  const posLabelToId = {};
-  SHTAT_POSITIONS.forEach(p => { posLabelToId[p.label] = p.id; });
-
-  let imported = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const cells = rows[i].querySelectorAll('td,th');
-    if (cells.length < 3) continue;
-    const unitName = (cells[0].textContent || '').trim();
-    const posLabel = (cells[1].textContent || '').trim();
-    const shtat = (cells[2].textContent || '').trim();
-    const fakt = (cells[3] && cells[3].textContent || '').trim();
-
-    if (!unitName || unitName === 'Підрозділ' || unitName === 'ЗАГАЛОМ') continue;
-    if (posLabel === 'Посада' || posLabel === 'ВСЬОГО') continue;
-    if (shtat === 'Штат' || (!shtat && !fakt)) continue;
-    if (shtat && isNaN(parseFloat(shtat))) continue;
-
-    let unitId = Object.keys(data).find(uid => data[uid].name === unitName);
-    if (!unitId) {
-      unitId = slugifyUnitName(unitName);
-      if (!data[unitId]) data[unitId] = createDefaultUnit(unitId, unitName);
-    }
-    ensureUnitPositions(data[unitId]);
-    const posId = posLabelToId[posLabel];
-    if (posId) {
-      data[unitId].positions[posId].shtat = shtat;
-      data[unitId].positions[posId].fakt = fakt;
-      imported++;
-    } else if (shtat) {
-      if (!data[unitId].custom) data[unitId].custom = {};
-      data[unitId].custom[posLabel] = shtat;
-      imported++;
-    }
-  }
-
-  if (imported > 0) {
-    recalcAndSaveShtat(data);
-    alert(`Імпортовано ${imported} записів (HTML).`);
-  }
-  return imported;
-}
-
-function recalcAndSaveShtat(data) {
-  Object.values(data).forEach(u => {
-    let sumS = 0, sumF = 0;
-    SHTAT_POSITIONS.forEach(p => {
-      sumS += parseFloat(u.positions[p.id]?.shtat) || 0;
-      sumF += parseFloat(u.positions[p.id]?.fakt) || 0;
-    });
-    u.personnelShtat = sumS || '';
-    u.personnelFakt = sumF || '';
-  });
-  saveShtatData(data);
-  renderShtatWorkspace();
-}
-
-function importShtatJson(text) {
-  const imported = JSON.parse(text);
-  if (!imported.units || !imported.type || imported.type !== 'shtat_personnel') {
-    alert('Невірний формат JSON. Очікується файл експорту Штату (shtat_personnel).');
-    return;
-  }
-  const existing = loadShtatData();
-  const newData = {};
-  const importUnits = imported.units;
-  const importIds = Object.keys(importUnits);
-  if (importIds.length === 0) { alert('Файл не містить даних підрозділів.'); return; }
-  Object.keys(existing).forEach(uid => { newData[uid] = existing[uid]; });
-  importIds.forEach(uid => {
-    const imp = importUnits[uid];
-    ensureUnitPositions(imp);
-    if (newData[uid]) {
-      newData[uid].name = imp.name || newData[uid].name;
-      if (imp.positions) {
-        SHTAT_POSITIONS.forEach(p => {
-          if (imp.positions[p.id]) {
-            newData[uid].positions[p.id] = {
-              shtat: imp.positions[p.id].shtat || '',
-              fakt: imp.positions[p.id].fakt || ''
-            };
-          }
-        });
-      }
-    } else {
-      newData[uid] = imp;
-    }
-  });
-  saveShtatData(newData);
-  if (imported.customCols) saveShtatCustomCols(imported.customCols);
-  renderShtatWorkspace();
-  alert(`Імпортовано ${importIds.length} підрозділів (JSON).`);
-}
-
-function importShtatCsv(text) {
-  // Parse tab-separated or semicolon-separated data
-  const clean = text.replace(/^﻿/, '').replace(/^￾/, ''); // strip BOM
-  const lines = clean.split(/\r?\n/).filter(l => {
-    const t = l.trim();
-    return t && !t.startsWith('Підрозділ') && !t.startsWith('﻿Підрозділ');
-  });
-  if (!lines.length) { alert('CSV файл порожній або не містить даних.'); return; }
-
-  // Detect separator: tab or semicolon
-  const sep = lines[0].includes('\t') ? '\t' : ';';
-
-  const data = loadShtatData();
-  const posLabelToId = {};
-  SHTAT_POSITIONS.forEach(p => { posLabelToId[p.label] = p.id; });
-
-  let imported = 0;
-  lines.forEach(line => {
-    const cols = line.split(sep);
-    if (cols.length < 3) return;
-    const unitName = cols[0].trim();
-    const posLabel = cols[1].trim();
-    const shtat = cols[2].trim();
-    const fakt = (cols[3] || '').trim();
-
-    if (!unitName || unitName === 'ВСЬОГО' || unitName === 'ЗАГАЛОМ') return;
-    if (posLabel === 'ВСЬОГО' || posLabel === 'Посада') return;
-    if (!shtat && !fakt) return; // skip empty rows
-
-    let unitId = Object.keys(data).find(uid => data[uid].name === unitName);
-    if (!unitId) {
-      unitId = slugifyUnitName(unitName);
-      if (!data[unitId]) data[unitId] = createDefaultUnit(unitId, unitName);
-    }
-
-    ensureUnitPositions(data[unitId]);
-    const posId = posLabelToId[posLabel];
-    if (posId) {
-      data[unitId].positions[posId].shtat = shtat;
-      data[unitId].positions[posId].fakt = fakt;
-      imported++;
-    } else {
-      if (!data[unitId].custom) data[unitId].custom = {};
-      data[unitId].custom[posLabel] = shtat;
-      imported++;
-    }
-  });
-
-  if (imported > 0) {
-    recalcAndSaveShtat(data);
-    alert(`Імпортовано ${imported} записів (CSV).`);
-  }
-  return imported;
-}
-
-function deleteShtatCustomCol(colId) {
-  const cols = loadShtatCustomCols();
-  const col = cols.find(c => c.id === colId);
-  if (!col) return;
-  if (!confirm(`Видалити категорію "${col.label}" і всі її дані?`)) return;
-  saveShtatCustomCols(cols.filter(c => c.id !== colId));
-  // Remove data for this column from all units
-  const data = loadShtatData();
-  Object.keys(data).forEach(uid => {
-    if (data[uid].custom && data[uid].custom[colId] !== undefined) {
-      delete data[uid].custom[colId];
-    }
-  });
-  saveShtatData(data);
-  renderShtatWorkspace();
-}
-
-// ===== Google Sheets Import → Штат =====
-
-function loadImportedPersonnel() {
-  try { return JSON.parse(localStorage.getItem(SHTAT_IMPORTED_KEY)) || { units: [] }; }
-  catch(e) { return { units: [] }; }
-}
-function saveImportedPersonnel(data) {
-  localStorage.setItem(SHTAT_IMPORTED_KEY, JSON.stringify(data));
-}
-
-function importShtatFromGoogleSheets() {
+// ---- Імпорт з Google Таблиці (викликається ТІЛЬКИ з налаштувань) ----
+function importStaffFromSheets() {
   const urlInput = document.getElementById('sheets-url');
   const statusEl = document.getElementById('sheets-status');
   const previewEl = document.getElementById('sheets-preview');
@@ -4760,118 +2976,88 @@ function importShtatFromGoogleSheets() {
   statusEl.textContent = '⏳ Завантаження...'; statusEl.style.color = 'var(--blue)'; btn.disabled = true;
 
   fetch(csvUrl).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-  .then(csvText => {
-    const result = parseStaffingSheet(csvText);
-    if (result.units.length === 0) throw new Error('Не знайдено підрозділів');
+  .then(csv => {
+    const data = parseStaffCSV(csv);
+    if (data.units.length === 0) throw new Error('Не знайдено підрозділів');
+    saveImportedStaff(data);
 
-    saveImportedPersonnel(result);
-
-    let html = `<strong>✅ Знайдено ${result.units.length} підрозділів, ${result.totalPositions} посад</strong><br><br>`;
-    result.units.forEach(u => {
-      html += `• <strong>${escHtml(u.name)}</strong> — ${u.positions.length} посад (заповнено ${u.filled})<br>`;
+    let html = `<strong>✅ Знайдено ${data.units.length} підрозділів, ${data.totalPositions} посад</strong><br><br>`;
+    data.units.forEach(u => {
+      const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
+      html += `• <strong>${escHtml(u.name)}</strong> — ${u.filled}/${u.total} (${pct}%)<br>`;
     });
     if (previewEl) { previewEl.innerHTML = html; previewEl.style.display = 'block'; }
 
-    statusEl.textContent = `✅ Імпортовано! ${result.units.length} підрозділів, ${result.totalPositions} посад`;
+    statusEl.textContent = `✅ Імпортовано ${data.units.length} підрозділів!`;
     statusEl.style.color = 'var(--green)'; statusEl.style.background = 'var(--green-bg)';
     btn.disabled = false;
-    renderShtatWorkspace();
+    renderShtatDashboard();
   })
   .catch(err => {
     statusEl.textContent = '❌ ' + err.message; statusEl.style.color = 'var(--red)'; btn.disabled = false;
+    if (previewEl) previewEl.style.display = 'none';
   });
 }
 
-function parseStaffingSheet(csvText) {
+// ---- Парсер CSV з Google Таблиці ----
+function parseStaffCSV(csvText) {
   const rows = csvText.split(/\r?\n/);
   const dataRows = rows.map(row => {
     const cols = []; let cur = '', q = false;
-    for (const ch of row) {
-      if (ch === '"') q = !q;
-      else if (ch === ',' && !q) { cols.push(cur.trim()); cur = ''; }
-      else cur += ch;
-    }
-    cols.push(cur.trim());
-    return cols;
+    for (const ch of row) { if (ch === '"') q = !q; else if (ch === ',' && !q) { cols.push(cur.trim()); cur = ''; } else cur += ch; }
+    cols.push(cur.trim()); return cols;
   });
 
   const units = [];
-  const POS_KEYS = ['посада', 'position', 'найменування посади', 'штатна посада', 'назва посади', 'посада (професія)'];
-  const NAME_KEYS = ['піб', 'name', 'прізвище', 'прізвище та ініціали', 'працівник', 'співробітник', 'прізвище, ім\'я, по батькові'];
+  let currentUnit = null, currentSub = null;
 
-  // Фаза 1: знайти всі групи (unit header → column header → data rows)
-  let currentUnit = null, colMap = null, lastPosIdx = -1, lastNameIdx = -1;
-
-  function detectCols(row) {
-    const map = { pos: -1, name: -1 };
-    row.forEach((c, i) => {
-      const cl = c.replace(/^["']|["']$/g, '').toLowerCase().trim();
-      if (POS_KEYS.some(k => cl.includes(k) || k.includes(cl))) map.pos = i;
-      if (NAME_KEYS.some(k => cl.includes(k) || k.includes(cl))) map.name = i;
-    });
-    return map.pos >= 0 ? map : null;
-  }
-
-  function isUnitHeader(row) {
-    const nonEmpty = row.filter(c => c.replace(/^["']|["']$/g, '').trim());
-    if (nonEmpty.length === 0 || nonEmpty.length > 3) return false;
-    const first = nonEmpty[0].replace(/^["']|["']$/g, '').trim();
-    if (first.length < 4 || /^\d+$/.test(first)) return false;
-    if (POS_KEYS.some(k => first.toLowerCase().includes(k))) return false;
-    if (NAME_KEYS.some(k => first.toLowerCase().includes(k))) return false;
-    if (first.startsWith('Authorized') || first.startsWith('Note') || first.startsWith('№')) return false;
-    return true;
-  }
-
-  function isVacant(name) {
-    return !name || /^[-–—\s]*$/ .test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name);
-  }
+  function isVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
+  function clean(s) { return s.replace(/^["']|["']$/g, '').replace(/^[-–•\s]+|[-–•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
 
   for (const row of dataRows) {
-    const detected = detectCols(row);
-    if (detected) {
-      colMap = detected; lastPosIdx = detected.pos; lastNameIdx = detected.name;
+    const num = clean(row[0] || '');
+    const posRaw = clean(row[1] || '');
+    const personRaw = clean(row[2] || '');
+    const col4 = clean(row[3] || '');
+    const col5 = clean(row[4] || '');
+
+    // Пропускаємо повністю порожні рядки
+    if (!num && !posRaw && !personRaw && !col4 && !col5) continue;
+
+    // Рядок-заголовок підрозділу? (№ = назва підрозділу, без номера)
+    if (!num && posRaw && !personRaw && !col4) {
+      if (posRaw.toLowerCase().includes('по штату') || posRaw.toLowerCase().startsWith('authorized')) continue;
+      // Це назва підрозділу або підсекції
+      if (currentUnit && posRaw.length < 50) {
+        // Підсекція всередині підрозділу
+        currentSub = posRaw;
+        if (!currentUnit.subunits) currentUnit.subunits = {};
+        if (!currentUnit.subunits[currentSub]) currentUnit.subunits[currentSub] = [];
+      } else if (!currentUnit || posRaw.length >= 10) {
+        // Новий підрозділ
+        if (currentUnit && currentUnit.positions.length > 0) units.push(currentUnit);
+        currentUnit = { name: posRaw, positions: [], subunits: {} };
+        currentSub = null;
+      }
       continue;
     }
 
-    if (isUnitHeader(row)) {
-      if (currentUnit && currentUnit.positions.length > 0) units.push(currentUnit);
-      let name = row[0].replace(/^["']|["']$/g, '').trim();
-      const extra = row.length > 1 ? row[1].replace(/^["']|["']$/g, '').trim() : '';
-      if (extra && extra.length > 1) name += ' — ' + extra;
-      currentUnit = { name, positions: [] };
-      colMap = null;
-      continue;
-    }
+    // Рядок з позицією (має номер)
+    if (num && /^\d/.test(num) && posRaw && currentUnit) {
+      const position = posRaw;
+      const person = personRaw;
+      const filled = !isVacant(person);
 
-    if (currentUnit && colMap) {
-      const pi = colMap.pos, ni = colMap.name >= 0 ? colMap.name : pi + 1;
-      let pos = pi < row.length ? row[pi].replace(/^["']|["']$/g, '').trim() : '';
-      let personName = ni < row.length ? row[ni].replace(/^["']|["']$/g, '').trim() : '';
-
-      if (!pos) continue;
-      if (POS_KEYS.some(k => pos.toLowerCase().includes(k))) continue;
-      if (['посада', 'position'].includes(pos.toLowerCase())) continue;
-      if (pos.toLowerCase().startsWith('authorized') || pos.toLowerCase().startsWith('note')) continue;
-      if (/^\d+\.?\s*$/.test(pos)) continue;
-
-      pos = pos.replace(/^[-–•\s]+|[-–•\s]+$/g, '').replace(/\s+/g, ' ');
-      const filled = !isVacant(personName);
-
-      currentUnit.positions.push({ position: pos, name: personName, filled });
-    } else if (currentUnit && !colMap && row.length >= 2) {
-      // Спроба здогадатись: перша непорожня нечислова колонка = посада, наступна = ПІБ
-      const cleaned = row.map(c => c.replace(/^["']|["']$/g, '').trim());
-      const nonEmptyIdx = cleaned.findIndex(c => c && !/^\d+$/.test(c));
-      if (nonEmptyIdx >= 0) {
-        const pos = cleaned[nonEmptyIdx];
-        const nm = nonEmptyIdx + 1 < cleaned.length ? cleaned[nonEmptyIdx + 1] : '';
-        if (pos.length > 3 && !pos.startsWith('Authorized') && !POS_KEYS.some(k => pos.toLowerCase().includes(k))) {
-          const filled = !isVacant(nm);
-          currentUnit.positions.push({ position: pos.replace(/\s+/g, ' '), name: nm, filled });
-        }
+      const entry = { position, name: person, filled };
+      currentUnit.positions.push(entry);
+      if (currentSub && currentUnit.subunits) {
+        if (!currentUnit.subunits[currentSub]) currentUnit.subunits[currentSub] = [];
+        currentUnit.subunits[currentSub].push(entry);
       }
     }
+
+    // Якщо є дані в колонках 4+ — це наступні таблиці (інші підрозділи)
+    // Обробляються при повторному проході
   }
 
   if (currentUnit && currentUnit.positions.length > 0) units.push(currentUnit);
@@ -4887,94 +3073,119 @@ function parseStaffingSheet(csvText) {
   return { units, totalPositions };
 }
 
-// ===== Спрощений рендер Personnel (імпортовані дані) =====
-function renderPersonnelTab(units, thead, tbody, tfoot, summary) {
-  const imported = loadImportedPersonnel();
-  const hasData = imported.units.length > 0;
-  const unitIds = getUnitIds(units);
+// ---- Рендер дашборду Штату ----
+function renderShtatDashboard() {
+  const container = document.getElementById('shtat-dashboard');
+  if (!container) return;
 
-  if (hasData) {
-    // Рендер імпортованих даних
-    let grandTotal = 0, grandFilled = 0;
-    imported.units.forEach(u => { grandTotal += u.total; grandFilled += u.filled; });
+  const data = loadImportedStaff();
 
-    thead.innerHTML = `<tr>
-      <th class="shtat-th-unit">Підрозділ</th>
-      <th class="shtat-th-cat">Всього посад</th>
-      <th class="shtat-th-cat" style="color:var(--green);">Факт</th>
-      <th class="shtat-th-cat" style="color:var(--red);">Некомплект</th>
-    </tr>`;
-
-    let rowsHtml = '';
-    imported.units.forEach((u, i) => {
-      const shortage = u.total - u.filled;
-      rowsHtml += `<tr class="shtat-unit-row" data-idx="${i}" data-toggle="imported-unit" style="cursor:pointer;">
-        <td>
-          <span class="shtat-unit-toggle">▶</span>
-          <span class="shtat-unit-name">${escHtml(u.name)}</span>
-        </td>
-        <td><strong>${u.total}</strong></td>
-        <td><strong style="color:var(--green);">${u.filled}</strong></td>
-        <td><strong style="color:${shortage > 0 ? 'var(--red)' : 'var(--green)'}">${shortage > 0 ? '−' + shortage : '✓'}</strong></td>
-      </tr>
-      <tr class="shtat-pos-detail" data-idx="${i}" style="display:none;">
-        <td colspan="4" style="padding:0;">
-          <div class="shtat-pos-editor">
-            <table class="shtat-table shtat-pos-table">
-              <thead><tr><th>№</th><th>Посада</th><th>Штат</th><th>Факт</th><th>ПІБ</th></tr></thead>
-              <tbody>`;
-
-      u.positions.forEach((p, pi) => {
-        const vacantClass = p.filled ? '' : 'style="color:var(--red);"';
-        rowsHtml += `<tr ${vacantClass}>
-          <td>${pi + 1}</td>
-          <td>${escHtml(p.position)}</td>
-          <td>1</td>
-          <td>${p.filled ? '1' : '<span style="color:var(--red);">0</span>'}</td>
-          <td>${p.filled ? escHtml(p.name) : '<span style="color:var(--red);">Вакант</span>'}</td>
-        </tr>`;
-      });
-
-      rowsHtml += `</tbody></table></div></td></tr>`;
-    });
-
-    tbody.innerHTML = rowsHtml;
-    tfoot.innerHTML = `<tr>
-      <td><strong>ВСЬОГО</strong></td>
-      <td><strong>${grandTotal}</strong></td>
-      <td><strong style="color:var(--green);">${grandFilled}</strong></td>
-      <td><strong style="color:var(--red);">${grandTotal - grandFilled}</strong></td>
-    </tr>`;
-    if (summary) summary.innerHTML = `<span>Підрозділів: <strong>${imported.units.length}</strong></span>
-      <span>Посад: <strong>${grandTotal}</strong></span>
-      <span>Заповнено: <strong>${grandFilled}</strong></span>
-      <span>Некомплект: <strong style="color:var(--red);">${grandTotal - grandFilled}</strong></span>`;
-
-    // Toggle listeners
-    tbody.querySelectorAll('[data-toggle="imported-unit"]').forEach(row => {
-      row.addEventListener('click', () => {
-        const idx = row.dataset.idx;
-        const detail = tbody.querySelector(`tr.shtat-pos-detail[data-idx="${idx}"]`);
-        const toggle = row.querySelector('.shtat-unit-toggle');
-        if (detail) {
-          const open = detail.style.display !== 'none';
-          detail.style.display = open ? 'none' : '';
-          if (toggle) toggle.textContent = open ? '▶' : '▼';
-        }
-      });
-    });
-
-  } else if (unitIds.length > 0) {
-    // Старий рендер (ручне редагування)
-    renderPersonnelTabLegacy(units, thead, tbody, tfoot, summary);
-  } else {
-    // Порожній стан
-    thead.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = '';
-    if (summary) summary.innerHTML = '<span style="color:var(--text3);">Немає даних. Імпортуйте штатний розпис через Налаштування → 📊 Google Таблиці.</span>';
+  if (!data.units.length) {
+    container.innerHTML = `
+      <div class="shtat-empty">
+        <div class="shtat-empty-icon">📊</div>
+        <div class="shtat-empty-title">Немає даних штатного розпису</div>
+        <div class="shtat-empty-sub">
+          Імпортуйте дані через <code>Налаштування → 📊 Google Таблиці</code><br>
+          Вставте посилання на Google Таблицю зі штатним розписом
+        </div>
+      </div>`;
+    return;
   }
+
+  const grandTotal = data.totalPositions;
+  const grandFilled = data.units.reduce((s, u) => s + u.filled, 0);
+  const grandVacant = grandTotal - grandFilled;
+  const overallPct = grandTotal > 0 ? Math.round(grandFilled / grandTotal * 100) : 0;
+
+  // Колір за % заповнення
+  function pctColor(pct) {
+    if (pct >= 90) return 'var(--green)';
+    if (pct >= 70) return 'var(--amber)';
+    return 'var(--red)';
+  }
+
+  let html = '';
+
+  // ── Summary Cards ──
+  html += `<div class="shtat-summary-cards">
+    <div class="shtat-stat total"><div class="shtat-stat-label">Всього посад</div><div class="shtat-stat-value">${grandTotal}</div><div class="shtat-stat-sub">за штатним розписом</div></div>
+    <div class="shtat-stat filled"><div class="shtat-stat-label">Укомплектовано</div><div class="shtat-stat-value">${grandFilled}</div><div class="shtat-stat-sub">особового складу</div></div>
+    <div class="shtat-stat vacant"><div class="shtat-stat-label">Некомплект</div><div class="shtat-stat-value">${grandVacant}</div><div class="shtat-stat-sub">вакантних посад</div></div>
+    <div class="shtat-stat pct"><div class="shtat-stat-label">Укомплектованість</div><div class="shtat-stat-value">${overallPct}%</div><div class="shtat-stat-sub">від штатної чисельності</div></div>
+  </div>`;
+
+  // ── Overall Progress Bar ──
+  const barColor = pctColor(overallPct);
+  html += `<div class="shtat-overall-bar-wrap">
+    <div class="shtat-overall-label">
+      <span class="shtat-overall-title">Загальна укомплектованість</span>
+      <span class="shtat-overall-pct" style="color:${barColor}">${grandFilled} з ${grandTotal}</span>
+    </div>
+    <div class="shtat-overall-track"><div class="shtat-overall-fill" style="width:${overallPct}%;background:${barColor};"></div></div>
+  </div>`;
+
+  // ── Units List ──
+  html += `<div class="shtat-units-list">`;
+  data.units.forEach((u, i) => {
+    const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
+    const color = pctColor(pct);
+    const shortage = u.total - u.filled;
+
+    html += `<div class="shtat-unit-card" id="shtat-unit-${i}">
+      <div class="shtat-unit-header" onclick="toggleShtatUnit(${i})">
+        <div class="shtat-unit-name">
+          <span class="shtat-unit-chevron">▶</span> ${escHtml(u.name)}
+        </div>
+        <div class="shtat-unit-bar-wrap"><div class="shtat-unit-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+        <div class="shtat-unit-count" style="color:${color}">${u.filled}/${u.total}</div>
+      </div>
+      <div class="shtat-unit-detail">`;
+
+    // Позиції згруповані за підсекціями
+    if (u.subunits && Object.keys(u.subunits).length > 0) {
+      Object.entries(u.subunits).forEach(([subName, positions]) => {
+        if (!positions || !positions.length) return;
+        html += `<div class="shtat-unit-subsection">
+          <div class="shtat-subsection-title">${escHtml(subName)}</div>`;
+        positions.forEach(p => {
+          html += `<div class="shtat-position-row">
+            <span class="shtat-position-name">${escHtml(p.position)}</span>
+            <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
+            <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      });
+    } else {
+      // Без підсекцій — просто список позицій
+      html += `<div class="shtat-unit-subsection">`;
+      u.positions.forEach(p => {
+        html += `<div class="shtat-position-row">
+          <span class="shtat-position-name">${escHtml(p.position)}</span>
+          <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
+          <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div></div>`;
+  });
+  html += `</div>`;
+
+  container.innerHTML = html;
 }
 
+function toggleShtatUnit(idx) {
+  const card = document.getElementById('shtat-unit-' + idx);
+  if (card) card.classList.toggle('open');
+}
 
+// ---- Ініціалізація при переході в режим Штату ----
+function initShtatMode() {
+  renderShtatDashboard();
+}
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
@@ -5326,44 +3537,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   applyEditMode();
 
-  // ---- Штат sub-tabs ----
-  document.querySelectorAll('.shtat-subtab').forEach(btn => {
-    btn.addEventListener('click', () => setActiveShtatTab(btn.dataset.shtatTab));
-  });
-  // Init sub-tab state
-  setActiveShtatTab(activeShtatTab);
-
-  // ---- Штат add buttons ----
-  const shtatAddUnitBtn = document.getElementById('shtat-add-unit-btn');
-  if (shtatAddUnitBtn) shtatAddUnitBtn.addEventListener('click', addShtatUnit);
-  const shtatAddColBtn = document.getElementById('shtat-add-col-btn');
-  if (shtatAddColBtn) shtatAddColBtn.addEventListener('click', addShtatCustomCol);
-
-  // ---- Штат export/import ----
-  const shtatExportBtn = document.getElementById('shtat-export-btn');
-  if (shtatExportBtn) shtatExportBtn.addEventListener('click', exportShtatData);
-  const shtatImportBtn = document.getElementById('shtat-import-btn');
-  const shtatImportFile = document.getElementById('shtat-import-file');
-  if (shtatImportBtn && shtatImportFile) {
-    shtatImportBtn.addEventListener('click', () => shtatImportFile.click());
-    shtatImportFile.addEventListener('change', () => {
-      if (shtatImportFile.files[0]) {
-        importShtatData(shtatImportFile.files[0]);
-        shtatImportFile.value = '';
-      }
-    });
-  }
-
-  // ---- Google Sheets Import ----
+  // ---- Google Sheets Import (тільки в налаштуваннях) ----
   const sheetsImportBtn = document.getElementById('sheets-import-btn');
   if (sheetsImportBtn) {
-    sheetsImportBtn.addEventListener('click', importShtatFromGoogleSheets);
+    sheetsImportBtn.addEventListener('click', importStaffFromSheets);
   }
 
-  // Initialize Штат data if empty
-  const shtatData = loadShtatData();
-  if (!Object.keys(shtatData).length) {
-    // noop — loadShtatData already seeds defaults
-  }
-  renderShtatWorkspace();
+  // Ініціалізація дашборду Штату
+  initShtatMode();
 });

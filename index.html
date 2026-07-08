@@ -2120,445 +2120,81 @@
   }
 
   /* Edit mode OFF — hide editing UI chrome */
-  body.edit-mode-off .shtat-edit-unit,
-  body.edit-mode-off .shtat-delete-unit,
-  body.edit-mode-off .shtat-drag-handle,
-  body.edit-mode-off .shtat-del-col-btn,
   body.edit-mode-off .tab-close,
   body.edit-mode-off .task-action-btn,
   body.edit-mode-off #tab-add-btn { display: none !important; }
 
-  /* Штат mode overrides */
+  /* ═══════════════════════════════════════════════════════════
+     📊 ШТАТ — Дашборд комплектності підрозділів
+     ═══════════════════════════════════════════════════════════ */
   body.shtat-mode .dash-layout,
   body.shtat-mode #tab-bar { display: none !important; }
   body.shtat-mode #ops-workspace { display: none !important; }
   body.shtat-mode #shtat-workspace { display: block !important; }
 
-  /* Штат workspace */
-  .shtat-workspace {
-    padding: 24px 28px 40px;
-    margin: 0 20px 20px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-  }
-  .shtat-shell {
-    max-width: 100%;
-    overflow-x: auto;
-  }
-  .shtat-hero {
-    margin-bottom: 20px;
-  }
-  .shtat-kicker {
-    font: 700 11px/1 'Inter', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--blue);
-    margin-bottom: 6px;
-  }
-  .shtat-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .shtat-title {
-    font: 700 20px/1.25 'Inter', sans-serif;
-    color: var(--text);
-    margin: 0 0 4px;
-  }
-  .shtat-subtitle {
-    font: 400 13px/1.5 'Inter', sans-serif;
-    color: var(--text3);
-    margin: 0;
-  }
-  .shtat-action-row {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-  .shtat-soft-btn {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--text2);
-    cursor: pointer;
-    font: 600 12px/1 'Inter', sans-serif;
-    padding: 8px 16px;
-    white-space: nowrap;
-    transition: background .18s ease, color .18s ease, border-color .18s ease;
-  }
-  .shtat-soft-btn:hover {
-    color: var(--text);
-    border-color: var(--border2);
-    background: var(--surface2);
-  }
-  #shtat-export-btn {
-    border-color: var(--green);
-    color: var(--green);
-  }
-  #shtat-export-btn:hover {
-    background: var(--green-bg);
-    border-color: var(--green);
-  }
-  #shtat-import-btn {
-    border-color: var(--amber);
-    color: var(--amber);
-  }
-  #shtat-import-btn:hover {
-    background: var(--amber-bg);
-    border-color: var(--amber);
-  }
+  .shtat-workspace { padding: 24px 28px 40px; margin: 0 20px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 
-  /* Штат sub-tabs */
-  .shtat-subnav {
-    display: flex;
-    gap: 2px;
-    margin-bottom: 16px;
-    background: var(--surface2);
-    border-radius: 10px;
-    padding: 3px;
-    width: fit-content;
-  }
-  .shtat-subtab {
-    border: none;
-    background: transparent;
-    color: var(--text2);
-    cursor: pointer;
-    font: 600 12px/1 'Inter', sans-serif;
-    padding: 8px 16px;
-    border-radius: 8px;
-    white-space: nowrap;
-    transition: background .18s ease, color .18s ease, box-shadow .18s ease;
-  }
-  .shtat-subtab:hover {
-    color: var(--text);
-    background: var(--surface);
-  }
-  .shtat-subtab.active {
-    background: var(--surface);
-    color: var(--blue);
-    box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    font-weight: 700;
-  }
+  /* ── Дашборд: шапка з інфографікою ── */
+  .shtat-summary-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .shtat-stat { background: var(--surface2); border-radius: 14px; padding: 18px 20px; border: 1px solid var(--border); }
+  .shtat-stat-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .shtat-stat-value { font: 800 32px/1 'JetBrains Mono', monospace; }
+  .shtat-stat-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .shtat-stat.total .shtat-stat-value { color: var(--text); }
+  .shtat-stat.filled .shtat-stat-value { color: var(--green); }
+  .shtat-stat.vacant .shtat-stat-value { color: var(--red); }
+  .shtat-stat.pct .shtat-stat-value { color: var(--blue); }
 
-  /* Штат table */
-  .shtat-table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-  }
-  .shtat-table {
-    width: 100%;
-    border-collapse: collapse;
-    font: 400 13px/1.4 'Inter', sans-serif;
-    min-width: 1100px;
-  }
-  .shtat-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-  }
-  .shtat-table th {
-    background: var(--surface2);
-    color: var(--text2);
-    font-weight: 700;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    padding: 10px 8px;
-    border-bottom: 2px solid var(--border);
-    text-align: center;
-    white-space: nowrap;
-  }
-  .shtat-th-unit {
-    text-align: left !important;
-    min-width: 180px;
-    position: sticky;
-    left: 0;
-    z-index: 3;
-    background: var(--surface2) !important;
-  }
-  .shtat-th-cat {
-    color: var(--text) !important;
-    font-size: 12px !important;
-    letter-spacing: .02em !important;
-  }
-  .shtat-th-sub {
-    font-weight: 600 !important;
-    font-size: 10px !important;
-    color: var(--text3) !important;
-    padding: 6px 6px !important;
-  }
-  .shtat-col-shtat { color: var(--blue) !important; }
-  .shtat-col-fakt { color: var(--green) !important; }
+  /* ── Overall progress bar ── */
+  .shtat-overall-bar-wrap { margin-bottom: 24px; background: var(--surface2); border-radius: 10px; padding: 14px 18px; border: 1px solid var(--border); }
+  .shtat-overall-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .shtat-overall-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .shtat-overall-pct { font: 700 14px 'JetBrains Mono', monospace; }
+  .shtat-overall-track { height: 10px; border-radius: 5px; background: var(--border2); overflow: hidden; }
+  .shtat-overall-fill { height: 100%; border-radius: inherit; transition: width .5s ease; }
 
-  .shtat-table td {
-    padding: 8px 6px;
-    border-bottom: 1px solid var(--border);
-    text-align: center;
-    vertical-align: middle;
-  }
-  .shtat-table td:first-child {
-    text-align: left;
-    font-weight: 600;
-    color: var(--text);
-    position: sticky;
-    left: 0;
-    background: var(--surface);
-    z-index: 1;
-  }
-  .shtat-table tr:hover td {
-    background: var(--surface2);
-  }
-  .shtat-table tr:hover td:first-child {
-    background: var(--surface2);
-  }
-  .shtat-table input {
-    width: 60px;
-    text-align: center;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 5px 4px;
-    font: 500 13px/1 'Inter', sans-serif;
-    color: var(--text);
-    background: var(--surface);
-    outline: none;
-    transition: border-color .15s ease, box-shadow .15s ease;
-  }
-  .shtat-table input:focus {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px var(--blue-bg);
-  }
-  .shtat-table input.shtat-input-shtat {
-    color: var(--blue);
-    font-weight: 600;
-  }
-  .shtat-table input.shtat-input-fakt {
-    color: var(--green);
-    font-weight: 600;
-  }
-  .shtat-table input.shtat-input-diff {
-    color: var(--red);
-    font-weight: 700;
-  }
-  .shtat-table .shtat-unit-name {
-    font-weight: 600;
-    color: var(--text);
-    min-width: 160px;
-    display: block;
-  }
-  .shtat-table .shtat-edit-unit {
-    cursor: pointer;
-    color: var(--text3);
-    margin-left: 4px;
-    font-size: 12px;
-    opacity: 0;
-    transition: opacity .15s ease, color .15s ease;
-    vertical-align: middle;
-  }
-  .shtat-table tr:hover .shtat-edit-unit {
-    opacity: 1;
-  }
-  .shtat-table .shtat-edit-unit:hover {
-    color: var(--blue);
-  }
-  .shtat-table .shtat-delete-unit {
-    cursor: pointer;
-    color: var(--text3);
-    margin-left: 4px;
-    font-size: 14px;
-    opacity: 0;
-    transition: opacity .15s ease, color .15s ease;
-    vertical-align: middle;
-  }
-  .shtat-table tr:hover .shtat-delete-unit {
-    opacity: 1;
-  }
-  .shtat-table .shtat-delete-unit:hover {
-    color: var(--red);
-  }
-  .shtat-drag-handle {
-    cursor: grab;
-    color: var(--text3);
-    margin-right: 4px;
-    font-size: 14px;
-    opacity: 0.5;
-    user-select: none;
-    padding: 2px 4px;
-    border-radius: 4px;
-    transition: opacity .15s ease, background .15s ease;
-  }
-  .shtat-drag-handle:hover {
-    opacity: 1;
-    background: var(--surface2);
-  }
-  .shtat-drag-handle:active { cursor: grabbing; }
-  .shtat-dragging { opacity: 0.4; }
-  .shtat-drop-before { box-shadow: inset 0 2px 0 var(--blue); }
-  .shtat-drop-after  { box-shadow: inset 0 -2px 0 var(--blue); }
+  /* ── Список підрозділів ── */
+  .shtat-units-list { display: flex; flex-direction: column; gap: 8px; }
+  .shtat-unit-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow .2s; }
+  .shtat-unit-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  .shtat-unit-header { display: grid; grid-template-columns: 1fr 120px 60px; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer; user-select: none; }
+  .shtat-unit-name { font-weight: 700; font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .shtat-unit-chevron { font-size: 10px; color: var(--text3); transition: transform .2s; }
+  .shtat-unit-card.open .shtat-unit-chevron { transform: rotate(90deg); }
+  .shtat-unit-bar-wrap { height: 8px; border-radius: 4px; background: var(--border2); overflow: hidden; }
+  .shtat-unit-bar-fill { height: 100%; border-radius: inherit; transition: width .4s ease; }
+  .shtat-unit-count { text-align: right; font: 700 13px 'JetBrains Mono', monospace; color: var(--text2); }
+  .shtat-unit-detail { display: none; border-top: 1px solid var(--border); }
+  .shtat-unit-card.open .shtat-unit-detail { display: block; }
+  .shtat-unit-subsection { padding: 10px 18px; }
+  .shtat-unit-subsection + .shtat-unit-subsection { border-top: 1px solid var(--border); }
+  .shtat-subsection-title { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .shtat-position-row { display: grid; grid-template-columns: 1fr 80px 180px; gap: 8px; align-items: center; padding: 5px 0; font-size: 13px; border-bottom: 1px solid rgba(0,0,0,.03); }
+  .shtat-position-row:last-child { border-bottom: none; }
+  .shtat-position-name { color: var(--text); }
+  .shtat-position-status { font-size: 11px; font-weight: 600; text-align: center; padding: 2px 8px; border-radius: 10px; }
+  .shtat-position-status.filled { background: var(--green-bg); color: var(--green); }
+  .shtat-position-status.vacant { background: var(--red-bg); color: var(--red); }
+  .shtat-position-person { color: var(--text2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+  /* ── Empty state ── */
+  .shtat-empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+  .shtat-empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .shtat-empty-title { font-size: 18px; font-weight: 700; color: var(--text2); margin-bottom: 8px; }
+  .shtat-empty-sub { font-size: 13px; line-height: 1.6; max-width: 420px; margin: 0 auto; }
+  .shtat-empty-sub code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 12px; }
 
-  /* Штат footer — показуємо ЗВЕРХУ після заголовків */
-  .shtat-table tfoot {
-    display: table-header-group;
-  }
-  .shtat-table tfoot td {
-    background: var(--surface2);
-    font-weight: 700;
-    color: var(--text);
-    border-bottom: 2px solid var(--border);
-  }
-  .shtat-table tfoot td:first-child {
-    background: var(--surface2);
-    position: sticky;
-    left: 0;
-    z-index: 3;
-  }
-  .shtat-summary-row {
-    margin-top: 16px;
-    display: flex;
-    gap: 24px;
-    flex-wrap: wrap;
-    font: 500 12px/1 'Inter', sans-serif;
-    color: var(--text2);
-  }
-  .shtat-summary-row strong {
-    color: var(--text);
-    font-weight: 700;
-  }
-
-  /* Unit row toggle */
-  .shtat-unit-toggle {
-    display: inline-block;
-    width: 16px;
-    font-size: 10px;
-    color: var(--text3);
-    transition: transform .15s ease;
-    margin-right: 4px;
-  }
-  .shtat-unit-row {
-    transition: background .15s ease;
-  }
-  .shtat-row-even { background: var(--surface2); }
-  .shtat-row-even td:first-child { background: var(--surface2); }
-  .shtat-unit-row:hover {
-    background: var(--surface3) !important;
-  }
-  .shtat-pos-detail {
-    background: var(--surface2);
-  }
-  .shtat-pos-detail td {
-    border-bottom: 2px solid var(--border) !important;
-  }
-
-  /* Position editor (inside expanded unit) */
-  .shtat-pos-editor {
-    padding: 8px 12px 12px;
-    background: var(--surface);
-    border-radius: 0 0 8px 8px;
-  }
-  .shtat-pos-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-  }
-  .shtat-pos-table th {
-    background: var(--surface2);
-    font-size: 10px;
-    padding: 6px 8px;
-    text-align: center;
-  }
-  .shtat-pos-table td {
-    padding: 4px 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .shtat-pos-table td:first-child {
-    font-weight: 500;
-    color: var(--text);
-  }
-  .shtat-pos-table input {
-    width: 60px;
-    text-align: center;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 4px;
-    font: 500 12px/1 'Inter', sans-serif;
-    color: var(--text);
-    background: var(--surface);
-    outline: none;
-  }
-  .shtat-pos-table input:focus {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px var(--blue-bg);
-  }
-  .shtat-equipment-detail .shtat-pos-editor {
-    padding: 16px 20px;
-    border-top: 1px solid var(--border);
-    background: var(--bg2);
-  }
-  .shtat-equipment-table {
-    width: 100%;
-    border-spacing: 0;
-    border-collapse: separate;
-    font-size: 13px;
-  }
-  .shtat-equipment-table th {
-    text-align: left;
-    font-weight: 600;
-    color: var(--text3);
-    padding: 8px 6px;
-    border-bottom: 1px solid var(--border);
-  }
-  .shtat-equipment-table th:first-child { width: 30px; text-align: center; padding-left: 20px; }
-  .shtat-equipment-table td {
-    padding: 6px;
-    vertical-align: top;
-    border-bottom: 1px dashed var(--border);
-  }
-  .shtat-equipment-table td:first-child { text-align: center; color: var(--text3); padding-left: 20px; }
-  .shtat-equipment-table tr:last-child td { border-bottom: none; }
-  .shtat-equipment-table input[type="text"] {
-    width: 100%;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-input);
-    color: var(--text);
-    font-size: 13px;
-    line-height: 1.4;
-  }
-  .shtat-equipment-table input[type="text"]:focus {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px var(--blue-bg);
-  }
-  .shtat-equipment-table .shtat-checkbox-col {
-    text-align: center;
-    width: 70px;
-  }
-  .shtat-equipment-table input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    vertical-align: middle;
-    cursor: pointer;
-  }
-  .shtat-del-col-btn {
-    cursor: pointer;
-    color: var(--text3);
-    margin-left: 4px;
-    font-size: 11px;
-    opacity: 0;
-    transition: opacity .15s ease, color .15s ease;
-  }
-  .shtat-table th:hover .shtat-del-col-btn {
-    opacity: 1;
-  }
-  .shtat-del-col-btn:hover {
-    color: var(--red);
+  /* ── Mobile ── */
+  @media (max-width: 600px) {
+    .shtat-workspace { padding: 10px; margin: 0 4px 10px; border-radius: 12px; }
+    .shtat-summary-cards { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .shtat-stat { padding: 12px 14px; }
+    .shtat-stat-value { font-size: 24px; }
+    .shtat-unit-header { grid-template-columns: 1fr 70px 45px; gap: 6px; padding: 10px 12px; }
+    .shtat-unit-name { font-size: 12px; }
+    .shtat-unit-count { font-size: 11px; }
+    .shtat-position-row { grid-template-columns: 1fr 55px 100px; font-size: 11px; }
+    .shtat-position-person { font-size: 10px; }
   }
 /* ═══════════════════════════════════════════════════════════════
    📱 МОБІЛЬНА АДАПТАЦІЯ — Telegram Mini App (phone ≤600px)
@@ -3141,37 +2777,8 @@
 </section>
 
 <section class="shtat-workspace" id="shtat-workspace" aria-label="Штат" style="display:none;">
-  <div class="shtat-shell">
-    <div class="shtat-hero">
-      <div class="shtat-kicker">Штат</div>
-      <div class="shtat-title-row">
-        <div>
-          <h2 class="shtat-title">Структурні підрозділи — особовий склад, техніка, обладнання</h2>
-          <p class="shtat-subtitle">Штатна чисельність / фактична наявність. Дані редагуються по клітинках.</p>
-        </div>
-        <div class="shtat-action-row">
-          <button class="shtat-soft-btn" type="button" id="shtat-add-unit-btn">Додати підрозділ</button>
-          <button class="shtat-soft-btn" type="button" id="shtat-add-col-btn">Додати категорію</button>
-          <button class="shtat-soft-btn" type="button" id="shtat-export-btn" title="Завантажити у форматі .ods">📥 Експорт ODS</button>
-          <button class="shtat-soft-btn" type="button" id="shtat-import-btn" title="Імпортувати .ods, .csv або .json">📤 Імпорт</button>
-          <input type="file" id="shtat-import-file" accept=".json,.csv,.ods" style="display:none;">
-        </div>
-      </div>
-    </div>
-    <nav class="shtat-subnav" id="shtat-subnav">
-      <button class="shtat-subtab active" data-shtat-tab="personnel">👤 Особовий склад</button>
-      <button class="shtat-subtab" data-shtat-tab="equipment">🚛 Техніка</button>
-      <button class="shtat-subtab" data-shtat-tab="hardware">📦 Обладнання</button>
-      <button class="shtat-subtab" data-shtat-tab="custom">➕ Додатково</button>
-    </nav>
-    <div class="shtat-table-wrap">
-      <table class="shtat-table" id="shtat-table">
-        <thead id="shtat-thead"></thead>
-        <tfoot id="shtat-tfoot"></tfoot>
-        <tbody id="shtat-tbody"></tbody>
-      </table>
-    </div>
-    <div class="shtat-summary-row" id="shtat-summary"></div>
+  <div class="shtat-dashboard" id="shtat-dashboard">
+    <!-- Заповнюється через renderShtatDashboard() -->
   </div>
 </section>
 
