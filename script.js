@@ -2467,7 +2467,7 @@ function closeSettings() {
 
 // ---- Edit mode (UI chrome visibility) ----
 function loadEditMode() {
-  return localStorage.getItem(EDIT_MODE_KEY) !== 'false'; // default: ON
+  return localStorage.getItem(EDIT_MODE_KEY) === 'true'; // default: OFF
 }
 
 function applyEditMode() {
@@ -4736,6 +4736,347 @@ function deleteShtatCustomCol(colId) {
   renderShtatWorkspace();
 }
 
+// ===== Google Sheets Import → Штат =====
+const SHEETS_POSITION_MAP = {
+  // Начальницький склад
+  'начальник частини': 'chief',
+  'station chief': 'chief',
+  'unit commander': 'chief',
+  'заступник начальника частини': 'deputy',
+  'deputy chief': 'deputy',
+  'deputy commander': 'deputy',
+  'заступник начальника загону з реагування на нс': 'brigade_deputy_ns',
+  'deputy commander for emergency response': 'brigade_deputy_ns',
+  'начальник поста': 'post_chief',
+  'post chief': 'post_chief',
+  'начальник караулу': 'guard_chief',
+  'guard chief': 'guard_chief',
+  'начальник відділення': 'dept_chief',
+  'section chief': 'dept_chief',
+  // Командири
+  'командир відділення': 'squad_com',
+  'squad leader': 'squad_com',
+  'командир відділення-водій': 'squad_driver',
+  'squad leader-driver': 'squad_driver',
+  // Рятувальники
+  'пожежний-рятувальник': 'firefighter',
+  'firefighter-rescuer': 'firefighter',
+  'firefighter rescuer': 'firefighter',
+  // Водії
+  'старший водій': 'senior_driver',
+  'senior driver': 'senior_driver',
+  'водій': 'driver',
+  'driver': 'driver',
+  'водій автотранспортних засобів': 'vehicle_driver',
+  'vehicle driver': 'vehicle_driver',
+  // Оперативне реагування
+  'начальник відділення організації реагування на нс': 'dprz_chief',
+  'emergency response section chief': 'dprz_chief',
+  'фахівець відділення організації реагування на нс': 'dprz_spec',
+  'фахівець-інструктор': 'dprz_instr',
+  'specialist-instructor': 'dprz_instr',
+  'specialist': 'dprz_spec',
+  'leading specialist': 'dprz_spec',
+  // Ресурсне забезпечення
+  'начальник відділення ресурсного забезпечення': 'res_chief',
+  'resource support section chief': 'res_chief',
+  'фахівець відділення ресурсного забезпечення': 'res_spec',
+  // Закупівлі
+  'завідувач групи закупівель': 'proc_head',
+  'procurement group head': 'proc_head',
+  'фахівець групи закупівель': 'proc_spec',
+  // Юридична
+  'завідувач юридичної групи': 'legal_head',
+  'legal group head': 'legal_head',
+  'фахівець юридичної групи': 'legal_spec',
+  'legal specialist': 'legal_spec',
+  // Оператори
+  'начальник відділення-оператор': 'dept_op',
+  'communications squad leader-operator': 'dept_op',
+  'оператор': 'operator',
+  'operator': 'operator',
+  // Специфічні (апарат управління)
+  'начальник загону': 'brigade_chief',
+  'заступник начальника загону': 'brigade_deputy',
+  // Майстри ГДЗС
+  'старший майстер гдзс-водій': 'senior_driver',
+  'senior gas & smoke protection master-driver': 'senior_driver',
+  'майстер гдзс-водій': 'driver',
+  'gdzs master-driver': 'driver',
+  'gas & smoke protection squad leader-driver': 'squad_driver',
+  // Обслуговуючий персонал
+  'ремонтний squad leader-водій': 'squad_driver',
+  'maintenance squad leader-driver': 'squad_driver',
+  'прибиральниця': null, // не враховуємо в бойовому штаті
+  'cleaner': null,
+  'service premises cleaner': null,
+};
+
+function importShtatFromGoogleSheets() {
+  const urlInput = document.getElementById('sheets-url');
+  const statusEl = document.getElementById('sheets-status');
+  const previewEl = document.getElementById('sheets-preview');
+  const btn = document.getElementById('sheets-import-btn');
+
+  if (!urlInput || !statusEl) return;
+
+  const url = urlInput.value.trim();
+  if (!url) {
+    statusEl.textContent = '⚠️ Вставте посилання';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  // Витягуємо ID таблиці
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) {
+    statusEl.textContent = '❌ Невірне посилання';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+
+  const sheetId = match[1];
+  const gidMatch = url.match(/gid=(\d+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${gid}`;
+
+  statusEl.textContent = '⏳ Завантаження...';
+  statusEl.style.color = 'var(--blue)';
+  btn.disabled = true;
+
+  fetch(csvUrl)
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    })
+    .then(csvText => {
+      const result = parseStaffingCsv(csvText);
+      if (result.units.length === 0) {
+        throw new Error('Не знайдено підрозділів у таблиці');
+      }
+
+      // Показуємо превью
+      let previewHtml = '<strong>Знайдено:</strong><br>';
+      result.units.forEach(u => {
+        previewHtml += `• <strong>${escHtml(u.name)}</strong> — ${u.total} посад (заповнено ${u.filled})<br>`;
+      });
+      if (result.unmatched.length > 0) {
+        previewHtml += `<br><span style="color:var(--amber);">⚠ Не розпізнано ${result.unmatched.length} типів посад:</span><br>`;
+        result.unmatched.slice(0, 10).forEach(p => {
+          previewHtml += `• ${escHtml(p)}<br>`;
+        });
+        if (result.unmatched.length > 10) previewHtml += `... та ще ${result.unmatched.length - 10}<br>`;
+      }
+      if (previewEl) {
+        previewEl.innerHTML = previewHtml;
+        previewEl.style.display = 'block';
+      }
+
+      // Записуємо в shtat_data
+      applyStaffingToShtat(result);
+
+      statusEl.textContent = `✅ Імпортовано ${result.units.length} підрозділів!`;
+      statusEl.style.color = 'var(--green)';
+      statusEl.style.background = 'var(--green-bg)';
+      btn.disabled = false;
+
+      // Перемальовуємо штат
+      renderShtatWorkspace();
+    })
+    .catch(err => {
+      console.error('[Sheets] Import error:', err);
+      statusEl.textContent = '❌ Помилка: ' + err.message;
+      statusEl.style.color = 'var(--red)';
+      statusEl.style.background = 'var(--red-bg)';
+      btn.disabled = false;
+      if (previewEl) previewEl.style.display = 'none';
+    });
+}
+
+function parseStaffingCsv(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  const units = [];
+  const unmatched = new Set();
+
+  let currentUnit = null;
+  let headerFound = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Пропускаємо meta-рядки (заголовок таблиці)
+    if (line.startsWith('№,') || line.startsWith('"№"')) {
+      headerFound = true;
+      continue;
+    }
+
+    // Визначаємо чи це заголовок підрозділу
+    // Формат: рядок без ком, який містить назву підрозділу
+    const cols = parseCSVLine(line);
+
+    if (cols.length === 1 || (cols.length === 2 && !cols[0].match(/^\d/))) {
+      // Може бути назвою підрозділу
+      const candidate = cols[0].replace(/^["']|["']$/g, '').trim();
+      if (candidate && !candidate.startsWith('Authorized') && !candidate.startsWith('Note') &&
+          !candidate.includes('DSNS') && candidate.length > 3 && !candidate.match(/^\d+$/)) {
+        // Це новий підрозділ
+        if (currentUnit && currentUnit.positions.length > 0) {
+          units.push(currentUnit);
+        }
+        currentUnit = {
+          name: candidate,
+          positions: [],
+          total: 0,
+          filled: 0
+        };
+        headerFound = false;
+        continue;
+      }
+    }
+
+    // Рядок з даними позиції: №, Посада, ПІБ (опціонально)
+    if (currentUnit && cols.length >= 2) {
+      const num = cols[0].replace(/^["']|["']$/g, '').trim();
+      let position = cols[1].replace(/^["']|["']$/g, '').trim();
+      let name = cols.length >= 3 ? cols.slice(2).join(',').replace(/^["']|["']$/g, '').trim() : '';
+
+      // Пропускаємо якщо це не рядок з позицією
+      if (!position || position === 'Position' || position === 'Посада') continue;
+      if (num && !num.match(/^\d/)) continue; // не номер
+
+      // Очищаємо позицію від зайвих символів
+      position = position.replace(/^[-–\s]+|[-–\s]+$/g, '');
+
+      // Визначаємо чи заповнена позиція
+      const isFilled = name && !name.match(/vacant|вакант|вакансія|- В -|^-$|^–$/i);
+      const mappedId = mapPositionToShtat(position);
+
+      currentUnit.positions.push({
+        position: position,
+        mappedId: mappedId,
+        filled: isFilled,
+        name: name
+      });
+      currentUnit.total++;
+      if (isFilled) currentUnit.filled++;
+
+      if (!mappedId && position.length > 2) {
+        unmatched.add(position);
+      }
+    }
+  }
+
+  // Додаємо останній підрозділ
+  if (currentUnit && currentUnit.positions.length > 0) {
+    units.push(currentUnit);
+  }
+
+  return { units, unmatched: [...unmatched].sort() };
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function mapPositionToShtat(position) {
+  const lower = position.toLowerCase().trim();
+  // Прямий пошук
+  if (SHEETS_POSITION_MAP[lower] !== undefined) return SHEETS_POSITION_MAP[lower];
+  // Частковий пошук
+  for (const [key, id] of Object.entries(SHEETS_POSITION_MAP)) {
+    if (lower.includes(key) || key.includes(lower)) return id;
+  }
+  return null;
+}
+
+function applyStaffingToShtat(result) {
+  const data = loadShtatData();
+
+  result.units.forEach(unitData => {
+    // Знаходимо або створюємо підрозділ
+    let unitId = Object.keys(data).find(uid =>
+      data[uid] && data[uid].name.toLowerCase() === unitData.name.toLowerCase()
+    );
+
+    if (!unitId) {
+      // Шукаємо за частковим співпадінням
+      unitId = Object.keys(data).find(uid => {
+        if (!data[uid]) return false;
+        const existing = data[uid].name.toLowerCase();
+        const incoming = unitData.name.toLowerCase();
+        return existing.includes(incoming) || incoming.includes(existing);
+      });
+    }
+
+    if (!unitId) {
+      unitId = slugifyUnitName(unitData.name);
+      data[unitId] = createDefaultUnit(unitId, unitData.name);
+    }
+
+    const unit = data[unitId];
+    ensureUnitPositions(unit);
+
+    // Скидаємо попередні дані позицій для цього підрозділу
+    SHTAT_POSITIONS.forEach(p => {
+      unit.positions[p.id] = { shtat: '', fakt: '' };
+    });
+
+    // Групуємо позиції по mappedId
+    const posCounts = {}; // { posId: { shtat: 0, fakt: 0 } }
+    SHTAT_POSITIONS.forEach(p => { posCounts[p.id] = { shtat: 0, fakt: 0 }; });
+
+    let otherShtat = 0;
+    let otherFakt = 0;
+
+    unitData.positions.forEach(pos => {
+      if (pos.mappedId && posCounts[pos.mappedId]) {
+        posCounts[pos.mappedId].shtat++;
+        if (pos.filled) posCounts[pos.mappedId].fakt++;
+      } else {
+        otherShtat++;
+        if (pos.filled) otherFakt++;
+      }
+    });
+
+    // Записуємо в unit.positions
+    SHTAT_POSITIONS.forEach(p => {
+      const cnt = posCounts[p.id];
+      unit.positions[p.id] = {
+        shtat: cnt.shtat > 0 ? String(cnt.shtat) : '',
+        fakt: cnt.fakt > 0 ? String(cnt.fakt) : ''
+      };
+    });
+
+    // Зберігаємо нерозпізнані в custom
+    if (otherShtat > 0) {
+      if (!unit.custom) unit.custom = {};
+      unit.custom['Інші посади'] = String(otherShtat) + '/' + String(otherFakt);
+    }
+
+    // Оновлюємо загальні totals
+    unit.personnelShtat = String(unitData.total) || '';
+    unit.personnelFakt = String(unitData.filled) || '';
+  });
+
+  saveShtatData(data);
+}
+
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
@@ -5113,6 +5454,12 @@ document.addEventListener('DOMContentLoaded', () => {
         shtatImportFile.value = '';
       }
     });
+  }
+
+  // ---- Google Sheets Import ----
+  const sheetsImportBtn = document.getElementById('sheets-import-btn');
+  if (sheetsImportBtn) {
+    sheetsImportBtn.addEventListener('click', importShtatFromGoogleSheets);
   }
 
   // Initialize Штат data if empty
