@@ -3090,12 +3090,8 @@ function loadShtatData() {
       return data;
     }
   } catch(e) {}
-  // Default: empty values for all default units
+  // Порожній штат за замовчуванням (користувач імпортує дані сам)
   const data = {};
-  DEFAULT_SHTAT_UNITS.forEach(name => {
-    const id = slugifyUnitName(name);
-    data[id] = createDefaultUnit(id, name);
-  });
   ensureUnitOrder(data);
   return data;
 }
@@ -4807,9 +4803,27 @@ const SHEETS_POSITION_MAP = {
   // Обслуговуючий персонал
   'ремонтний squad leader-водій': 'squad_driver',
   'maintenance squad leader-driver': 'squad_driver',
-  'прибиральниця': null, // не враховуємо в бойовому штаті
+  'прибиральниця': null,
   'cleaner': null,
   'service premises cleaner': null,
+  // Адміністративний персонал (апарат)
+  'начальник сектору персоналу': 'res_spec',
+  'personnel section chief': 'res_spec',
+  'начальник планово-контрольної групи': 'res_spec',
+  'planning, control & documentation group head': 'res_spec',
+  'начальник сектору економіки і фінансів': 'res_spec',
+  'economics & finance section head': 'res_spec',
+  'бухгалтер': null,
+  'accountant': null,
+  'фахівець': 'dprz_spec',
+  'спеціаліст': 'dprz_spec',
+  'провідний фахівець': 'dprz_spec',
+  'спеціаліст з електронних комунікацій': 'dprz_spec',
+  'electronic communications & it specialist': 'dprz_spec',
+  // ГДЗС
+  'старший майстер гдзс': 'senior_driver',
+  'майстер гдзс': 'driver',
+  'командир відділення гдзс': 'squad_com',
 };
 
 function importShtatFromGoogleSheets() {
@@ -4894,69 +4908,116 @@ function importShtatFromGoogleSheets() {
 }
 
 function parseStaffingCsv(csvText) {
-  const lines = csvText.split(/\r?\n/).filter(l => l.trim());
+  const allRows = csvText.split(/\r?\n/).map(line => parseCSVLine(line));
   const units = [];
   const unmatched = new Set();
 
   let currentUnit = null;
-  let headerFound = false;
+  // Поточні індекси колонок для секції: { posIdx, nameIdx, numIdx }
+  let colMap = null;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
+  // Ключові слова для визначення колонок
+  const POSITION_KEYS = ['посада', 'position', 'найменування посади', 'штатна посада', 'назва посади'];
+  const NAME_KEYS = ['піб', 'name', 'прізвище', 'прізвище та ініціали', 'працівник', 'співробітник'];
+  const NUM_KEYS = ['№', 'no', 'номер', '#', 'п/п', 'n'];
 
-    // Пропускаємо meta-рядки (заголовок таблиці)
-    if (line.startsWith('№,') || line.startsWith('"№"')) {
-      headerFound = true;
+  function detectColumnMap(row) {
+    const map = { numIdx: -1, posIdx: -1, nameIdx: -1 };
+    row.forEach((cell, idx) => {
+      const clean = cell.replace(/^["']|["']$/g, '').trim().toLowerCase();
+      if (NUM_KEYS.some(k => clean === k || clean.startsWith(k))) map.numIdx = idx;
+      if (POSITION_KEYS.some(k => clean.includes(k))) map.posIdx = idx;
+      if (NAME_KEYS.some(k => clean.includes(k))) map.nameIdx = idx;
+    });
+    // Якщо знайшли хоча б позицію — колонки валідні
+    return (map.posIdx >= 0) ? map : null;
+  }
+
+  function isSectionHeader(row) {
+    // Секція: 1-2 непорожні колонки, перша не є числом, не містить ключових слів колонок
+    const nonEmpty = row.filter(c => c.trim());
+    if (nonEmpty.length === 0 || nonEmpty.length > 3) return false;
+    const first = nonEmpty[0].replace(/^["']|["']$/g, '').trim();
+    if (!first || first.length < 3) return false;
+    if (/^\d/.test(first) && nonEmpty.length <= 2) return false; // схоже на рядок даних
+    if (POSITION_KEYS.some(k => first.toLowerCase().includes(k))) return false;
+    if (NAME_KEYS.some(k => first.toLowerCase().includes(k))) return false;
+    // Перевіряємо чи не є це рядком з числом у першій колонці (дані)
+    if (/^\d+\.?\s/.test(first) || /^\d+$/.test(first)) return false;
+    return true;
+  }
+
+  function cleanCell(val) {
+    return val.replace(/^["']|["']$/g, '').replace(/^[-–•\s]+/, '').trim();
+  }
+
+  for (let i = 0; i < allRows.length; i++) {
+    const row = allRows[i];
+    const nonEmpty = row.filter(c => c.trim());
+    if (nonEmpty.length === 0) continue;
+
+    // 1. Спроба розпізнати рядок заголовка колонок
+    const detected = detectColumnMap(row);
+    if (detected) {
+      colMap = detected;
       continue;
     }
 
-    // Визначаємо чи це заголовок підрозділу
-    // Формат: рядок без ком, який містить назву підрозділу
-    const cols = parseCSVLine(line);
-
-    if (cols.length === 1 || (cols.length === 2 && !cols[0].match(/^\d/))) {
-      // Може бути назвою підрозділу
-      const candidate = cols[0].replace(/^["']|["']$/g, '').trim();
-      if (candidate && !candidate.startsWith('Authorized') && !candidate.startsWith('Note') &&
-          !candidate.includes('DSNS') && candidate.length > 3 && !candidate.match(/^\d+$/)) {
-        // Це новий підрозділ
-        if (currentUnit && currentUnit.positions.length > 0) {
-          units.push(currentUnit);
-        }
-        currentUnit = {
-          name: candidate,
-          positions: [],
-          total: 0,
-          filled: 0
-        };
-        headerFound = false;
-        continue;
+    // 2. Рядок-заголовок секції?
+    if (isSectionHeader(row)) {
+      // Зберігаємо попередню секцію
+      if (currentUnit && currentUnit.positions.length > 0) {
+        units.push(currentUnit);
       }
+
+      const name = cleanCell(row[0]);
+      // Якщо є друга колонка з уточненням — додаємо
+      const extra = row.length > 1 ? cleanCell(row[1]) : '';
+      const fullName = extra ? `${name} (${extra})` : name;
+
+      currentUnit = { name: fullName, positions: [], total: 0, filled: 0 };
+      colMap = null; // скидаємо — змушуємо перевизначити для нової секції
+      continue;
     }
 
-    // Рядок з даними позиції: №, Посада, ПІБ (опціонально)
-    if (currentUnit && cols.length >= 2) {
-      const num = cols[0].replace(/^["']|["']$/g, '').trim();
-      let position = cols[1].replace(/^["']|["']$/g, '').trim();
-      let name = cols.length >= 3 ? cols.slice(2).join(',').replace(/^["']|["']$/g, '').trim() : '';
+    // 3. Рядок даних?
+    if (currentUnit && colMap) {
+      const posIdx = colMap.posIdx;
+      const nameIdx = colMap.nameIdx >= 0 ? colMap.nameIdx : (posIdx + 1); // за замовчуванням — наступна після позиції
+      const numIdx = colMap.numIdx;
 
-      // Пропускаємо якщо це не рядок з позицією
-      if (!position || position === 'Position' || position === 'Посада') continue;
-      if (num && !num.match(/^\d/)) continue; // не номер
+      let position = posIdx < row.length ? cleanCell(row[posIdx]) : '';
+      let personName = nameIdx < row.length ? cleanCell(row[nameIdx]) : '';
 
-      // Очищаємо позицію від зайвих символів
-      position = position.replace(/^[-–\s]+|[-–\s]+$/g, '');
+      // Якщо позиція порожня — можливо це підрядок (multi-row entry)
+      if (!position && personName && currentUnit.positions.length > 0) {
+        // Пропускаємо або додаємо до попередньої позиції
+        continue;
+      }
 
-      // Визначаємо чи заповнена позиція
-      const isFilled = name && !name.match(/vacant|вакант|вакансія|- В -|^-$|^–$/i);
+      if (!position) continue;
+
+      // Фільтруємо явно не-посади
+      if (POSITION_KEYS.some(k => position.toLowerCase().includes(k))) continue;
+      if (position.toLowerCase() === 'position' || position.toLowerCase() === 'посада') continue;
+      if (position.toLowerCase().startsWith('authorized') || position.toLowerCase().startsWith('note')) {
+        continue;
+      }
+
+      // Очищаємо позицію
+      position = position.replace(/^[-–•\s]+|[-–•\s]+$/g, '').replace(/\s+/g, ' ');
+
+      // Визначаємо чи заповнена
+      const vacantPattern = /vacant|вакант|вакансія|-\s*В\s*-|^-\s*$/i;
+      const isFilled = personName.length > 0 && !vacantPattern.test(personName);
+
       const mappedId = mapPositionToShtat(position);
 
       currentUnit.positions.push({
         position: position,
         mappedId: mappedId,
         filled: isFilled,
-        name: name
+        name: personName
       });
       currentUnit.total++;
       if (isFilled) currentUnit.filled++;
@@ -4967,7 +5028,7 @@ function parseStaffingCsv(csvText) {
     }
   }
 
-  // Додаємо останній підрозділ
+  // Додаємо останню секцію
   if (currentUnit && currentUnit.positions.length > 0) {
     units.push(currentUnit);
   }
@@ -4995,21 +5056,29 @@ function parseCSVLine(line) {
 }
 
 function mapPositionToShtat(position) {
-  const lower = position.toLowerCase().trim();
+  const lower = position.toLowerCase().trim().replace(/\s+/g, ' ');
   // Прямий пошук
   if (SHEETS_POSITION_MAP[lower] !== undefined) return SHEETS_POSITION_MAP[lower];
-  // Частковий пошук
+  // Частковий пошук — пріоритет довшим ключам (більш специфічні збіги)
+  let bestMatch = null;
+  let bestLen = 0;
   for (const [key, id] of Object.entries(SHEETS_POSITION_MAP)) {
-    if (lower.includes(key) || key.includes(lower)) return id;
+    if (id === null) continue; // пропускаємо null-мапінги
+    const keyLen = key.length;
+    if ((lower.includes(key) || key.includes(lower)) && keyLen > bestLen) {
+      bestMatch = id;
+      bestLen = keyLen;
+    }
   }
-  return null;
+  return bestMatch;
 }
 
 function applyStaffingToShtat(result) {
   const data = loadShtatData();
+  const importedIds = [];
 
   result.units.forEach(unitData => {
-    // Фільтруємо тільки ключі підрозділів (не service keys як unitOrder)
+    // Фільтруємо тільки ключі підрозділів
     const unitKeys = Object.keys(data).filter(uid =>
       uid !== 'unitOrder' && data[uid] && typeof data[uid] === 'object' && data[uid].name
     );
@@ -5020,7 +5089,6 @@ function applyStaffingToShtat(result) {
     );
 
     if (!unitId) {
-      // Шукаємо за частковим співпадінням
       unitId = unitKeys.find(uid => {
         const existing = data[uid].name.toLowerCase();
         const incoming = unitData.name.toLowerCase();
@@ -5033,16 +5101,19 @@ function applyStaffingToShtat(result) {
       data[unitId] = createDefaultUnit(unitId, unitData.name);
     }
 
+    importedIds.push(unitId);
+
     const unit = data[unitId];
     ensureUnitPositions(unit);
 
-    // Скидаємо попередні дані позицій для цього підрозділу
+    // Скидаємо попередні дані позицій
     SHTAT_POSITIONS.forEach(p => {
       unit.positions[p.id] = { shtat: '', fakt: '' };
     });
+    unit.custom = {};
 
     // Групуємо позиції по mappedId
-    const posCounts = {}; // { posId: { shtat: 0, fakt: 0 } }
+    const posCounts = {};
     SHTAT_POSITIONS.forEach(p => { posCounts[p.id] = { shtat: 0, fakt: 0 }; });
 
     let otherShtat = 0;
@@ -5058,7 +5129,6 @@ function applyStaffingToShtat(result) {
       }
     });
 
-    // Записуємо в unit.positions
     SHTAT_POSITIONS.forEach(p => {
       const cnt = posCounts[p.id];
       unit.positions[p.id] = {
@@ -5067,17 +5137,17 @@ function applyStaffingToShtat(result) {
       };
     });
 
-    // Зберігаємо нерозпізнані в custom
     if (otherShtat > 0) {
-      if (!unit.custom) unit.custom = {};
       unit.custom['Інші посади'] = String(otherShtat) + '/' + String(otherFakt);
     }
 
-    // Оновлюємо загальні totals
     unit.personnelShtat = String(unitData.total) || '';
     unit.personnelFakt = String(unitData.filled) || '';
   });
 
+  // Оновлюємо порядок підрозділів
+  data.unitOrder = importedIds;
+  ensureUnitOrder(data);
   saveShtatData(data);
 }
 
