@@ -3009,58 +3009,90 @@ function parseStaffCSV(csvText) {
   });
 
   const units = [];
-  let currentUnit = null, currentSub = null;
 
+  function clean(s) { return (s||'').replace(/^["']|["']$/g,'').replace(/^[-–•\s]+|[-–•\s]+$/g,'').trim().replace(/\s+/g,' '); }
   function isVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
-  function clean(s) { return s.replace(/^["']|["']$/g, '').replace(/^[-–•\s]+|[-–•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
+  function isSummaryRow(s) { return /по штату|authorized|всього/i.test(s); }
+  function looksLikeStationName(s) { return /дпрч|дпрп|державний|пожежно|загін|дснс/i.test(s); }
 
-  for (const row of dataRows) {
-    const num = clean(row[0] || '');
-    const posRaw = clean(row[1] || '');
-    const personRaw = clean(row[2] || '');
-    const col4 = clean(row[3] || '');
-    const col5 = clean(row[4] || '');
+  // ── Фаза 1: Headquarters (рядки де col C = назва загону, немає даних у col D/E) ──
+  let hqUnit = null, hqSub = null;
+  let i = 0;
 
-    // Пропускаємо повністю порожні рядки
-    if (!num && !posRaw && !personRaw && !col4 && !col5) continue;
-
-    // Рядок-заголовок підрозділу? (№ = назва підрозділу, без номера)
-    if (!num && posRaw && !personRaw && !col4) {
-      if (posRaw.toLowerCase().includes('по штату') || posRaw.toLowerCase().startsWith('authorized')) continue;
-      // Це назва підрозділу або підсекції
-      if (currentUnit && posRaw.length < 50) {
-        // Підсекція всередині підрозділу
-        currentSub = posRaw;
-        if (!currentUnit.subunits) currentUnit.subunits = {};
-        if (!currentUnit.subunits[currentSub]) currentUnit.subunits[currentSub] = [];
-      } else if (!currentUnit || posRaw.length >= 10) {
-        // Новий підрозділ
-        if (currentUnit && currentUnit.positions.length > 0) units.push(currentUnit);
-        currentUnit = { name: posRaw, positions: [], subunits: {} };
-        currentSub = null;
-      }
-      continue;
+  // Шукаємо заголовок апарату управління (рядок з "№ п/п" і назвою загону в col C)
+  for (; i < dataRows.length; i++) {
+    const c0 = clean(dataRows[i][0]), c1 = clean(dataRows[i][1]), c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
+    if (c0.includes('№') && c1.toLowerCase().includes('посада') && looksLikeStationName(c2) && !c3) {
+      hqUnit = { name: c2, positions: [], subunits: {} };
+      i++; break;
     }
-
-    // Рядок з позицією (має номер)
-    if (num && /^\d/.test(num) && posRaw && currentUnit) {
-      const position = posRaw;
-      const person = personRaw;
-      const filled = !isVacant(person);
-
-      const entry = { position, name: person, filled };
-      currentUnit.positions.push(entry);
-      if (currentSub && currentUnit.subunits) {
-        if (!currentUnit.subunits[currentSub]) currentUnit.subunits[currentSub] = [];
-        currentUnit.subunits[currentSub].push(entry);
-      }
-    }
-
-    // Якщо є дані в колонках 4+ — це наступні таблиці (інші підрозділи)
-    // Обробляються при повторному проході
   }
 
-  if (currentUnit && currentUnit.positions.length > 0) units.push(currentUnit);
+  // Парсимо апарат управління
+  for (; i < dataRows.length; i++) {
+    const num = clean(dataRows[i][0]), posRaw = clean(dataRows[i][1]), person = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]);
+    if (!num && !posRaw && !person) {
+      if (c3) break; // новий блок (станції)
+      continue;
+    }
+    if (isSummaryRow(posRaw + ' ' + person)) { i++; break; } // кінець апарату
+    if (!hqUnit) continue;
+
+    if (!num && posRaw && !person && posRaw.length < 60 && !isSummaryRow(posRaw)) {
+      hqSub = posRaw;
+      if (!hqUnit.subunits[hqSub]) hqUnit.subunits[hqSub] = [];
+      continue;
+    }
+    if (num && /^\d/.test(num) && posRaw) {
+      const filled = !isVacant(person);
+      const entry = { position: posRaw, name: person, filled };
+      hqUnit.positions.push(entry);
+      if (hqSub && hqUnit.subunits[hqSub]) hqUnit.subunits[hqSub].push(entry);
+    }
+  }
+  if (hqUnit && hqUnit.positions.length > 0) units.push(hqUnit);
+
+  // ── Фаза 2: Станції (ДПРЧ/ДПРП) в блоках по 3 колонки ──
+  while (i < dataRows.length) {
+    // Шукаємо заголовок блоку станцій (рядок з назвами станцій у cols C/D/E)
+    let stations = [];
+    for (; i < dataRows.length; i++) {
+      const c0 = clean(dataRows[i][0]), c1 = clean(dataRows[i][1]), c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
+      if (!c2 && !c3 && !c4) continue;
+      if (looksLikeStationName(c2) || looksLikeStationName(c3) || looksLikeStationName(c4)) {
+        [c2, c3, c4].forEach(name => {
+          const n = name.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+          if (n && looksLikeStationName(n)) stations.push({ name: n, positions: [], subunits: {} });
+        });
+        if (stations.length > 0) { i++; break; }
+      }
+    }
+    if (!stations.length) break;
+
+    // Парсимо позиції для цих станцій
+    let lastPosition = '';
+    for (; i < dataRows.length; i++) {
+      const num = clean(dataRows[i][0]), posRaw = clean(dataRows[i][1]);
+      const c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
+
+      if (isSummaryRow(c2 + ' ' + c3 + ' ' + c4)) { i++; break; }
+      if (!num && !posRaw && !c2 && !c3 && !c4) continue;
+
+      const position = posRaw || lastPosition;
+      if (position) lastPosition = position;
+      else continue;
+
+      [c2, c3, c4].forEach((person, si) => {
+        if (si >= stations.length) return;
+        if (person === '-' || person === '- В -' || person === '') person = '';
+        const filled = !isVacant(person);
+        const entry = { position, name: person, filled };
+        stations[si].positions.push(entry);
+      });
+    }
+
+    stations.forEach(s => { if (s.positions.length > 0) units.push(s); });
+  }
 
   // Порахувати totals
   let totalPositions = 0;
