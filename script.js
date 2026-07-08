@@ -5009,15 +5009,19 @@ function applyStaffingToShtat(result) {
   const data = loadShtatData();
 
   result.units.forEach(unitData => {
+    // Фільтруємо тільки ключі підрозділів (не service keys як unitOrder)
+    const unitKeys = Object.keys(data).filter(uid =>
+      uid !== 'unitOrder' && data[uid] && typeof data[uid] === 'object' && data[uid].name
+    );
+
     // Знаходимо або створюємо підрозділ
-    let unitId = Object.keys(data).find(uid =>
-      data[uid] && data[uid].name.toLowerCase() === unitData.name.toLowerCase()
+    let unitId = unitKeys.find(uid =>
+      data[uid].name.toLowerCase() === unitData.name.toLowerCase()
     );
 
     if (!unitId) {
       // Шукаємо за частковим співпадінням
-      unitId = Object.keys(data).find(uid => {
-        if (!data[uid]) return false;
+      unitId = unitKeys.find(uid => {
         const existing = data[uid].name.toLowerCase();
         const incoming = unitData.name.toLowerCase();
         return existing.includes(incoming) || incoming.includes(existing);
