@@ -4915,7 +4915,7 @@ function renderPersonnelTab(units, thead, tbody, tfoot, summary) {
         </td>
         <td><strong>${u.total}</strong></td>
         <td><strong style="color:var(--green);">${u.filled}</strong></td>
-        <td><strong style="color:${shortage > 0 ? 'var(--red)' : 'var(--green)');}">${shortage > 0 ? '−' + shortage : '✓'}</strong></td>
+        <td><strong style="color:${shortage > 0 ? 'var(--red)' : 'var(--green)'}">${shortage > 0 ? '−' + shortage : '✓'}</strong></td>
       </tr>
       <tr class="shtat-pos-detail" data-idx="${i}" style="display:none;">
         <td colspan="4" style="padding:0;">
@@ -4980,23 +4980,22 @@ function renderPersonnelTab(units, thead, tbody, tfoot, summary) {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
-  // Core listeners
-  document.getElementById('add-btn').addEventListener('click', openModal);
-  document.getElementById('api-key').addEventListener('input', saveApiKey);
-  document.getElementById('clear-storage-btn').addEventListener('click', clearStorage);
-  document.getElementById('clear-tasks-btn').addEventListener('click', clearTasks);
-  const clearAllBtn = document.getElementById('clear-all-btn');
+  // Core listeners (з null-захистом)
+  const $ = (id) => document.getElementById(id);
+  const on = (id, evt, fn) => { const el = $(id); if (el) el.addEventListener(evt, fn); };
+  on('add-btn', 'click', openModal);
+  on('api-key', 'input', saveApiKey);
+  on('clear-storage-btn', 'click', clearStorage);
+  on('clear-tasks-btn', 'click', clearTasks);
+  const clearAllBtn = $('clear-all-btn');
   if (clearAllBtn) clearAllBtn.addEventListener('click', clearAllData);
-  document.getElementById('modal-close-btn').addEventListener('click', closeModal);
-  document.getElementById('settings-btn').addEventListener('click', openSettings);
-  document.getElementById('settings-close-btn').addEventListener('click', closeSettings);
-  document.getElementById('btn-parse').addEventListener('click', parseWithGemini);
-
-  document.getElementById('edit-modal-close-btn').addEventListener('click', closeEditModal);
-  document.getElementById('btn-save-edit').addEventListener('click', saveEditedTask);
-
-  // Tab bar
-  document.getElementById('tab-add-btn').addEventListener('click', addNewTab);
+  on('modal-close-btn', 'click', closeModal);
+  on('settings-btn', 'click', openSettings);
+  on('settings-close-btn', 'click', closeSettings);
+  on('btn-parse', 'click', parseWithGemini);
+  on('edit-modal-close-btn', 'click', closeEditModal);
+  on('btn-save-edit', 'click', saveEditedTask);
+  on('tab-add-btn', 'click', addNewTab);
   const requiredToggleBtn = document.getElementById('required-toggle-btn');
   if (requiredToggleBtn) requiredToggleBtn.addEventListener('click', () => setRequiredUndatedVisible(!shouldShowRequiredUndated()));
   updateRequiredToggleUI();
