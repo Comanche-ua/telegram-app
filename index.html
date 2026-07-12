@@ -5,45 +5,129 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#F1F5F9">
+<meta name="theme-color" content="#4F46E5">
 <meta name="apple-mobile-web-app-title" content="Дедлайни">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
 <title>Контроль дедлайнів</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #F1F5F9;
+    --bg: #EEF1F7;
     --surface: #FFFFFF;
-    --surface2: #F8FAFC;
-    --border: rgba(0,0,0,0.06);
-    --border2: rgba(0,0,0,0.10);
-    --text: #0F172A;
-    --text2: #475569;
-    --text3: #94A3B8;
-    --green: #16A34A;
-    --green-bg: rgba(22,163,74,0.10);
+    --surface2: #F6F8FC;
+    --border: rgba(15,23,42,0.07);
+    --border2: rgba(15,23,42,0.12);
+    --text: #0B1220;
+    --text2: #4B5875;
+    --text3: #94A0B8;
+    --green: #12A454;
+    --green-bg: rgba(18,164,84,0.10);
     --amber: #D97706;
     --amber-bg: rgba(217,119,6,0.10);
-    --red: #DC2626;
-    --red-bg: rgba(220,38,38,0.10);
-    --blue: #2563EB;
-    --blue-bg: rgba(37,99,235,0.10);
-    --radius: 16px;
-    --radius-sm: 8px;
+    --red: #E11D48;
+    --red-bg: rgba(225,29,72,0.10);
+    --blue: #4F46E5;
+    --blue-bg: rgba(79,70,229,0.10);
+
+    /* Premium accent gradient (indigo -> violet -> cyan) */
+    --accent-1: #4F46E5;
+    --accent-2: #7C3AED;
+    --accent-3: #06B6D4;
+    --grad-accent: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 55%, var(--accent-3) 100%);
+    --grad-accent-soft: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(124,58,237,0.10) 55%, rgba(6,182,212,0.10));
+
+    --radius: 18px;
+    --radius-sm: 10px;
+    --radius-lg: 24px;
+
+    /* Elevation system */
+    --shadow-xs: 0 1px 2px rgba(15,23,42,0.05);
+    --shadow-sm: 0 2px 8px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.05);
+    --shadow-md: 0 8px 24px rgba(15,23,42,0.09), 0 2px 6px rgba(15,23,42,0.05);
+    --shadow-lg: 0 20px 48px rgba(15,23,42,0.14), 0 6px 16px rgba(15,23,42,0.07);
+    --shadow-glow: 0 8px 24px rgba(79,70,229,0.28);
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   body {
-    background: var(--bg);
+    background:
+      radial-gradient(1100px 620px at 100% -8%, rgba(79,70,229,0.10), transparent 60%),
+      radial-gradient(900px 560px at -10% 10%, rgba(6,182,212,0.08), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
     color: var(--text);
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.01em;
+  }
+
+  /* Premium scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 20px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); background-clip: padding-box; }
+  * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+
+  ::selection { background: rgba(79,70,229,0.25); color: var(--text); }
+
+  /* Голосове введення (Web Speech API) */
+  .voice-field { position: relative; }
+  .voice-field textarea { padding-right: 40px !important; }
+
+  .mic-btn {
+    position: absolute;
+    top: 8px;
+    right: 6px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text2);
+    transition: transform 0.2s var(--ease-out, ease), background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+    z-index: 2;
+  }
+  .mic-btn::before {
+    content: '';
+    width: 15px; height: 15px;
+    background-color: currentColor;
+    mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3C/svg%3E");
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z'/%3E%3C/svg%3E");
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+  }
+  .mic-btn:hover {
+    color: #fff;
+    background: var(--grad-accent, var(--blue));
+    box-shadow: 0 6px 16px -6px var(--button-glow, rgba(79,70,229,0.4));
+  }
+  .mic-btn.is-recording {
+    color: #fff;
+    background: linear-gradient(135deg, var(--red), #F43F5E);
+    animation: micPulse 1.4s ease-in-out infinite;
+  }
+  .mic-btn.is-unsupported { display: none; }
+
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(225,29,72,0.45); }
+    50% { box-shadow: 0 0 0 8px rgba(225,29,72,0); }
   }
 
   /* Глобальный фокус для полей ввода (UX улучшение) */
@@ -59,30 +143,38 @@
   }
 
   .topbar {
-    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
     border-bottom: 1px solid var(--border);
-    padding: 12px 24px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     gap: 12px;
     position: sticky;
     top: 0;
     z-index: 100;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
   }
 
   .topbar-icon {
-    width: 34px; height: 34px;
-    background: var(--red-bg);
+    width: 36px; height: 36px;
+    background: var(--grad-accent);
+    box-shadow: var(--shadow-glow);
     border-radius: var(--radius-sm);
     display: flex; align-items: center; justify-content: center;
     font-size: 18px;
   }
 
-  .topbar-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+  .topbar-title {
+    font-size: 16px; font-weight: 800; letter-spacing: -0.3px;
+    background: var(--grad-accent);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: var(--text);
+  }
   .topbar-sub { font-size: 12px; color: var(--text2); margin-left: auto; }
 
   /* Auth UI */
+
   .auth-section { display: flex; align-items: center; gap: 10px; margin-left: auto; }
   .auth-btn {
     background: var(--surface2);
@@ -713,23 +805,42 @@
 
   /* Themes */
   body.theme-dark {
-    --bg: #0B1120;
-    --surface: #111827;
-    --surface2: #1F2937;
-    --border: rgba(255,255,255,0.06);
-    --border2: rgba(255,255,255,0.12);
-    --text: #F3F4F6;
-    --text2: #9CA3AF;
-    --text3: #6B7280;
-    --green: #22C55E;
-    --green-bg: rgba(34,197,94,0.12);
+    --bg: #060910;
+    --surface: #0E1420;
+    --surface2: #161D2E;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #F1F5F9;
+    --text2: #9AA5BD;
+    --text3: #626E8A;
+    --green: #34D399;
+    --green-bg: rgba(52,211,153,0.14);
     --amber: #FBBF24;
-    --amber-bg: rgba(251,191,36,0.12);
-    --red: #F87171;
-    --red-bg: rgba(248,113,113,0.12);
-    --blue: #3B82F6;
-    --blue-bg: rgba(59,130,246,0.12);
+    --amber-bg: rgba(251,191,36,0.14);
+    --red: #FB7185;
+    --red-bg: rgba(251,113,133,0.14);
+    --blue: #818CF8;
+    --blue-bg: rgba(129,140,248,0.14);
+    --accent: #818CF8;
+    --accent-2: #A78BFA;
+    --ink-shadow: rgba(0,0,0,0.55);
+    --button-glow: rgba(129,140,248,0.42);
+    --control-ring: rgba(129,140,248,0.28);
+    --shadow-sm: 0 2px 10px rgba(0,0,0,0.35);
+    --shadow-md: 0 10px 30px rgba(0,0,0,0.45);
+    --shadow-lg: 0 24px 56px rgba(0,0,0,0.55);
   }
+  body.theme-dark::before { opacity: 0.05; }
+  body.theme-dark .card,
+  body.theme-dark .dash-widget,
+  body.theme-dark .lock-box,
+  body.theme-dark .modal-content {
+    box-shadow: 0 18px 45px -28px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  body.theme-dark .card:hover {
+    box-shadow: 0 26px 60px -26px rgba(0,0,0,0.72), 0 0 0 1px rgba(129,140,248,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
   body.theme-light {
     --bg: #F3F4F6;
     --surface: rgba(255, 255, 255, 0.85);
@@ -740,16 +851,42 @@
     --border2: rgba(0,0,0,0.15);
   }
   body.theme-ocean {
-    --bg: #0F172A;
-    --surface: rgba(30, 41, 59, 0.85);
-    --surface2: rgba(51, 65, 85, 0.85);
+    --bg: #0A1628;
+    --surface: rgba(15, 33, 56, 0.82);
+    --surface2: rgba(23, 48, 79, 0.82);
+    --text: #E6F1FB;
+    --text2: #93B4D6;
+    --text3: #5D7FA3;
+    --border: rgba(148,197,255,0.10);
+    --border2: rgba(148,197,255,0.18);
+    --blue: #38BDF8;
+    --blue-bg: rgba(56,189,248,0.16);
+    --accent: #0EA5E9;
+    --accent-2: #22D3EE;
+    --button-glow: rgba(14,165,233,0.4);
+    --control-ring: rgba(14,165,233,0.26);
   }
   body.theme-forest {
-    --bg: #064E3B;
-    --surface: rgba(6, 78, 59, 0.85);
-    --surface2: rgba(4, 120, 87, 0.85);
+    --bg: #04140F;
+    --surface: rgba(6, 58, 45, 0.82);
+    --surface2: rgba(8, 84, 64, 0.82);
+    --text: #E7FBF2;
+    --text2: #92C9B2;
+    --text3: #5C9581;
+    --border: rgba(167,243,208,0.10);
+    --border2: rgba(167,243,208,0.18);
+    --green: #34D399;
+    --blue: #2DD4BF;
+    --accent: #10B981;
+    --accent-2: #34D399;
+    --button-glow: rgba(16,185,129,0.4);
+    --control-ring: rgba(16,185,129,0.26);
   }
-  
+  body.theme-ocean .card, body.theme-ocean .dash-widget, body.theme-ocean .lock-box, body.theme-ocean .modal-content,
+  body.theme-forest .card, body.theme-forest .dash-widget, body.theme-forest .lock-box, body.theme-forest .modal-content {
+    box-shadow: 0 18px 45px -28px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
   /* Wallpaper specific */
   body {
     background-size: cover;
@@ -962,11 +1099,11 @@
     justify-content: center;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.28s var(--ease-spring, ease), box-shadow 0.28s var(--ease-out, ease);
   }
   .fab-btn:hover {
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    transform: translateY(-3px) scale(1.07);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
   .fab-settings {
     background: var(--surface2);
@@ -1256,11 +1393,13 @@
     padding: 10px 12px;
     border-left: 3px solid var(--border2);
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.22s var(--ease-out, ease), box-shadow 0.22s var(--ease-out, ease);
+    position: relative;
+    overflow: hidden;
   }
   .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 26px -12px rgba(15,23,42,0.22);
   }
   @keyframes sectionFlash {
     0%, 100% { box-shadow: none; }
@@ -1388,10 +1527,10 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.06);
   }
   .tab-item.active {
-    background: var(--blue);
+    background: linear-gradient(135deg, var(--accent, var(--blue)) 0%, var(--accent-2, var(--blue)) 100%);
     color: #fff;
-    border: 1px solid var(--blue);
-    box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+    border: 1px solid transparent;
+    box-shadow: 0 8px 18px -8px var(--button-glow, rgba(79,70,229,0.4));
     font-weight: 700;
   }
   .tab-item.dragging { opacity: 0.4; }
@@ -1544,18 +1683,18 @@
 
   /* Visual refresh: tactile controls and custom glyph language */
   :root {
-    --accent: #2563EB;
-    --accent-2: #0EA5A4;
+    --accent: #4F46E5;
+    --accent-2: #7C3AED;
     --ink-shadow: rgba(15, 23, 42, 0.16);
-    --button-glow: rgba(37, 99, 235, 0.32);
-    --control-ring: rgba(37, 99, 235, 0.18);
+    --button-glow: rgba(79, 70, 229, 0.32);
+    --control-ring: rgba(79, 70, 229, 0.18);
   }
 
   body {
     background:
-      radial-gradient(circle at 14% 8%, rgba(14, 165, 164, 0.12), transparent 30%),
-      radial-gradient(circle at 88% 16%, rgba(37, 99, 235, 0.12), transparent 28%),
-      linear-gradient(180deg, #F8FAFC 0%, var(--bg) 46%, #E8EEF6 100%);
+      radial-gradient(circle at 14% 8%, rgba(6, 182, 212, 0.12), transparent 30%),
+      radial-gradient(circle at 88% 16%, rgba(79, 70, 229, 0.14), transparent 28%),
+      linear-gradient(180deg, #F8FAFC 0%, var(--bg) 46%, #E9EBF9 100%);
   }
 
   body::before {
@@ -1662,10 +1801,10 @@
   }
 
   .topbar-icon {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.13), rgba(14, 165, 164, 0.18));
+    background: linear-gradient(135deg, rgba(79, 70, 229, 0.16), rgba(6, 182, 212, 0.18));
     color: var(--blue);
-    border: 1px solid rgba(37, 99, 235, 0.18);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 22px rgba(37, 99, 235, 0.12);
+    border: 1px solid rgba(79, 70, 229, 0.20);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), 0 10px 22px rgba(79, 70, 229, 0.14);
   }
 
   .btn-primary,
@@ -1689,16 +1828,17 @@
     border-radius: 12px;
     background:
       linear-gradient(180deg, rgba(255,255,255,0.18), transparent 40%),
-      linear-gradient(135deg, var(--blue), #0EA5A4);
+      linear-gradient(135deg, var(--accent, var(--blue)) 0%, var(--accent-2) 60%, #06B6D4 100%);
     box-shadow: 0 14px 26px -14px var(--button-glow), inset 0 1px 0 rgba(255,255,255,0.28);
+    transition: transform 0.22s var(--ease-spring, ease), box-shadow 0.22s var(--ease-out, ease), background 0.22s ease;
   }
 
   .btn-primary:hover {
     background:
       linear-gradient(180deg, rgba(255,255,255,0.22), transparent 44%),
-      linear-gradient(135deg, #1D4ED8, #0D9488);
+      linear-gradient(135deg, #4338CA 0%, #6D28D9 60%, #0891B2 100%);
     transform: translateY(-2px);
-    box-shadow: 0 18px 34px -16px var(--button-glow), inset 0 1px 0 rgba(255,255,255,0.34);
+    box-shadow: 0 20px 38px -16px var(--button-glow), inset 0 1px 0 rgba(255,255,255,0.34);
   }
 
   .btn-secondary,
@@ -1749,6 +1889,23 @@
 
   .card {
     border-radius: 12px;
+    transition: transform 0.25s var(--ease-out, ease), box-shadow 0.25s var(--ease-out, ease), border-color 0.25s ease;
+    animation: cardIn 0.35s var(--ease-out, ease) both;
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 26px 54px -30px rgba(15, 23, 42, 0.32), inset 0 1px 0 rgba(255,255,255,0.6);
+    border-color: color-mix(in srgb, var(--border2) 60%, var(--accent, var(--blue)));
   }
 
   .card::before {
@@ -2804,7 +2961,10 @@
     <div id="quick-mode-fields">
       <div class="input-box" style="margin-bottom: 0; padding: 0; border: none; background: transparent;">
         <label>⚡ Швидке додавання завдання</label>
-        <input type="text" id="quick-task-text" placeholder="Опис завдання..." style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px 12px; border-radius:var(--radius-sm); outline:none; font-family:'Inter',sans-serif; font-size:14px; margin-bottom:10px;">
+        <div class="voice-field">
+          <input type="text" id="quick-task-text" placeholder="Опис завдання..." style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px 40px 10px 12px; border-radius:var(--radius-sm); outline:none; font-family:'Inter',sans-serif; font-size:14px; margin-bottom:10px;">
+          <button type="button" class="mic-btn" data-target="quick-task-text" aria-label="Голосове введення" title="Голосове введення"></button>
+        </div>
         <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap: wrap;">
           <div style="flex:1; min-width:130px;">
             <label style="font-size: 12px; color: var(--text2); display:block; margin-bottom: 4px;">📅 Дедлайн:</label>
@@ -2845,9 +3005,12 @@
         <div id="ai-mode-fields" style="display:none;">
           <div class="input-box" style="margin-bottom: 0; padding: 0; border: none; background: transparent;">
             <label>📋 Список недоліків з термінами</label>
-            <textarea id="raw" placeholder="Наприклад:
+            <div class="voice-field">
+              <textarea id="raw" placeholder="Наприклад:
 1. Підтікання даху в корпусі А — термін 20.06.2025
 2. Відсутність плану евакуації — до 05.07.2025"></textarea>
+              <button type="button" class="mic-btn" data-target="raw" aria-label="Голосове введення" title="Голосове введення"></button>
+            </div>
             <div style="display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; align-items: flex-end;">
               <div>
                 <label style="font-size: 13px; color: var(--text2); margin-right: 8px;">🔄 Повторення:</label>
@@ -2880,7 +3043,10 @@
     </div>
     <div class="input-box" style="margin-bottom: 0; padding: 0; border: none; background: transparent;">
       <label>📝 Текст замітки</label>
-      <textarea id="edit-text" style="min-height: 80px;"></textarea>
+      <div class="voice-field">
+        <textarea id="edit-text" style="min-height: 80px;"></textarea>
+        <button type="button" class="mic-btn" data-target="edit-text" aria-label="Голосове введення" title="Голосове введення"></button>
+      </div>
       
       <div style="display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 130px;">

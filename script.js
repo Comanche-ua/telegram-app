@@ -3220,6 +3220,87 @@ function initShtatMode() {
 }
 
 // ---- Init ----
+// ---- Голосове введення (безкоштовний Web Speech API, без ключів і лімітів) ----
+// Підтримка: Chrome/Edge (десктоп + Android, у т.ч. Telegram Android WebView).
+// НЕ підтримується: Safari/iOS та Telegram iOS WebView — кнопки мікрофону
+// на таких пристроях автоматично приховуються, решта функціоналу не страждає.
+function initVoiceInput() {
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micButtons = document.querySelectorAll('.mic-btn');
+
+  if (!SpeechRecognitionAPI) {
+    micButtons.forEach((btn) => btn.classList.add('is-unsupported'));
+    return;
+  }
+
+  let recognition = null;
+  let activeBtn = null;
+  let activeField = null;
+  let baseValue = '';
+
+  function stopRecording() {
+    if (recognition) {
+      try { recognition.stop(); } catch (e) { /* ignore */ }
+    }
+    if (activeBtn) activeBtn.classList.remove('is-recording');
+    activeBtn = null;
+    activeField = null;
+  }
+
+  micButtons.forEach((btn) => {
+    const targetId = btn.dataset.target;
+    const field = document.getElementById(targetId);
+    if (!field) { btn.classList.add('is-unsupported'); return; }
+
+    btn.addEventListener('click', () => {
+      // Повторний клік по активній кнопці — зупинити запис
+      if (activeBtn === btn) { stopRecording(); return; }
+
+      // Перемикання на інше поле — зупинити попередній запис
+      stopRecording();
+
+      recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'uk-UA';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      activeBtn = btn;
+      activeField = field;
+      baseValue = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
+      btn.classList.add('is-recording');
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalTranscript += transcript;
+          else interimTranscript += transcript;
+        }
+        if (finalTranscript) baseValue += finalTranscript.trim() + ' ';
+        field.value = (baseValue + interimTranscript).trim();
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('[VoiceInput] Помилка розпізнавання:', event.error);
+        stopRecording();
+      };
+
+      recognition.onend = () => {
+        if (activeBtn === btn) stopRecording();
+      };
+
+      try {
+        recognition.start();
+      } catch (e) {
+        console.warn('[VoiceInput] Не вдалося запустити:', e);
+        stopRecording();
+      }
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
@@ -3250,6 +3331,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSettings();
   initSettingsNav();
   initOpsWorkspace();
+  initVoiceInput();
   populateDatalist();
   loadFromLocal();
 
