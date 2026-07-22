@@ -26,32 +26,33 @@
     --text: #0B1220;
     --text2: #4B5875;
     --text3: #94A0B8;
-    --green: #12A454;
-    --green-bg: rgba(18,164,84,0.10);
-    --amber: #D97706;
-    --amber-bg: rgba(217,119,6,0.10);
-    --red: #E11D48;
-    --red-bg: rgba(225,29,72,0.10);
-    --blue: #4F46E5;
-    --blue-bg: rgba(79,70,229,0.10);
+    --green: #10B981;
+    --green-bg: rgba(16,185,129,0.10);
+    --amber: #F59E0B;
+    --amber-bg: rgba(245,158,11,0.10);
+    --red: #F43F5E;
+    --red-bg: rgba(244,63,94,0.10);
+    --blue: #6366F1;
+    --blue-bg: rgba(99,102,241,0.10);
 
-    /* Premium accent gradient (indigo -> violet -> cyan) */
-    --accent-1: #4F46E5;
-    --accent-2: #7C3AED;
+    /* Premium accent gradients */
+    --accent-1: #6366F1;
+    --accent-2: #8B5CF6;
     --accent-3: #06B6D4;
-    --grad-accent: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 55%, var(--accent-3) 100%);
-    --grad-accent-soft: linear-gradient(135deg, rgba(79,70,229,0.12), rgba(124,58,237,0.10) 55%, rgba(6,182,212,0.10));
+    --grad-accent: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #06B6D4 100%);
+    --grad-accent-soft: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.10) 55%, rgba(6,182,212,0.10));
+    --grad-primary: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
 
     --radius: 18px;
     --radius-sm: 10px;
     --radius-lg: 24px;
 
     /* Elevation system */
-    --shadow-xs: 0 1px 2px rgba(15,23,42,0.05);
-    --shadow-sm: 0 2px 8px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.05);
-    --shadow-md: 0 8px 24px rgba(15,23,42,0.09), 0 2px 6px rgba(15,23,42,0.05);
-    --shadow-lg: 0 20px 48px rgba(15,23,42,0.14), 0 6px 16px rgba(15,23,42,0.07);
-    --shadow-glow: 0 8px 24px rgba(79,70,229,0.28);
+    --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
+    --shadow-sm: 0 3px 10px rgba(15,23,42,0.06);
+    --shadow-md: 0 10px 30px rgba(15,23,42,0.09);
+    --shadow-lg: 0 24px 56px rgba(15,23,42,0.14);
+    --shadow-glow: 0 8px 24px rgba(99,102,241,0.30);
 
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -430,32 +431,34 @@
 
   .btn-row { display: flex; gap: 12px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
 
-  /* Оновлені кнопки для кращого UX */
+  /* Premium UI Buttons */
   .btn-primary {
-    background: var(--blue);
+    background: var(--grad-primary, linear-gradient(135deg, #6366F1, #4F46E5));
     color: #fff;
     border: none;
     border-radius: var(--radius-sm);
-    padding: 10px 20px;
+    padding: 10px 22px;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+    transition: transform 0.18s var(--ease-out), box-shadow 0.18s ease, filter 0.18s ease;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.30);
   }
   .btn-primary:hover { 
     transform: translateY(-1px); 
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); 
-    background: #1D4ED8;
+    box-shadow: 0 8px 20px rgba(99,102,241,0.40); 
+    filter: brightness(1.05);
   }
   .btn-primary:active {
-    transform: translateY(1px);
-    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+    transform: scale(0.97);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+    filter: brightness(0.95);
   }
-  .btn-primary:disabled { opacity: 0.5; transform: none; cursor: not-allowed; box-shadow: none; }
+  .btn-primary:disabled { opacity: 0.5; transform: none; cursor: not-allowed; box-shadow: none; filter: none; }
 
   .btn-secondary {
     background: var(--surface);
@@ -466,12 +469,17 @@
     font-weight: 500;
     color: var(--text);
     cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    transition: transform 0.18s var(--ease-out), background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    box-shadow: var(--shadow-xs);
   }
   .btn-secondary:hover { 
     background: var(--surface2); 
-    border-color: var(--text3); 
+    border-color: var(--text3);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+  .btn-secondary:active {
+    transform: scale(0.97);
   }
 
   .status { font-size: 13px; color: var(--text2); margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--surface2); padding: 6px 12px; border-radius: 40px; }
@@ -740,15 +748,16 @@
   .modal-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(10px) saturate(160%);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s;
+    transition: opacity 0.25s var(--ease-out);
   }
   .modal-overlay.active {
     opacity: 1;
@@ -756,15 +765,16 @@
   }
   .modal-content {
     background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 28px;
     width: 90%;
     max-width: 600px;
     position: relative;
     z-index: 20;
-    transform: translateY(20px) scale(0.95);
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.08);
+    transform: translateY(16px) scale(0.96);
+    transition: transform 0.3s var(--ease-spring, cubic-bezier(0.16, 1, 0.3, 1));
   }
   .modal-overlay.active .modal-content {
     transform: translateY(0) scale(1);

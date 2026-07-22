@@ -1582,53 +1582,55 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   const endD = getDeadlineEnd(deadline, deadlineTime);
   const isOverdue = now > endD;
 
-  let mainColor = '#22C55E';
-  if (isOverdue) mainColor = '#DC2626';
-  else if (progress > 0.7) mainColor = '#DC2626';
-  else if (progress > 0.4) mainColor = '#D97706';
-  else mainColor = '#16A34A';
-
-  const bgColor = 'rgba(0,0,0,0.15)';
-  const radius = 54;
-  const centerX = 60, centerY = 60;
+  const centerX = 60, centerY = 60, radius = 50;
 
   ctx.clearRect(0, 0, size, size);
 
-  // Glow effect behind the ring
+  // Gradient for stroke ring
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  let glowColor = '#10B981';
+  if (isOverdue) {
+    grad.addColorStop(0, '#F43F5E');
+    grad.addColorStop(1, '#E11D48');
+    glowColor = '#F43F5E';
+  } else if (progress > 0.7) {
+    grad.addColorStop(0, '#F59E0B');
+    grad.addColorStop(1, '#F43F5E');
+    glowColor = '#F43F5E';
+  } else if (progress > 0.4) {
+    grad.addColorStop(0, '#10B981');
+    grad.addColorStop(1, '#F59E0B');
+    glowColor = '#F59E0B';
+  } else {
+    grad.addColorStop(0, '#34D399');
+    grad.addColorStop(1, '#10B981');
+    glowColor = '#10B981';
+  }
+
+  // Glow effect
   ctx.save();
-  ctx.shadowColor = mainColor;
-  ctx.shadowBlur = isOverdue ? 12 : 8;
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = isOverdue ? 14 : 8;
 
-  // Background circle
+  // Background track ring
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-  ctx.fillStyle = bgColor;
-  ctx.fill();
-
-  // Track ring
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-  ctx.strokeStyle = 'rgba(128,128,128,0.2)';
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(128, 128, 128, 0.15)';
+  ctx.lineWidth = 7;
   ctx.stroke();
 
-  // Progress ring
+  // Progress arc
   const startAngle = -Math.PI / 2;
   const sweepAngle = 2 * Math.PI * (isOverdue ? 1 : Math.max(0.02, 1 - progress));
   const endAngle = startAngle + sweepAngle;
+
   ctx.beginPath();
   ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-  ctx.strokeStyle = mainColor;
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 7;
   ctx.lineCap = 'round';
   ctx.stroke();
   ctx.restore();
-
-  // Inner circle
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius - 9, 0, 2 * Math.PI);
-  ctx.fillStyle = 'var(--surface)';
-  ctx.fill();
 }
 
 function countdownData(deadline, deadlineTime) {
