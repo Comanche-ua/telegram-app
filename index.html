@@ -528,7 +528,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 0;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
     display: flex;
     align-items: stretch;
     opacity: 0;
@@ -536,9 +536,10 @@
     position: relative;
     overflow: hidden;
     min-height: 56px;
+    user-select: none;
+    touch-action: pan-y;
   }
   .card:hover {
-    transform: translateX(4px);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     border-color: var(--border2);
     z-index: 5;
@@ -660,7 +661,7 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
-    padding-right: 40px;
+    padding-right: 8px;
   }
   canvas.timer-canvas {
     width: 42px;
@@ -905,13 +906,11 @@
   body.size-medium .card-text { font-size: 13px; }
   body.size-medium canvas.timer-canvas { width: 36px !important; height: 36px !important; }
   body.size-medium .timer-text { font-size: 14px; min-width: 65px; }
-  body.size-medium .timer-section { padding-right: 36px; }
 
   body.size-small .card-body { padding: 8px 12px; gap: 8px; }
   body.size-small .card-text { font-size: 12px; }
   body.size-small canvas.timer-canvas { width: 30px !important; height: 30px !important; }
   body.size-small .timer-text { font-size: 12px; min-width: 55px; }
-  body.size-small .timer-section { padding-right: 32px; }
   body.size-small .card-num, body.size-small .card-date, body.size-small .assignee-badge { font-size: 10px; }
 
   /* Screen Lock */
@@ -1950,61 +1949,144 @@
   .sec-later .section-icon::before { background: var(--text2); box-shadow: 0 0 0 5px var(--surface2); }
   .sec-none .section-icon::before { background: var(--text3); box-shadow: 0 0 0 5px var(--surface2); }
 
-  .task-action-btn,
-  .delete-task-btn {
+  /* ── Swipe-to-Reveal Menu ── */
+
+  /* Background layer: houses the action buttons */
+  .card-background {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 192px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    z-index: 1;
+  }
+
+  /* Foreground layer: slides over the background */
+  .card-foreground {
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    min-width: 0;
+    background: var(--surface);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+    display: flex;
+    align-items: stretch;
+    border-radius: var(--radius-sm);
+  }
+
+  .card.is-swiped .card-foreground {
+    transform: translateX(-192px);
+  }
+
+  /* Three-dot trigger button — desktop only */
+  .card-swipe-trigger {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: 1px solid currentColor;
-    transition: transform 0.18s ease, opacity 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    flex-shrink: 0;
+    margin-right: 6px;
+    color: var(--text3);
+    font-size: 16px;
+    letter-spacing: -1px;
+    line-height: 1;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
     opacity: 0;
-    z-index: 20;
   }
-
-  .delete-task-btn,
-  .task-action-delete {
-    right: 8px;
-    color: var(--red);
-    background: var(--red-bg);
-    border-color: rgba(220, 38, 38, 0.18);
-  }
-
-  .task-action-complete {
-    right: 44px;
-    color: var(--green);
-    background: var(--green-bg);
-    border-color: rgba(22, 163, 74, 0.2);
-  }
-
-  .task-action-edit {
-    right: 80px;
-    color: var(--blue);
+  .card:hover .card-swipe-trigger,
+  .card.is-swiped .card-swipe-trigger { opacity: 1; }
+  .card-swipe-trigger:hover {
     background: var(--blue-bg);
-    border-color: rgba(37, 99, 235, 0.2);
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  /* On touch devices hide the trigger button (swipe gesture used instead) */
+  @media (hover: none) {
+    .card-swipe-trigger { display: none; }
   }
 
-  .card:hover .task-action-btn,
-  .card:hover .delete-task-btn {
-    opacity: 1;
-  }
-
-  .task-action-btn:hover,
-  .delete-task-btn:hover {
+  /* Action buttons */
+  .swipe-action-btn {
+    flex: 1;
+    height: calc(100% - 12px);
+    max-height: 52px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
     color: #fff;
-    transform: translateY(-50%) scale(1.08);
+    font-size: 0;
+    transition: transform 0.15s ease, filter 0.15s ease;
+    border: none;
+    outline: none;
+    position: relative;
+  }
+  .swipe-action-btn::before {
+    content: '';
+    display: block;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    flex-shrink: 0;
+  }
+  .swipe-action-btn:active { transform: scale(0.9); filter: brightness(0.88); }
+
+  .swipe-action-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    color: rgba(255,255,255,0.9);
+    pointer-events: none;
   }
 
-  .task-action-delete:hover,
-  .delete-task-btn:hover { background: var(--red); box-shadow: 0 10px 22px -12px var(--red); }
-  .task-action-complete:hover { background: var(--green); box-shadow: 0 10px 22px -12px var(--green); }
-  .task-action-edit:hover { background: var(--blue); box-shadow: 0 10px 22px -12px var(--blue); }
+  .swipe-action-complete {
+    background: linear-gradient(145deg, #10B981, #059669);
+    box-shadow: 0 3px 10px rgba(16,185,129,0.35);
+  }
+  .swipe-action-complete::before {
+    mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m9.3 16.7-4-4 1.45-1.45 2.55 2.55 7.95-7.95L18.7 7.3l-9.4 9.4Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m9.3 16.7-4-4 1.45-1.45 2.55 2.55 7.95-7.95L18.7 7.3l-9.4 9.4Z'/%3E%3C/svg%3E");
+  }
+
+  .swipe-action-edit {
+    background: linear-gradient(145deg, #6366F1, #4F46E5);
+    box-shadow: 0 3px 10px rgba(79,70,229,0.35);
+  }
+  .swipe-action-edit::before {
+    mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 17.3V20h2.7L17.9 8.8l-2.7-2.7L4 17.3Zm15.6-10.2-2.7-2.7 1.15-1.15a1.4 1.4 0 0 1 1.98 0l.72.72a1.4 1.4 0 0 1 0 1.98L19.6 7.1Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 17.3V20h2.7L17.9 8.8l-2.7-2.7L4 17.3Zm15.6-10.2-2.7-2.7 1.15-1.15a1.4 1.4 0 0 1 1.98 0l.72.72a1.4 1.4 0 0 1 0 1.98L19.6 7.1Z'/%3E%3C/svg%3E");
+  }
+
+  .swipe-action-delete {
+    background: linear-gradient(145deg, #F43F5E, #E11D48);
+    box-shadow: 0 3px 10px rgba(225,29,72,0.35);
+  }
+  .swipe-action-delete::before {
+    mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6.4 5 12.6 12.6-1.4 1.4L5 6.4 6.4 5Zm11.2 0L19 6.4 6.4 19 5 17.6 17.6 5Z'/%3E%3C/svg%3E");
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6.4 5 12.6 12.6-1.4 1.4L5 6.4 6.4 5Zm11.2 0L19 6.4 6.4 19 5 17.6 17.6 5Z'/%3E%3C/svg%3E");
+  }
 
   .modal-close {
     color: var(--red);
@@ -2255,12 +2337,9 @@
     box-shadow: 0 0 0 5px var(--amber-bg);
   }
 
-  /* Important task card */
-  .card-important {
+  /* Important task card — accent border on the foreground layer */
+  .card-important .card-foreground {
     border-left: 4px solid var(--red) !important;
-  }
-  .card-important::before {
-    background: var(--red) !important;
   }
 
   /* Important task badge */
@@ -2279,6 +2358,8 @@
   /* Edit mode OFF — hide editing UI chrome */
   body.edit-mode-off .tab-close,
   body.edit-mode-off .task-action-btn,
+  body.edit-mode-off .card-background,
+  body.edit-mode-off .card-swipe-trigger,
   body.edit-mode-off #tab-add-btn { display: none !important; }
 
   /* ═══════════════════════════════════════════════════════════
@@ -2543,20 +2624,7 @@
   }
   .timer-label { font-size: 7px; }
 
-  /* Action buttons: завжди видно на мобілі */
-  .task-action-btn,
-  .delete-task-btn {
-    opacity: 0.85 !important;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    z-index: 5;
-  }
-  .delete-task-btn, .task-action-delete { right: 6px; }
-  .task-action-complete { right: 38px; }
-  .task-action-edit { right: 70px; }
-  .card:hover .task-action-btn,
-  .card:hover .delete-task-btn { opacity: 0.85 !important; }
+  /* Action buttons: native swipe-to-reveal on mobile */
 
   /* Remove left border accent on mobile (экономия места) */
   .card::before { width: 2px; }
@@ -2754,14 +2822,7 @@
   }
   .timer-label { font-size: 7px; }
 
-  /* Action buttons: тісніші */
-  .task-action-btn, .delete-task-btn {
-    width: 24px; height: 24px;
-    border-radius: 6px;
-  }
-  .delete-task-btn, .task-action-delete { right: 4px; }
-  .task-action-complete { right: 32px; }
-  .task-action-edit { right: 60px; }
+  /* Action buttons handled by swipe menu */
 
   /* Секції */
   .section-header { top: 86px; padding: 2px 0 6px; }
