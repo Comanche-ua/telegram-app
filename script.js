@@ -3400,11 +3400,29 @@ function initVoiceInput() {
   let recognition = null;
   let activeBtn = null;
   let activeField = null;
-  let baseValue = '';
+  let initialFieldValue = '';
+  let micPermissionGranted = false;
+
+  async function ensureMicPermission() {
+    if (micPermissionGranted) return true;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        micPermissionGranted = true;
+        return true;
+      } catch (err) {
+        console.warn('[VoiceInput] Mic permission check:', err);
+        return false;
+      }
+    }
+    return true;
+  }
 
   function stopRecording() {
     if (recognition) {
       try { recognition.stop(); } catch (e) { /* ignore */ }
+      recognition = null;
     }
     if (activeBtn) activeBtn.classList.remove('is-recording');
     activeBtn = null;
@@ -3416,46 +3434,65 @@ function initVoiceInput() {
     const field = document.getElementById(targetId);
     if (!field) { btn.classList.add('is-unsupported'); return; }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       // Повторний клік по активній кнопці — зупинити запис
-      if (activeBtn === btn) { stopRecording(); return; }
+      if (activeBtn === btn) {
+        stopRecording();
+        return;
+      }
 
       // Перемикання на інше поле — зупинити попередній запис
       stopRecording();
 
-      recognition = new SpeechRecognitionAPI();
-      recognition.lang = 'uk-UA';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-
-      activeBtn = btn;
-      activeField = field;
-      baseValue = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
-      btn.classList.add('is-recording');
-
-      recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalTranscript += transcript;
-          else interimTranscript += transcript;
-        }
-        if (finalTranscript) baseValue += finalTranscript.trim() + ' ';
-        field.value = (baseValue + interimTranscript).trim();
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-      };
-
-      recognition.onerror = (event) => {
-        console.warn('[VoiceInput] Помилка розпізнавання:', event.error);
-        stopRecording();
-      };
-
-      recognition.onend = () => {
-        if (activeBtn === btn) stopRecording();
-      };
+      // Отримання дозволу на мікрофон один раз для домену
+      await ensureMicPermission();
 
       try {
+        recognition = new SpeechRecognitionAPI();
+        recognition.lang = 'uk-UA';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        activeBtn = btn;
+        activeField = field;
+        initialFieldValue = field.value ? (field.value.trim() + ' ') : '';
+
+        btn.classList.add('is-recording');
+
+        recognition.onresult = (event) => {
+          if (!activeField) return;
+
+          let sessionFinal = '';
+          let interimTranscript = '';
+
+          for (let i = 0; i < event.results.length; i++) {
+            const res = event.results[i];
+            const text = res[0].transcript;
+            if (res.isFinal) {
+              sessionFinal += text.trim() + ' ';
+            } else {
+              interimTranscript += text;
+            }
+          }
+
+          const newTotalValue = (initialFieldValue + sessionFinal + interimTranscript).trim();
+          activeField.value = newTotalValue;
+          activeField.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('[VoiceInput] Помилка розпізнавання:', event.error);
+          if (event.error !== 'no-speech') {
+            stopRecording();
+          }
+        };
+
+        recognition.onend = () => {
+          if (activeBtn === btn) {
+            stopRecording();
+          }
+        };
+
         recognition.start();
       } catch (e) {
         console.warn('[VoiceInput] Не вдалося запустити:', e);
