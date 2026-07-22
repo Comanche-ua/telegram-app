@@ -3404,11 +3404,30 @@ function initVoiceInput() {
   let activeBtn = null;
   let activeField = null;
   let initialFieldValue = '';
-  let isRecording = false;
+let isRecording = false;
+let micPermissionGranted = false;
+
+async function ensureMicPermission() {
+  if (micPermissionGranted) return true;
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      micPermissionGranted = true;
+      return true;
+    } catch (err) {
+      console.warn('[VoiceInput] Mic permission check:', err);
+      return false;
+    }
+  }
+  return true;
+}
+
 
   function stopRecording() {
     if (isRecording && recognition) {
       try { recognition.stop(); } catch (e) { /* ignore */ }
+      recognition = null;
     }
     isRecording = false;
     if (activeBtn) activeBtn.classList.remove('is-recording');
@@ -3471,7 +3490,7 @@ function initVoiceInput() {
     const field = document.getElementById(targetId);
     if (!field) { btn.classList.add('is-unsupported'); return; }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       // Повторний клік по активній кнопці — зупинити запис
       if (activeBtn === btn && isRecording) {
         stopRecording();
@@ -3481,6 +3500,13 @@ function initVoiceInput() {
       // Зупинити попередній запис
       stopRecording();
 
+      // Отримання дозволу на мікрофон один раз для домену
+      const micOk = await ensureMicPermission();
+      if (!micOk) {
+        console.warn('[VoiceInput] Microphone permission denied');
+        return;
+      }
+
       activeBtn = btn;
       activeField = field;
       initialFieldValue = field.value ? (field.value.trim() + ' ') : '';
@@ -3488,6 +3514,51 @@ function initVoiceInput() {
       btn.classList.add('is-recording');
 
       try {
+        recognition = new SpeechRecognitionAPI();
+        recognition.lang = 'uk-UA';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+
+        activeBtn = btn;
+        activeField = field;
+        initialFieldValue = field.value ? (field.value.trim() + ' ') : '';
+
+        btn.classList.add('is-recording');
+
+        recognition.onresult = (event) => {
+          if (!activeField) return;
+
+          let sessionFinal = '';
+          let interimTranscript = '';
+
+          for (let i = 0; i < event.results.length; i++) {
+            const res = event.results[i];
+            const text = res[0].transcript;
+            if (res.isFinal) {
+              sessionFinal += text.trim() + ' ';
+            } else {
+              interimTranscript += text;
+            }
+          }
+
+          const newTotalValue = (initialFieldValue + sessionFinal + interimTranscript).trim();
+          activeField.value = newTotalValue;
+          activeField.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('[VoiceInput] Помилка розпізнавання:', event.error);
+          if (event.error !== 'no-speech') {
+            stopRecording();
+          }
+        };
+
+        recognition.onend = () => {
+          if (activeBtn === btn) {
+            stopRecording();
+          }
+        };
+
         recognition.start();
       } catch (e) {
         console.warn('[VoiceInput] Помилка старту:', e);
