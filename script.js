@@ -2397,7 +2397,7 @@ function renderCalendar() {
 
   for (let i = startDow - 1; i >= 0; i--) {
     const d = daysInPrev - i;
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    html += `<div class="cal-cell other-month"><span class="cal-day-num">${d}</span></div>`;
   }
 
   for (let d = 1; d <= daysInMonth; d++) {
@@ -2405,20 +2405,21 @@ function renderCalendar() {
     let cls = 'cal-cell';
     if (dateStr === todayStr) cls += ' today';
     const count = deadlineMap.get(dateStr) || 0;
-    let barHtml = '';
+    let badgeHtml = '';
     if (count > 0) {
       cls += ' has-events';
-      if (urgentSet.has(dateStr)) barHtml = '<span class="dot urgent"></span>';
-      else if (warnSet.has(dateStr)) barHtml = '<span class="dot warn"></span>';
-      else barHtml = '<span class="dot normal"></span>';
+      let urgencyCls = 'normal';
+      if (urgentSet.has(dateStr)) urgencyCls = 'urgent';
+      else if (warnSet.has(dateStr)) urgencyCls = 'warn';
+      badgeHtml = `<span class="cal-badge ${urgencyCls}">${count}</span>`;
     }
-    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')">${d}${barHtml}</div>`;
+    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')">${badgeHtml}<span class="cal-day-num">${d}</span></div>`;
   }
 
   const totalCells = startDow + daysInMonth;
   const remaining = totalCells % 7 ? 7 - (totalCells % 7) : 0;
   for (let d = 1; d <= remaining; d++) {
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    html += `<div class="cal-cell other-month"><span class="cal-day-num">${d}</span></div>`;
   }
 
   grid.innerHTML = html;
