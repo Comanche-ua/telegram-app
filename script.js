@@ -1928,53 +1928,162 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       timerSection.appendChild(canvas);
       timerSection.appendChild(timerTextWrap);
 
-      // Delete, complete, edit buttons (absolute right)
-      const deleteSpan = document.createElement('div');
-      deleteSpan.className = 'task-action-btn task-action-delete delete-task-btn';
-      deleteSpan.innerHTML = '';
-      deleteSpan.title = 'Видалити';
-      deleteSpan.addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteTaskByIdx(wsIdx, wsId);
-      });
+      // Background action buttons for swipe menu
+      const cardBg = document.createElement('div');
+      cardBg.className = 'card-background';
 
-      const completeSpan = document.createElement('div');
-      completeSpan.className = 'task-action-btn task-action-complete';
-      completeSpan.innerHTML = '';
-      completeSpan.title = 'Виконано';
-      completeSpan.addEventListener('click', (e) => {
+      const completeBtn = document.createElement('div');
+      completeBtn.className = 'swipe-action-btn swipe-action-complete';
+      completeBtn.title = 'Виконано';
+      completeBtn.innerHTML = '<span class="swipe-action-icon ui-glyph-check"></span><span class="swipe-action-label">Готово</span>';
+      completeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         completeTaskByIdx(wsIdx, wsId);
       });
 
-      const editSpan = document.createElement('div');
-      editSpan.className = 'task-action-btn task-action-edit';
-      editSpan.innerHTML = '';
-      editSpan.title = 'Редагувати';
-      editSpan.addEventListener('click', (e) => {
+      const editBtn = document.createElement('div');
+      editBtn.className = 'swipe-action-btn swipe-action-edit';
+      editBtn.title = 'Редагувати';
+      editBtn.innerHTML = '<span class="swipe-action-icon ui-glyph-edit"></span><span class="swipe-action-label">Змінити</span>';
+      editBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         openEditModal(wsIdx, wsId);
       });
 
-      // Show edit/complete on card hover
-      cardDiv.addEventListener('mouseenter', () => {
-        editSpan.style.opacity = '1';
-        completeSpan.style.opacity = '1';
+      const deleteBtn = document.createElement('div');
+      deleteBtn.className = 'swipe-action-btn swipe-action-delete';
+      deleteBtn.title = 'Видалити';
+      deleteBtn.innerHTML = '<span class="swipe-action-icon ui-glyph-close"></span><span class="swipe-action-label">Видалити</span>';
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTaskByIdx(wsIdx, wsId);
       });
-      cardDiv.addEventListener('mouseleave', () => {
-        editSpan.style.opacity = '0';
-        completeSpan.style.opacity = '0';
-      });
+
+      cardBg.appendChild(completeBtn);
+      cardBg.appendChild(editBtn);
+      cardBg.appendChild(deleteBtn);
 
       cardBody.appendChild(textDiv);
       cardBody.appendChild(metaDiv);
       cardBody.appendChild(timerSection);
 
-      cardDiv.appendChild(deleteSpan);
-      cardDiv.appendChild(completeSpan);
-      cardDiv.appendChild(editSpan);
-      cardDiv.appendChild(cardBody);
+      const cardFg = document.createElement('div');
+      cardFg.className = 'card-foreground';
+      cardFg.appendChild(cardBody);
+
+      cardDiv.appendChild(cardBg);
+      cardDiv.appendChild(cardFg);
+
+      setupCardSwipe(cardDiv, cardFg);
+
       return cardDiv;
+}
+
+// ---- Swipe-to-Reveal Handler ----
+let activeSwipedCard = null;
+
+function closeActiveSwipedCard() {
+  if (activeSwipedCard) {
+    const fg = activeSwipedCard.querySelector('.card-foreground');
+    if (fg) {
+      fg.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+      fg.style.transform = 'translateX(0px)';
+    }
+    activeSwipedCard.classList.remove('is-swiped');
+    activeSwipedCard = null;
+  }
+}
+
+function setupCardSwipe(cardDiv, cardFg) {
+  let startX = 0;
+  let startY = 0;
+  let currentTranslateX = 0;
+  let isHorizontal = null;
+  let isDragging = false;
+  const MENU_WIDTH = 210;
+
+  function onTouchStart(e) {
+    if (e.touches.length > 1) return;
+
+    if (activeSwipedCard && activeSwipedCard !== cardDiv) {
+      closeActiveSwipedCard();
+    }
+
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    isHorizontal = null;
+    isDragging = true;
+
+    const transformStr = cardFg.style.transform;
+    const match = transformStr ? transformStr.match(/translateX\(([-0-9.]+)px\)/) : null;
+    currentTranslateX = match ? parseFloat(match[1]) : (cardDiv.classList.contains('is-swiped') ? -MENU_WIDTH : 0);
+
+    cardFg.style.transition = 'none';
+  }
+
+  function onTouchMove(e) {
+    if (!isDragging) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - startX;
+    const diffY = currentY - startY;
+
+    if (isHorizontal === null) {
+      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 6) {
+        isHorizontal = true;
+      } else if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 6) {
+        isHorizontal = false;
+      }
+    }
+
+    if (isHorizontal === false) return;
+
+    if (e.cancelable) e.preventDefault();
+
+    let targetX = currentTranslateX + diffX;
+
+    if (targetX > 0) {
+      targetX = targetX * 0.2;
+    } else if (targetX < -MENU_WIDTH) {
+      const over = targetX + MENU_WIDTH;
+      targetX = -MENU_WIDTH + over * 0.2;
+    }
+
+    cardFg.style.transform = `translateX(${targetX}px)`;
+  }
+
+  function onTouchEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    cardFg.style.transition = 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)';
+
+    const transformStr = cardFg.style.transform;
+    const match = transformStr ? transformStr.match(/translateX\(([-0-9.]+)px\)/) : null;
+    const currentX = match ? parseFloat(match[1]) : 0;
+
+    if (currentX < -60) {
+      cardFg.style.transform = `translateX(-${MENU_WIDTH}px)`;
+      cardDiv.classList.add('is-swiped');
+      activeSwipedCard = cardDiv;
+    } else {
+      cardFg.style.transform = 'translateX(0px)';
+      cardDiv.classList.remove('is-swiped');
+      if (activeSwipedCard === cardDiv) activeSwipedCard = null;
+    }
+  }
+
+  cardFg.addEventListener('touchstart', onTouchStart, { passive: true });
+  cardFg.addEventListener('touchmove', onTouchMove, { passive: false });
+  cardFg.addEventListener('touchend', onTouchEnd);
+  cardFg.addEventListener('touchcancel', onTouchEnd);
+
+  cardFg.addEventListener('click', (e) => {
+    if (cardDiv.classList.contains('is-swiped')) {
+      e.stopPropagation();
+      e.preventDefault();
+      closeActiveSwipedCard();
+    }
+  });
 }
 
 // ---- Edit Modal ----

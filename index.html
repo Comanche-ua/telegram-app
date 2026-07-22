@@ -1950,61 +1950,108 @@
   .sec-later .section-icon::before { background: var(--text2); box-shadow: 0 0 0 5px var(--surface2); }
   .sec-none .section-icon::before { background: var(--text3); box-shadow: 0 0 0 5px var(--surface2); }
 
-  .task-action-btn,
-  .delete-task-btn {
+  /* Swipeable Task Card Menu Styles */
+  .card {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface2);
+    user-select: none;
+    touch-action: pan-y;
+  }
+
+  .card-background {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 210px;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(15, 23, 42, 0.04);
+    border-top-right-radius: var(--radius-sm);
+    border-bottom-right-radius: var(--radius-sm);
+    z-index: 1;
+  }
+
+  .swipe-action-btn {
+    flex: 1;
+    height: 100%;
+    max-height: 48px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
+    gap: 3px;
     cursor: pointer;
-    border: 1px solid currentColor;
-    transition: transform 0.18s ease, opacity 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
-    opacity: 0;
-    z-index: 20;
+    color: #FFFFFF;
+    transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+    font-family: 'Inter', sans-serif;
+    border: none;
+    outline: none;
   }
 
-  .delete-task-btn,
-  .task-action-delete {
-    right: 8px;
-    color: var(--red);
-    background: var(--red-bg);
-    border-color: rgba(220, 38, 38, 0.18);
+  .swipe-action-btn:active {
+    transform: scale(0.92);
+    filter: brightness(0.9);
   }
 
-  .task-action-complete {
-    right: 44px;
-    color: var(--green);
-    background: var(--green-bg);
-    border-color: rgba(22, 163, 74, 0.2);
+  .swipe-action-complete {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+    box-shadow: 0 4px 12px rgba(16,185,129,0.3);
   }
 
-  .task-action-edit {
-    right: 80px;
-    color: var(--blue);
-    background: var(--blue-bg);
-    border-color: rgba(37, 99, 235, 0.2);
+  .swipe-action-edit {
+    background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.3);
   }
 
-  .card:hover .task-action-btn,
-  .card:hover .delete-task-btn {
-    opacity: 1;
+  .swipe-action-delete {
+    background: linear-gradient(135deg, #F43F5E 0%, #E11D48 100%);
+    box-shadow: 0 4px 12px rgba(225,29,72,0.3);
   }
 
-  .task-action-btn:hover,
-  .delete-task-btn:hover {
-    color: #fff;
-    transform: translateY(-50%) scale(1.08);
+  .swipe-action-icon {
+    width: 18px;
+    height: 18px;
+    background: currentColor;
+    display: block;
+    pointer-events: none;
   }
 
-  .task-action-delete:hover,
-  .delete-task-btn:hover { background: var(--red); box-shadow: 0 10px 22px -12px var(--red); }
-  .task-action-complete:hover { background: var(--green); box-shadow: 0 10px 22px -12px var(--green); }
-  .task-action-edit:hover { background: var(--blue); box-shadow: 0 10px 22px -12px var(--blue); }
+  .swipe-action-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .card-foreground {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    background: var(--surface);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+    display: flex;
+    align-items: stretch;
+    border-radius: var(--radius-sm);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .card:hover .card-foreground {
+      transform: translateX(-210px);
+    }
+  }
+
+  .card.is-swiped .card-foreground {
+    transform: translateX(-210px);
+  }
 
   .modal-close {
     color: var(--red);
@@ -2543,20 +2590,7 @@
   }
   .timer-label { font-size: 7px; }
 
-  /* Action buttons: завжди видно на мобілі */
-  .task-action-btn,
-  .delete-task-btn {
-    opacity: 0.85 !important;
-    width: 26px;
-    height: 26px;
-    border-radius: 8px;
-    z-index: 5;
-  }
-  .delete-task-btn, .task-action-delete { right: 6px; }
-  .task-action-complete { right: 38px; }
-  .task-action-edit { right: 70px; }
-  .card:hover .task-action-btn,
-  .card:hover .delete-task-btn { opacity: 0.85 !important; }
+  /* Action buttons: native swipe-to-reveal on mobile */
 
   /* Remove left border accent on mobile (экономия места) */
   .card::before { width: 2px; }
@@ -2754,14 +2788,7 @@
   }
   .timer-label { font-size: 7px; }
 
-  /* Action buttons: тісніші */
-  .task-action-btn, .delete-task-btn {
-    width: 24px; height: 24px;
-    border-radius: 6px;
-  }
-  .delete-task-btn, .task-action-delete { right: 4px; }
-  .task-action-complete { right: 32px; }
-  .task-action-edit { right: 60px; }
+  /* Action buttons handled by swipe menu */
 
   /* Секції */
   .section-header { top: 86px; padding: 2px 0 6px; }
