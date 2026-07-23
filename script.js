@@ -1684,6 +1684,84 @@ function completeTaskByIdx(idx, wsIdOverride) {
   updateCalendarVisibility();
 }
 
+// ---- Deadline focus slider (presentation state only; task data is untouched) ----
+const DEADLINE_FILTER_KEY = 'deadline_focus_filter';
+let activeDeadlineFilter = localStorage.getItem(DEADLINE_FILTER_KEY) || 'all';
+if (!['all', 'critical', 'today', 'upcoming'].includes(activeDeadlineFilter)) activeDeadlineFilter = 'all';
+
+function shouldShowDeadlineSection(key) {
+  if (activeDeadlineFilter === 'all') return true;
+  if (activeDeadlineFilter === 'critical') return key === 'overdue' || key === 'none';
+  if (activeDeadlineFilter === 'today') return key === 'today';
+  return key === 'tomorrow' || key === 'week' || key === 'later';
+}
+
+function renderDeadlineFocus() {
+  const items = getActiveItems().filter(item => !item.done);
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const counts = { all: items.length, critical: 0, today: 0, upcoming: 0 };
+
+  items.forEach(item => {
+    if (!item.deadline) { counts.critical++; return; }
+    const deadline = getDeadlineEnd(item.deadline, item.deadlineTime);
+    if (deadline < now) counts.critical++;
+    else if (item.deadline === today) counts.today++;
+    else counts.upcoming++;
+  });
+
+  Object.entries(counts).forEach(([key, value]) => {
+    const element = document.getElementById(`focus-count-${key}`);
+    if (element) element.textContent = value;
+  });
+
+  const labels = { all: 'Усі активні', critical: 'Критичні строки', today: 'Фокус на сьогодні', upcoming: 'Наступні строки' };
+  const label = document.getElementById('deadline-focus-label');
+  if (label) label.textContent = labels[activeDeadlineFilter] || labels.all;
+  document.querySelectorAll('[data-deadline-filter]').forEach(button => {
+    const selected = button.dataset.deadlineFilter === activeDeadlineFilter;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+}
+
+function setDeadlineFocus(filter) {
+  activeDeadlineFilter = ['all', 'critical', 'today', 'upcoming'].includes(filter) ? filter : 'all';
+  localStorage.setItem(DEADLINE_FILTER_KEY, activeDeadlineFilter);
+  renderCards();
+}
+
+function initDeadlineFocusUI() {
+  document.querySelectorAll('[data-deadline-filter]').forEach(button => {
+    button.addEventListener('click', () => setDeadlineFocus(button.dataset.deadlineFilter));
+    button.addEventListener('keydown', event => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        const buttons = [...document.querySelectorAll('[data-deadline-filter]')];
+        const index = buttons.indexOf(button);
+        const next = event.key === 'ArrowRight' ? (index + 1) % buttons.length : (index - 1 + buttons.length) % buttons.length;
+        buttons[next].focus();
+        setDeadlineFocus(buttons[next].dataset.deadlineFilter);
+      }
+    });
+  });
+
+  const slider = document.getElementById('deadline-slider');
+  if (slider) {
+    let startX = null;
+    slider.addEventListener('touchstart', event => { startX = event.changedTouches[0]?.clientX ?? null; }, { passive: true });
+    slider.addEventListener('touchend', event => {
+      const endX = event.changedTouches[0]?.clientX;
+      if (startX === null || endX === undefined || Math.abs(endX - startX) < 42) return;
+      const filters = ['all', 'critical', 'today', 'upcoming'];
+      const index = filters.indexOf(activeDeadlineFilter);
+      const next = endX < startX ? Math.min(index + 1, filters.length - 1) : Math.max(index - 1, 0);
+      if (next !== index) setDeadlineFocus(filters[next]);
+      startX = null;
+    }, { passive: true });
+  }
+}
+
 // ---- Render Cards ----
 function renderCards() {
   const container = document.getElementById('container');
@@ -1735,6 +1813,7 @@ function renderCards() {
     let globalIdx = 0;
     sectionDefs.forEach(def => {
       const list = buckets[def.key];
+      if (!shouldShowDeadlineSection(def.key)) return;
       if (!list.length) return;
 
       const secWrap = document.createElement('div');
@@ -1756,6 +1835,10 @@ function renderCards() {
       container.appendChild(secWrap);
     });
 
+    if (!container.children.length) {
+      container.innerHTML = '<div class="empty empty-state">У цьому фільтрі поки немає завдань. Оберіть інший період або додайте нове.</div>';
+    }
+
     activeItems.forEach(item => {
       const wsId = item._workspaceId || activeWorkspaceId;
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : 0;
@@ -1765,7 +1848,7 @@ function renderCards() {
   }
 
   // Completed section
-  if (completedItems.length > 0) {
+  if (activeDeadlineFilter === 'all' && completedItems.length > 0) {
     compSection.style.display = 'block';
     compContainer.innerHTML = '';
     const compGrid = document.createElement('div');
@@ -1820,6 +1903,7 @@ function renderCards() {
     compSection.style.display = 'none';
   }
 
+  renderDeadlineFocus();
   updateCalendarVisibility();
 }
 
@@ -2508,8 +2592,6 @@ function addNewTab() {
 
 // ---- Settings Init ----
 function initSettings() {
-  const savedTheme = localStorage.getItem('ext_theme') || 'neutral';
-  const savedWp = localStorage.getItem('ext_wp') || 'none';
   const savedSize = localStorage.getItem('ext_card_size') || 'normal';
 
   // Screen lock (password protect)
@@ -2564,8 +2646,6 @@ function initSettings() {
     });
   }
 
-  applyTheme(savedTheme);
-  applyWallpaper(savedWp);
   applyCardSize(savedSize);
 
   // Size Settings
@@ -2669,89 +2749,6 @@ function initSettings() {
     });
   }
 
-  // Theme Settings
-  document.querySelectorAll('.theme-option').forEach(el => {
-    const themeVal = el.dataset.theme;
-    if (themeVal === savedTheme || (!themeVal && savedTheme === 'neutral')) {
-      el.classList.add('active');
-    } else {
-      el.classList.remove('active');
-    }
-
-    el.addEventListener('click', (e) => {
-      document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
-      e.target.classList.add('active');
-      const t = e.target.dataset.theme || 'neutral';
-      localStorage.setItem('ext_theme', t);
-      applyTheme(t);
-    });
-  });
-
-  const customWpInput = document.getElementById('custom-wp-url');
-  customWpInput.addEventListener('input', (e) => {
-    const url = e.target.value.trim();
-    if (url) {
-      document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-      localStorage.setItem('ext_wp', url);
-      applyWallpaper(url);
-    }
-  });
-
-  const customWpBtn = document.getElementById('custom-wp-btn');
-  const customWpFile = document.getElementById('custom-wp-file');
-
-  if (customWpBtn && customWpFile) {
-    customWpBtn.addEventListener('click', () => {
-      customWpFile.click();
-    });
-
-    customWpFile.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        try {
-          localStorage.setItem('custom_wp_data', dataUrl);
-          localStorage.setItem('ext_wp', 'custom_upload');
-          customWpInput.value = '';
-          document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-          applyWallpaper('custom_upload');
-        } catch (err) {
-          alert("Зображення занадто велике! Виберіть файл меншого розміру (до 2-3 МБ).");
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  document.querySelectorAll('.wp-option').forEach(el => {
-    if (el.dataset.wp === savedWp) {
-      el.classList.add('active');
-    } else el.classList.remove('active');
-
-    el.addEventListener('click', (e) => {
-      customWpInput.value = '';
-      document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-      e.target.classList.add('active');
-      const w = e.target.dataset.wp;
-      localStorage.setItem('ext_wp', w);
-      applyWallpaper(w);
-    });
-  });
-
-  if (savedWp !== 'none' && !document.querySelector(`.wp-option[data-wp="${savedWp}"]`)) {
-    customWpInput.value = savedWp;
-  }
-}
-
-function applyTheme(theme) {
-  document.body.className = document.body.className.replace(/theme-\w+/g, '').trim();
-  if (theme === 'dark') document.body.classList.add('theme-dark');
-  else if (theme === 'light') document.body.classList.add('theme-light');
-  else if (theme === 'ocean') document.body.classList.add('theme-ocean');
-  else if (theme === 'forest') document.body.classList.add('theme-forest');
 }
 
 function applyCardSize(size) {
@@ -2840,6 +2837,11 @@ function setAppMode(mode) {
     const isActive = btn.dataset.mode === activeAppMode;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', String(isActive));
+  });
+  document.querySelectorAll('.mobile-nav-item').forEach(btn => {
+    const isActive = btn.dataset.mode === activeAppMode;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
 
   // Show/hide sections
@@ -3320,6 +3322,8 @@ document.addEventListener('DOMContentLoaded', () => {
   on('edit-modal-close-btn', 'click', closeEditModal);
   on('btn-save-edit', 'click', saveEditedTask);
   on('tab-add-btn', 'click', addNewTab);
+  document.querySelectorAll('.mobile-nav-item').forEach(btn => btn.addEventListener('click', () => setAppMode(btn.dataset.mode)));
+  initDeadlineFocusUI();
   const requiredToggleBtn = document.getElementById('required-toggle-btn');
   if (requiredToggleBtn) requiredToggleBtn.addEventListener('click', () => setRequiredUndatedVisible(!shouldShowRequiredUndated()));
   updateRequiredToggleUI();
@@ -3372,18 +3376,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
-
-    // Adapt to Telegram theme
-    if (tg.colorScheme === 'dark') {
-      document.body.classList.add('theme-dark');
-    }
-    tg.onEvent('themeChanged', () => {
-      if (tg.colorScheme === 'dark') {
-        document.body.classList.add('theme-dark');
-      } else {
-        document.body.classList.remove('theme-dark', 'theme-light', 'theme-ocean', 'theme-forest');
-      }
-    });
 
     // Show share button
     const shareBtn = document.getElementById('share-btn');
