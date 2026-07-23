@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v1.5-command-desk';
+const CACHE_NAME = 'deadline-tracker-v1.6-mobile-recovery';
 const ASSETS = [
   './',
   './index.html',

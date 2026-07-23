@@ -2228,8 +2228,8 @@ function updateCalendarVisibility() {
   if (!section) return;
   const items = getActiveItems();
   const activeItems = items.filter(i => !i.done);
-  section.style.display = activeItems.length ? 'block' : 'none';
-  if (activeItems.length) renderCalendar();
+  section.style.display = 'block';
+  renderCalendar();
   renderStats();
   renderTopAssignees();
 }
