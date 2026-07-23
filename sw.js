@@ -1,9 +1,11 @@
-const CACHE_NAME = 'deadline-tracker-v1.4-premium';
+const CACHE_NAME = 'deadline-tracker-v1.5-command-desk';
 const ASSETS = [
   './',
   './index.html',
+  './app.css',
   './script.js',
-  './manifest.json'
+  './manifest.json',
+  './logo-mark.svg'
 ];
 
 // Install — попередньо кешуємо ключові assets
