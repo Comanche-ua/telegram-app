@@ -1905,6 +1905,27 @@ function renderCards() {
 }
 
 // ---- Побудова однієї картки завдання (винесено окремо для секцій) ----
+function createTimerRabbit(status) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const rabbit = document.createElementNS(ns, 'svg');
+  rabbit.setAttribute('class', `timer-rabbit ${status}`);
+  rabbit.setAttribute('viewBox', '0 0 40 40');
+  rabbit.setAttribute('aria-hidden', 'true');
+  rabbit.innerHTML = `
+    <g class="timer-rabbit-hop">
+      <rect class="timer-rabbit-leg timer-rabbit-leg-back" x="20" y="29" width="3" height="7" rx="1.5" fill="currentColor"/>
+      <ellipse cx="17" cy="24" rx="10" ry="8" fill="currentColor"/>
+      <rect class="timer-rabbit-leg timer-rabbit-leg-front" x="11" y="29" width="3" height="7" rx="1.5" fill="currentColor"/>
+      <circle cx="26" cy="25" r="2.5" fill="#fff"/>
+      <circle cx="17" cy="15" r="7" fill="currentColor"/>
+      <ellipse class="timer-rabbit-ear timer-rabbit-ear-left" cx="14" cy="8" rx="3" ry="9" fill="currentColor"/>
+      <ellipse class="timer-rabbit-ear timer-rabbit-ear-right" cx="20" cy="8" rx="3" ry="9" fill="currentColor"/>
+      <circle cx="13" cy="17" r="2.2" fill="#fff"/>
+      <circle cx="14.5" cy="14" r="1" fill="#20213A"/>
+    </g>`;
+  return rabbit;
+}
+
 function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const wsId = item._workspaceId || activeWorkspaceId;
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : arrIdx;
@@ -2006,15 +2027,12 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       timerLabel.textContent = isOverdue ? 'ПРОСТРОЧЕНО' : 'ЗАЛИШИЛОСЬ';
       timerTextWrap.appendChild(timerTextSpan);
       timerTextWrap.appendChild(timerLabel);
-      timerSection.appendChild(canvas);
+      const timerOrbit = document.createElement('div');
+      timerOrbit.className = 'timer-orbit';
+      timerOrbit.appendChild(canvas);
+      timerOrbit.appendChild(createTimerRabbit(cls));
+      timerSection.appendChild(timerOrbit);
       timerSection.appendChild(timerTextWrap);
-      if (cls === 'urgent' || cls === 'critical' || cls === 'over') {
-        const alertMark = document.createElement('img');
-        alertMark.className = 'deadline-alert-mark';
-        alertMark.src = 'deadline-alert.svg';
-        alertMark.alt = isOverdue ? 'Прострочено' : 'Термін спливає';
-        timerSection.appendChild(alertMark);
-      }
 
       // Delete, complete, edit buttons (absolute right)
       const deleteSpan = document.createElement('div');

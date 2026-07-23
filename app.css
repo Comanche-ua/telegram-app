@@ -2922,3 +2922,21 @@ button, input, select, textarea { font-family: inherit; }
   .mobile-nav-item { pointer-events: auto; touch-action: manipulation; }
   .calendar-command-card#calendar-section { display: block; }
 }
+
+/* Rabbit runs around each deadline ring; urgency changes only its pace and color. */
+.timer-orbit { position: relative; width: 60px; height: 60px; flex: 0 0 60px; overflow: visible; }
+.timer-orbit .timer-canvas { width: 60px !important; height: 60px !important; }
+.timer-rabbit { position: absolute; inset: 0; z-index: 2; width: 18px; height: 18px; margin: auto; color: var(--blue); offset-path: path('M 30,3 A 27,27 0 1 1 29.99,3'); offset-rotate: auto; animation: timerRabbitRun 5.6s linear infinite; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(32,33,58,.18)); }
+.timer-rabbit.warn { color: var(--amber); animation-duration: 4.2s; }
+.timer-rabbit.urgent, .timer-rabbit.critical { color: var(--red); animation-duration: 2.9s; }
+.timer-rabbit.over { color: var(--red); animation-duration: 2.1s; }
+.timer-rabbit-hop { transform-box: fill-box; transform-origin: bottom center; animation: timerRabbitHop .55s cubic-bezier(.45,0,.55,1) infinite; }
+.timer-rabbit-ear { transform-origin: bottom center; animation: timerRabbitEar .55s cubic-bezier(.45,0,.55,1) infinite; }
+.timer-rabbit-leg { transform-box: fill-box; transform-origin: top center; animation: timerRabbitLeg .55s cubic-bezier(.45,0,.55,1) infinite; }
+.timer-rabbit-leg-front { animation-direction: reverse; }
+@keyframes timerRabbitRun { to { offset-distance: 100%; } }
+@keyframes timerRabbitHop { 0%,100% { transform: translateY(0) scale(1); } 12% { transform: translateY(1px) scale(1.12,.84); } 48%,62% { transform: translateY(-7px) scale(.9,1.13); } 84% { transform: translateY(1px) scale(1.1,.86); } }
+@keyframes timerRabbitEar { 0%,100% { transform: rotate(0); } 48%,62% { transform: rotate(-20deg); } 84% { transform: rotate(8deg); } }
+@keyframes timerRabbitLeg { 0%,100% { transform: rotate(0); } 12% { transform: rotate(25deg); } 48%,62% { transform: rotate(-25deg); } 84% { transform: rotate(12deg); } }
+@media (max-width: 760px) { .timer-orbit { width: 38px; height: 38px; flex-basis: 38px; } .timer-orbit .timer-canvas { width: 38px !important; height: 38px !important; } .timer-rabbit { width: 14px; height: 14px; offset-path: path('M 19,2 A 17,17 0 1 1 18.99,2'); } }
+@media (prefers-reduced-motion: reduce) { .timer-rabbit, .timer-rabbit-hop, .timer-rabbit-ear, .timer-rabbit-leg { animation: none !important; } }

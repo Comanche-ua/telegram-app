@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Rabbit Deadline Animation</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(1100px 620px at 100% -8%, rgba(79,70,229,0.10), transparent 60%),
+      radial-gradient(900px 560px at -10% 10%, rgba(6,182,212,0.08), transparent 55%),
+      #EEF1F7;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* ====== КОНТЕЙНЕР ИНДИКАТОРА ДЕДЛАЙНА ====== */
+  .deadline-ring {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    overflow: visible; /* чтобы прыжок кролика не обрезался краем блока */
+    margin-top: 16px;  /* запас сверху под высоту прыжка */
+  }
+
+  /* трек-круг (фон, по которому "бежит" путь) */
+  .deadline-ring svg.track {
+    position: absolute;
+    inset: 0;
+    transform: rotate(-90deg);
+  }
+  .deadline-ring .track-bg {
+    fill: none;
+    stroke: rgba(15,23,42,0.08);
+    stroke-width: 6;
+  }
+  .deadline-ring .track-progress {
+    fill: none;
+    stroke: url(#grad);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 314; /* 2*PI*R, R=50 */
+    stroke-dashoffset: 90; /* сколько прогресса пройдено */
+    transition: stroke-dashoffset 0.6s var(--ease, ease);
+  }
+
+  /* центр — можно вывести дни/часы */
+  .deadline-ring .center-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-weight: 800;
+    color: #0B1220;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .deadline-ring .center-label span {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4B5875;
+    margin-top: 2px;
+  }
+
+  /* ====== КРОЛИК, БЕГУЩИЙ ПО КРУГУ ====== */
+  .rabbit-runner {
+    position: absolute;
+    inset: 0;
+    width: 24px;
+    height: 24px;
+    margin: auto; /* центрируем стартовую позицию до начала offset-path */
+    /* радиус пути (42) чуть МЕНЬШЕ радиуса самого кольца (50),
+       поэтому кролик бежит внутри трека, а не ровно по линии обводки.
+       Хочешь, чтобы бежал ровно ПО линии кольца — поставь оба радиуса равными 50. */
+    offset-path: path('M 60,18 A 42,42 0 1 1 59.99,18');
+    offset-rotate: auto;
+    animation: run-around 3.6s linear infinite;
+    transform-origin: center;
+  }
+
+  @keyframes run-around {
+    from { offset-distance: 0%; }
+    to   { offset-distance: 100%; }
+  }
+
+  /* сам прыгающий кролик — отдельная группа внутри svg,
+     чтобы offset-path (позиция на круге) и прыжок (вверх-вниз) не конфликтовали */
+  .rabbit-runner .hopper {
+    animation: real-hop 0.55s cubic-bezier(.45,0,.55,1) infinite;
+    transform-box: fill-box;
+    transform-origin: bottom center;
+  }
+
+  /* фаза настоящего прыжка кролика:
+     присед (сжатие) -> резкий толчок -> полёт (растяжение, тело вытянуто) -> приземление (сжатие) -> пауза */
+  @keyframes real-hop {
+    0%   { transform: translateY(0)    scale(1, 1);     }
+    10%  { transform: translateY(1px)  scale(1.15, 0.8); }  /* присед перед толчком */
+    35%  { transform: translateY(-13px) scale(0.85, 1.2); } /* пик прыжка, тело вытянуто */
+    60%  { transform: translateY(-13px) scale(0.85, 1.2); } /* верхняя точка чуть дольше "висит" */
+    82%  { transform: translateY(1px)  scale(1.15, 0.8); }  /* приземление, сжатие */
+    100% { transform: translateY(0)    scale(1, 1);      }
+  }
+
+  /* уши прижаты в полёте назад, расправлены при приземлении */
+  .rabbit-runner .ear {
+    animation: ear-flop 0.55s cubic-bezier(.45,0,.55,1) infinite;
+    transform-origin: bottom center;
+  }
+  .rabbit-runner .ear.left  { animation-delay: -0.02s; }
+  .rabbit-runner .ear.right { animation-delay: 0.02s; }
+  @keyframes ear-flop {
+    0%   { transform: rotate(0deg); }
+    10%  { transform: rotate(6deg); }
+    35%  { transform: rotate(-22deg); }  /* уши откинуты назад в полёте */
+    60%  { transform: rotate(-22deg); }
+    82%  { transform: rotate(10deg); }
+    100% { transform: rotate(0deg); }
+  }
+
+  /* задние лапы — мощный толчок и поджатие в полёте, передние — вытянуты в полёте */
+  .rabbit-runner .leg.back {
+    animation: back-leg 0.55s cubic-bezier(.45,0,.55,1) infinite;
+    transform-origin: top center;
+  }
+  .rabbit-runner .leg.front {
+    animation: front-leg 0.55s cubic-bezier(.45,0,.55,1) infinite;
+    transform-origin: top center;
+  }
+  @keyframes back-leg {
+    0%   { transform: rotate(0deg);   }
+    10%  { transform: rotate(35deg);  } /* сгиб перед толчком */
+    35%  { transform: rotate(-30deg); } /* поджаты под тело в полёте */
+    60%  { transform: rotate(-30deg); }
+    82%  { transform: rotate(20deg);  } /* вытянуты для приземления */
+    100% { transform: rotate(0deg);   }
+  }
+  @keyframes front-leg {
+    0%   { transform: rotate(0deg);   }
+    10%  { transform: rotate(-10deg); }
+    35%  { transform: rotate(25deg);  } /* вытянуты вперёд в полёте */
+    60%  { transform: rotate(25deg);  }
+    82%  { transform: rotate(-15deg); } /* готовы принять приземление */
+    100% { transform: rotate(0deg);   }
+  }
+
+  .hint {
+    margin-top: 28px;
+    text-align: center;
+    color: #4B5875;
+    font-size: 13px;
+  }
+  .wrap { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="deadline-ring">
+    <!-- фон + прогресс -->
+    <svg class="track" viewBox="0 0 120 120">
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#4F46E5"/>
+          <stop offset="55%" stop-color="#7C3AED"/>
+          <stop offset="100%" stop-color="#06B6D4"/>
+        </linearGradient>
+      </defs>
+      <circle class="track-bg" cx="60" cy="60" r="50"/>
+      <circle class="track-progress" cx="60" cy="60" r="50"/>
+    </svg>
+
+    <!-- бегущий кролик (уменьшен, размер подбирается под кольцо) -->
+    <svg class="rabbit-runner" viewBox="0 0 40 40" width="24" height="24">
+      <g class="hopper">
+        <!-- задняя лапа (толчковая) — рисуется первой, чтобы была позади тела -->
+        <rect class="leg back"  x="20" y="29" width="3" height="7" rx="1.5" fill="#4F46E5"/>
+        <!-- тело -->
+        <ellipse cx="17" cy="24" rx="10" ry="8" fill="#7C3AED"/>
+        <!-- передняя лапа -->
+        <rect class="leg front" x="11" y="29" width="3" height="7" rx="1.5" fill="#4F46E5"/>
+        <!-- хвостик -->
+        <circle cx="26" cy="25" r="2.5" fill="#ffffff"/>
+        <!-- голова -->
+        <circle cx="17" cy="15" r="7" fill="#7C3AED"/>
+        <!-- уши -->
+        <ellipse class="ear left"  cx="14" cy="8"  rx="3" ry="9" fill="#4F46E5"/>
+        <ellipse class="ear right" cx="20" cy="8"  rx="3" ry="9" fill="#4F46E5"/>
+        <!-- щёчка/мордочка -->
+        <circle cx="13" cy="17" r="2.2" fill="#ffffff"/>
+        <!-- глаз -->
+        <circle cx="14.5" cy="14" r="1" fill="#0B1220"/>
+      </g>
+    </svg>
+
+    <div class="center-label">3<span>дні</span></div>
+  </div>
+
+  <div class="hint">Кролик біжить по колу дедлайну 🐰</div>
+</div>
+
+</body>
+</html>
