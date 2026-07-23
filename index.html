@@ -81,6 +81,7 @@
 <div class="dash-layout">
 
   <aside class="dash-sidebar">
+<<<<<<< HEAD
 
     <div class="dash-widget" id="stats-widget" style="display:none;">
       <h4>📊 Статистика</h4>
@@ -107,10 +108,21 @@
     <div class="dash-widget" id="top-assignees-widget" style="display:none;">
       <h4>👥 Топ виконавців</h4>
       <div id="top-assignees-list"></div>
+=======
+    <div class="dash-widget sidebar-cal" id="calendar-section" style="display: none;">
+      <h4>📅 Календар</h4>
+      <div class="cal-header">
+        <button id="cal-prev" aria-label="Попередній місяць"></button>
+        <span class="cal-title" id="cal-title"></span>
+        <button id="cal-next" aria-label="Наступний місяць"></button>
+      </div>
+      <div class="cal-grid" id="calendar-grid"></div>
+>>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
     </div>
   </aside>
 
   <div class="dash-main">
+<<<<<<< HEAD
     <section class="calendar-command-card dash-widget sidebar-cal" id="calendar-section" style="display: none;" aria-label="Календар завдань">
       <div class="calendar-command-heading">
         <div><p class="eyebrow">Планування</p><h1>Календар задач</h1></div>
@@ -122,6 +134,25 @@
         <button id="cal-next" aria-label="Наступний місяць"></button>
       </div>
       <div class="cal-grid" id="calendar-grid"></div>
+=======
+    <section class="deadline-brief" id="deadline-brief" aria-labelledby="deadline-brief-title">
+      <div class="deadline-brief-head">
+        <div>
+          <p class="eyebrow">Оперативна доба</p>
+          <h1 id="deadline-brief-title">Тримайте строки під контролем</h1>
+        </div>
+        <div class="discipline-meter" aria-label="Стан дедлайнів">
+          <span class="discipline-meter-dot"></span>
+          <span id="deadline-focus-label">Усі активні</span>
+        </div>
+      </div>
+      <div class="deadline-slider" id="deadline-slider" role="tablist" aria-label="Фільтр дедлайнів">
+        <button class="deadline-slide active" type="button" data-deadline-filter="all" role="tab" aria-selected="true"><span>Усі</span><strong id="focus-count-all">0</strong></button>
+        <button class="deadline-slide critical" type="button" data-deadline-filter="critical" role="tab" aria-selected="false"><span>Критично</span><strong id="focus-count-critical">0</strong></button>
+        <button class="deadline-slide today" type="button" data-deadline-filter="today" role="tab" aria-selected="false"><span>Сьогодні</span><strong id="focus-count-today">0</strong></button>
+        <button class="deadline-slide upcoming" type="button" data-deadline-filter="upcoming" role="tab" aria-selected="false"><span>Наступні</span><strong id="focus-count-upcoming">0</strong></button>
+      </div>
+>>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
     </section>
     <div id="container">
       <div class="empty empty-state">Завантажте завдання через Gemini або відновлено зі сховища</div>

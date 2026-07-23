@@ -2761,6 +2761,7 @@ button, input, select, textarea { font-family: inherit; }
   @keyframes sheetRise { from { transform: translateY(28px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 }
 
+<<<<<<< HEAD
 /* Restored calendar command card and deadline beacon. */
 .calendar-command-card { display: block; max-width: none; margin: 0 0 24px; padding: 22px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: rgba(255,255,255,.82); box-shadow: var(--shadow-sm); }
 .calendar-command-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
@@ -2786,6 +2787,8 @@ button, input, select, textarea { font-family: inherit; }
   .deadline-alert-mark { width: 18px; height: 18px; flex-basis: 18px; }
 }
 
+=======
+>>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
 @media (min-width: 761px) {
   .app-mode-switch { display: inline-flex; margin-left: 12px; }
 }
@@ -2904,6 +2907,7 @@ button, input, select, textarea { font-family: inherit; }
   .task-action-btn, .delete-task-btn { top: 10px; opacity: .9 !important; }
 }
 
+<<<<<<< HEAD
 /* Calendar owns the mobile hero position; preserve its original month-grid density. */
 @media (max-width: 760px) {
   .calendar-command-card#calendar-section { margin: 0 0 18px; padding: 16px 14px; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,255,255,.82); }
@@ -2911,3 +2915,5 @@ button, input, select, textarea { font-family: inherit; }
   .calendar-command-card.sidebar-cal .cal-cell { min-height: 42px; padding: 3px 1px; font-size: inherit; }
   .calendar-command-card .cal-day-num { font-size: 12px; }
 }
+=======
+>>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
