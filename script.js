@@ -2117,8 +2117,16 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : arrIdx;
       const viewKey = item._viewKey || String(wsIdx);
       const { str, cls } = countdownData(item.deadline, item.deadlineTime);
-      const dateObj = item.deadline ? new Date(item.deadline) : null;
-      const dateStr = dateObj ? dateObj.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+      const formatDeadlineWithDow = (ymd) => {
+        if (!ymd) return '';
+        const parts = ymd.split('-');
+        if (parts.length !== 3) return ymd;
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const dowNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+        const dow = dowNames[d.getDay()];
+        return `${dow}, ${parts[2].padStart(2, '0')}.${parts[1].padStart(2, '0')}.${parts[0]}`;
+      };
+      const dateStr = item.deadline ? formatDeadlineWithDow(item.deadline) : '';
       const isNearest = (item.deadline === nearestId && nearestId !== null);
       const canvasId = `timer_${wsId}_${viewKey}`;
 
@@ -2685,6 +2693,7 @@ function quickAddTask() {
   setStatus(`Завдання додано у "${targetWs.name}"`);
   renderTabBar();
   startTimers();
+  closeModal();
 
   setTimeout(() => setStatus(''), 2000);
 }
