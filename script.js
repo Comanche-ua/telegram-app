@@ -1591,6 +1591,7 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   const bgColor = 'rgba(0,0,0,0.15)';
   const radius = 54;
   const centerX = 60, centerY = 60;
+  const innerR = radius - 9;
 
   ctx.clearRect(0, 0, size, size);
 
@@ -1624,12 +1625,62 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   ctx.stroke();
   ctx.restore();
 
-  // Inner circle
+  // Inner circle — neon pulsing glow
+  const t = Date.now() / 1000;
+  const pulse = (Math.sin(t * 2.2) + 1) / 2; // 0..1 smooth cycle
+
+  // Pick neon accent colors by status
+  let neonA, neonB;
+  if (isOverdue || progress > 0.7) { neonA = '#FF003C'; neonB = '#FF6B6B'; }
+  else if (progress > 0.4)         { neonA = '#FF8C00'; neonB = '#FFD700'; }
+  else                              { neonA = '#00F5FF'; neonB = '#A78BFA'; }
+
+  // Much brighter glow ranges
+  const glowAlpha = 0.45 + pulse * 0.45; // 0.45..0.90
+  const glowBlur  = 18  + pulse * 32;    // 18..50
+
+  // Dark base fill
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius - 9, 0, 2 * Math.PI);
-  ctx.fillStyle = 'var(--surface)';
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.fillStyle = '#080C16';
   ctx.fill();
+
+  // Radial gradient — bright neon bloom from center
+  const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, innerR);
+  grad.addColorStop(0,    `${neonA}${Math.round(glowAlpha * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(0.45, `${neonB}${Math.round(glowAlpha * 0.55 * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(0.85, `${neonA}${Math.round(glowAlpha * 0.15 * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(1,    'transparent');
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Outer neon ring glow — thick pass
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.strokeStyle = neonA;
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.55 + pulse * 0.45; // 0.55..1.0
+  ctx.shadowColor = neonA;
+  ctx.shadowBlur = glowBlur;
+  ctx.stroke();
+
+  // Second inner ring pass — tighter, hotter core glow
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR - 3, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.12 + pulse * 0.35; // 0.12..0.47
+  ctx.shadowColor = neonA;
+  ctx.shadowBlur = glowBlur * 0.6;
+  ctx.stroke();
+
+  ctx.restore();
+
 }
+
 
 function countdownData(deadline, deadlineTime) {
   if (!deadline) return { str: 'Без терміну', cls: 'ok', days: 0, hours: 0, minutes: 0, seconds: 0 };
@@ -1909,19 +1960,56 @@ function createTimerRabbit(status) {
   const ns = 'http://www.w3.org/2000/svg';
   const rabbit = document.createElementNS(ns, 'svg');
   rabbit.setAttribute('class', `timer-rabbit ${status}`);
-  rabbit.setAttribute('viewBox', '0 0 40 40');
+  rabbit.setAttribute('viewBox', '-8 -8 56 56');
+  rabbit.setAttribute('overflow', 'visible');
   rabbit.setAttribute('aria-hidden', 'true');
+
+  let bodyFill = '#8B5CF6';
+  let earOuter = '#7C3AED';
+  let earInner = '#F0ABFC';
+  let legFill  = '#3730A3';
+  let bellyFill= '#C4B5FD';
+  let strokeCol= '#1E1B4B';
+
+  if (status === 'warn') {
+    bodyFill = '#F59E0B';
+    earOuter = '#D97706';
+    earInner = '#FEF3C7';
+    legFill  = '#B45309';
+    bellyFill= '#FDE68A';
+    strokeCol= '#78350F';
+  } else if (status === 'urgent' || status === 'critical' || status === 'over') {
+    bodyFill = '#F43F5E';
+    earOuter = '#E11D48';
+    earInner = '#FECDD3';
+    legFill  = '#9F1239';
+    bellyFill= '#FFE4E6';
+    strokeCol= '#4C0519';
+  }
+
   rabbit.innerHTML = `
-    <g class="timer-rabbit-hop">
-      <rect class="timer-rabbit-leg timer-rabbit-leg-back" x="20" y="29" width="3" height="7" rx="1.5" fill="currentColor"/>
-      <ellipse cx="17" cy="24" rx="10" ry="8" fill="currentColor"/>
-      <rect class="timer-rabbit-leg timer-rabbit-leg-front" x="11" y="29" width="3" height="7" rx="1.5" fill="currentColor"/>
-      <circle cx="26" cy="25" r="2.5" fill="#fff"/>
-      <circle cx="17" cy="15" r="7" fill="currentColor"/>
-      <ellipse class="timer-rabbit-ear timer-rabbit-ear-left" cx="14" cy="8" rx="3" ry="9" fill="currentColor"/>
-      <ellipse class="timer-rabbit-ear timer-rabbit-ear-right" cx="20" cy="8" rx="3" ry="9" fill="currentColor"/>
-      <circle cx="13" cy="17" r="2.2" fill="#fff"/>
-      <circle cx="14.5" cy="14" r="1" fill="#20213A"/>
+    <g class="hopper" stroke="${strokeCol}" stroke-width="1.1" stroke-linejoin="round">
+      <rect class="leg back" x="20" y="29" width="3.4" height="7" rx="1.6" fill="${legFill}"/>
+      <ellipse cx="17" cy="24" rx="10" ry="8" fill="${bodyFill}"/>
+      <ellipse cx="15" cy="26" rx="5.5" ry="4.5" fill="${bellyFill}" stroke="none"/>
+      <rect class="leg front" x="11" y="29" width="3.4" height="7" rx="1.6" fill="${legFill}"/>
+      <circle cx="26.5" cy="24.5" r="3" fill="#ffffff"/>
+      <circle cx="17" cy="15" r="7.2" fill="${bodyFill}"/>
+      <g class="ear left">
+        <ellipse cx="14" cy="7" rx="3.1" ry="9.5" fill="${earOuter}"/>
+        <ellipse cx="14" cy="8.5" rx="1.4" ry="6.5" fill="${earInner}" stroke="none"/>
+      </g>
+      <g class="ear right">
+        <ellipse cx="20" cy="7" rx="3.1" ry="9.5" fill="${earOuter}"/>
+        <ellipse cx="20" cy="8.5" rx="1.4" ry="6.5" fill="${earInner}" stroke="none"/>
+      </g>
+      <circle cx="13" cy="17" r="2.4" fill="#ffffff" stroke="none"/>
+      <circle cx="11.5" cy="16.7" r="0.8" fill="#EC4899" stroke="none"/>
+      <circle class="rabbit-eye" cx="14.5" cy="13.5" r="1.1" fill="#00F5FF" stroke="none">
+        <animate attributeName="r" values="1.1;1.7;0.9;1.7;1.1" dur="1.8s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1"/>
+        <animate attributeName="fill" values="#00F5FF;#A78BFA;#EC4899;#00F5FF;#F0ABFC;#00F5FF" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.7;1;0.8;1" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
     </g>`;
   return rabbit;
 }
@@ -2236,7 +2324,26 @@ function startTimers() {
     updateCalendarVisibility();
     saveToLocal();
   }, 1000);
+  startCanvasGlowLoop();
 }
+
+// Smooth 60fps canvas glow loop — only redraws timers, no heavy logic
+let _glowRaf = null;
+function startCanvasGlowLoop() {
+  if (_glowRaf) cancelAnimationFrame(_glowRaf);
+  function loop() {
+    const items = getActiveItems().filter(i => !i.done && i.deadline);
+    items.forEach(item => {
+      const wsId = item._workspaceId || activeWorkspaceId;
+      const wsIdx = item._wsIndex !== undefined ? item._wsIndex : 0;
+      const viewKey = item._viewKey || String(wsIdx);
+      drawTimer(`timer_${wsId}_${viewKey}`, item.deadline, item.deadlineTime);
+    });
+    _glowRaf = requestAnimationFrame(loop);
+  }
+  _glowRaf = requestAnimationFrame(loop);
+}
+
 
 // ---- Календар ----
 let calYear, calMonth;

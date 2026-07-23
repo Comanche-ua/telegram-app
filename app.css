@@ -2923,20 +2923,123 @@ button, input, select, textarea { font-family: inherit; }
   .calendar-command-card#calendar-section { display: block; }
 }
 
-/* Rabbit runs around each deadline ring; urgency changes only its pace and color. */
+/* Rabbit runs around each deadline ring (from rabbit-deadline-demo.html) */
 .timer-orbit { position: relative; width: 60px; height: 60px; flex: 0 0 60px; overflow: visible; }
 .timer-orbit .timer-canvas { width: 60px !important; height: 60px !important; }
-.timer-rabbit { position: absolute; inset: 0; z-index: 2; width: 18px; height: 18px; margin: auto; color: var(--blue); offset-path: path('M 30,3 A 27,27 0 1 1 29.99,3'); offset-rotate: auto; animation: timerRabbitRun 5.6s linear infinite; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(32,33,58,.18)); }
-.timer-rabbit.warn { color: var(--amber); animation-duration: 4.2s; }
-.timer-rabbit.urgent, .timer-rabbit.critical { color: var(--red); animation-duration: 2.9s; }
-.timer-rabbit.over { color: var(--red); animation-duration: 2.1s; }
-.timer-rabbit-hop { transform-box: fill-box; transform-origin: bottom center; animation: timerRabbitHop .55s cubic-bezier(.45,0,.55,1) infinite; }
-.timer-rabbit-ear { transform-origin: bottom center; animation: timerRabbitEar .55s cubic-bezier(.45,0,.55,1) infinite; }
-.timer-rabbit-leg { transform-box: fill-box; transform-origin: top center; animation: timerRabbitLeg .55s cubic-bezier(.45,0,.55,1) infinite; }
-.timer-rabbit-leg-front { animation-direction: reverse; }
-@keyframes timerRabbitRun { to { offset-distance: 100%; } }
-@keyframes timerRabbitHop { 0%,100% { transform: translateY(0) scale(1); } 12% { transform: translateY(1px) scale(1.12,.84); } 48%,62% { transform: translateY(-7px) scale(.9,1.13); } 84% { transform: translateY(1px) scale(1.1,.86); } }
-@keyframes timerRabbitEar { 0%,100% { transform: rotate(0); } 48%,62% { transform: rotate(-20deg); } 84% { transform: rotate(8deg); } }
-@keyframes timerRabbitLeg { 0%,100% { transform: rotate(0); } 12% { transform: rotate(25deg); } 48%,62% { transform: rotate(-25deg); } 84% { transform: rotate(12deg); } }
-@media (max-width: 760px) { .timer-orbit { width: 38px; height: 38px; flex-basis: 38px; } .timer-orbit .timer-canvas { width: 38px !important; height: 38px !important; } .timer-rabbit { width: 14px; height: 14px; offset-path: path('M 19,2 A 17,17 0 1 1 18.99,2'); } }
-@media (prefers-reduced-motion: reduce) { .timer-rabbit, .timer-rabbit-hop, .timer-rabbit-ear, .timer-rabbit-leg { animation: none !important; } }
+.timer-rabbit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  /* inner circle: center 30,30 radius 22.5 (= canvas inner ring r=45 scaled to 60px display) */
+  offset-path: path('M 30,7.5 A 22.5,22.5 0 1 1 29.99,7.5');
+  offset-anchor: center;
+  offset-rotate: auto 180deg;
+  animation: timerRabbitRun 5.6s linear infinite;
+  pointer-events: none;
+  overflow: visible;
+  transform-origin: center;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
+}
+.timer-rabbit.warn { animation-duration: 4.2s; }
+.timer-rabbit.urgent, .timer-rabbit.critical { animation-duration: 2.9s; }
+.timer-rabbit.over { animation-duration: 2.1s; }
+
+@keyframes timerRabbitRun {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+
+.timer-rabbit .hopper {
+  animation: timerRabbitHop 0.55s cubic-bezier(.45,0,.55,1) infinite;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+
+@keyframes timerRabbitHop {
+  0%   { transform: translateY(0) scale(1, 1); }
+  10%  { transform: translateY(1px) scale(1.15, 0.8); }
+  35%  { transform: translateY(-7px) scale(0.85, 1.2); }
+  60%  { transform: translateY(-7px) scale(0.85, 1.2); }
+  82%  { transform: translateY(1px) scale(1.15, 0.8); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+
+.timer-rabbit .ear {
+  animation: timerRabbitEar 0.55s cubic-bezier(.45,0,.55,1) infinite;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+.timer-rabbit .ear.left  { animation-delay: -0.02s; }
+.timer-rabbit .ear.right { animation-delay: 0.02s; }
+
+@keyframes timerRabbitEar {
+  0%   { transform: rotate(0deg); }
+  10%  { transform: rotate(-6deg); }
+  35%  { transform: rotate(22deg); }
+  60%  { transform: rotate(22deg); }
+  82%  { transform: rotate(-10deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.timer-rabbit .leg.back {
+  animation: timerRabbitBackLeg 0.55s cubic-bezier(.45,0,.55,1) infinite;
+  transform-box: fill-box;
+  transform-origin: top center;
+}
+.timer-rabbit .leg.front {
+  animation: timerRabbitFrontLeg 0.55s cubic-bezier(.45,0,.55,1) infinite;
+  transform-box: fill-box;
+  transform-origin: top center;
+}
+
+@keyframes timerRabbitBackLeg {
+  0%   { transform: rotate(0deg); }
+  10%  { transform: rotate(-35deg); }
+  35%  { transform: rotate(30deg); }
+  60%  { transform: rotate(30deg); }
+  82%  { transform: rotate(-20deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes timerRabbitFrontLeg {
+  0%   { transform: rotate(0deg); }
+  10%  { transform: rotate(10deg); }
+  35%  { transform: rotate(-25deg); }
+  60%  { transform: rotate(-25deg); }
+  82%  { transform: rotate(15deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@media (max-width: 760px) {
+  .timer-orbit { width: 38px; height: 38px; flex-basis: 38px; }
+  .timer-orbit .timer-canvas { width: 38px !important; height: 38px !important; }
+  .timer-rabbit {
+    width: 16px;
+    height: 16px;
+    /* inner circle for 38px display: center 19,19 radius ~14 */
+    offset-path: path('M 19,5 A 14,14 0 1 1 18.99,5');
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .timer-rabbit, .timer-rabbit .hopper, .timer-rabbit .ear, .timer-rabbit .leg {
+    animation: none !important;
+  }
+}
+
+/* Neon pulsing eye - size/color handled by SVG <animate>, CSS adds the glow */
+.rabbit-eye {
+  animation: rabbitEyeGlow 1.8s ease-in-out infinite;
+}
+
+@keyframes rabbitEyeGlow {
+  0%   { filter: drop-shadow(0 0 1.5px #00F5FF) drop-shadow(0 0 4px #00F5FF); }
+  20%  { filter: drop-shadow(0 0 2px #A78BFA) drop-shadow(0 0 7px #7C3AED); }
+  40%  { filter: drop-shadow(0 0 2px #EC4899) drop-shadow(0 0 6px #EC4899); }
+  60%  { filter: drop-shadow(0 0 3px #00F5FF) drop-shadow(0 0 9px #00BFFF); }
+  80%  { filter: drop-shadow(0 0 2px #F0ABFC) drop-shadow(0 0 6px #C026D3); }
+  100% { filter: drop-shadow(0 0 1.5px #00F5FF) drop-shadow(0 0 4px #00F5FF); }
+}
+
