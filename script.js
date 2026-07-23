@@ -2453,36 +2453,13 @@ let calYear, calMonth;
 function updateCalendarVisibility() {
   const section = document.getElementById('calendar-section');
   if (!section) return;
-  const items = getActiveItems();
-  const activeItems = items.filter(i => !i.done);
   section.style.display = 'block';
   renderCalendar();
-  renderStats();
   renderTopAssignees();
 }
 
 function renderStats() {
-  const widget = document.getElementById('stats-widget');
-  if (!widget) return;
-  const items = getActiveItems();
-  const active = items.filter(i => !i.done);
-  const doneCount = items.filter(i => i.done).length;
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  let overdueCount = 0;
-  let todayCount = 0;
-  active.forEach(it => {
-    if (!it.deadline) return;
-    const end = getDeadlineEnd(it.deadline, it.deadlineTime);
-    if (end < now) overdueCount++;
-    if (it.deadline === todayStr) todayCount++;
-  });
-  const shown = active.length > 0 || doneCount > 0;
-  widget.style.display = shown ? 'block' : 'none';
-  document.getElementById('stat-active').textContent = active.length;
-  document.getElementById('stat-overdue').textContent = overdueCount;
-  document.getElementById('stat-today').textContent = todayCount;
-  document.getElementById('stat-done').textContent = doneCount;
+  // Stats widget removed per user request
 }
 
 function renderTopAssignees() {
@@ -2524,7 +2501,10 @@ function renderCalendar() {
   title.textContent = `${monthNames[calMonth]} ${calYear}`;
 
   const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
-  let html = dayNames.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  let html = dayNames.map((d, idx) => {
+    const isWeekend = idx >= 5;
+    return `<div class="cal-dow dow-${idx} ${isWeekend ? 'weekend-dow' : ''}">${d}</div>`;
+  }).join('');
 
   const firstDay = new Date(calYear, calMonth, 1);
   let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
@@ -2539,6 +2519,7 @@ function renderCalendar() {
   const nowDate = new Date();
   items.filter(i => !i.done).forEach(item => {
     const key = item.deadline;
+    if (!key) return;
     deadlineMap.set(key, (deadlineMap.get(key) || 0) + 1);
     const end = getDeadlineEnd(item.deadline, item.deadlineTime);
     if (end < nowDate) urgentSet.add(key);
@@ -2548,30 +2529,43 @@ function renderCalendar() {
 
   const todayStr = now.toISOString().split('T')[0];
 
+  // Previous month cells
   for (let i = startDow - 1; i >= 0; i--) {
     const d = daysInPrev - i;
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    const colIndex = (startDow - 1 - i) % 7;
+    const isWeekend = colIndex >= 5;
+    html += `<div class="cal-cell other-month ${isWeekend ? 'weekend-cell' : ''}">${d}</div>`;
   }
 
+  // Current month cells
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const colIndex = (startDow + d - 1) % 7;
+    const isWeekend = colIndex >= 5;
     let cls = 'cal-cell';
+    if (isWeekend) cls += ' weekend-cell';
     if (dateStr === todayStr) cls += ' today';
+
     const count = deadlineMap.get(dateStr) || 0;
-    let barHtml = '';
+    let badgeHtml = '';
     if (count > 0) {
       cls += ' has-events';
-      if (urgentSet.has(dateStr)) barHtml = '<span class="dot urgent"></span>';
-      else if (warnSet.has(dateStr)) barHtml = '<span class="dot warn"></span>';
-      else barHtml = '<span class="dot normal"></span>';
+      let urgencyCls = 'normal';
+      if (urgentSet.has(dateStr)) urgencyCls = 'urgent';
+      else if (warnSet.has(dateStr)) urgencyCls = 'warn';
+      badgeHtml = `<span class="cal-count-badge ${urgencyCls}">${count}</span>`;
     }
-    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')">${d}${barHtml}</div>`;
+
+    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')"><span class="cal-day-num">${d}</span>${badgeHtml}</div>`;
   }
 
+  // Next month cells
   const totalCells = startDow + daysInMonth;
   const remaining = totalCells % 7 ? 7 - (totalCells % 7) : 0;
   for (let d = 1; d <= remaining; d++) {
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    const colIndex = (totalCells + d - 1) % 7;
+    const isWeekend = colIndex >= 5;
+    html += `<div class="cal-cell other-month ${isWeekend ? 'weekend-cell' : ''}">${d}</div>`;
   }
 
   grid.innerHTML = html;

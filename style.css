@@ -876,20 +876,28 @@ canvas.timer-canvas {
 }
 .cal-dow {
   font-size: 10px;
-  color: var(--text3);
   font-weight: 700;
   padding: 4px 0 6px;
   text-align: center;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  border-radius: 4px;
 }
+.cal-dow.dow-0 { color: #818CF8; } /* Mon - Indigo */
+.cal-dow.dow-1 { color: #38BDF8; } /* Tue - Sky */
+.cal-dow.dow-2 { color: #34D399; } /* Wed - Mint */
+.cal-dow.dow-3 { color: #FBBF24; } /* Thu - Gold */
+.cal-dow.dow-4 { color: #F472B6; } /* Fri - Pink */
+.cal-dow.dow-5 { color: #FB7185; background: rgba(251, 113, 133, 0.12); } /* Sat - Coral */
+.cal-dow.dow-6 { color: #EF4444; background: rgba(239, 68, 68, 0.15); } /* Sun - Red */
+
 .cal-cell {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  min-height: 42px;
   padding: 4px 2px;
   background: var(--surface2);
   border: 1px solid var(--border2);
@@ -903,6 +911,16 @@ canvas.timer-canvas {
   background: color-mix(in srgb, var(--blue-bg) 30%, var(--surface2));
   transform: translateY(-1px);
 }
+
+/* Weekend separation */
+.cal-cell.weekend-cell {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(251, 113, 133, 0.22);
+}
+.cal-cell.weekend-cell .cal-day-num {
+  color: #F87171;
+}
+
 .cal-cell.other-month {
   opacity: 0.22;
   pointer-events: none;
@@ -910,37 +928,41 @@ canvas.timer-canvas {
   border-color: transparent;
 }
 .cal-day-num {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text);
   line-height: 1;
 }
-.cal-badge {
+
+/* Count badge under date */
+.cal-count-badge, .cal-badge {
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
   padding: 2px 5px;
   border-radius: 6px;
-  color: #FFFFFF;
-  margin-bottom: 3px;
+  margin-top: 3px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  display: inline-block;
 }
-.cal-badge.normal { background: linear-gradient(135deg, #6366F1, #4F46E5); }
-.cal-badge.warn { background: linear-gradient(135deg, #F59E0B, #D97706); }
-.cal-badge.urgent { background: linear-gradient(135deg, #F43F5E, #E11D48); }
+.cal-count-badge.normal, .cal-badge.normal { background: linear-gradient(135deg, #6366F1, #4F46E5); color: #fff; }
+.cal-count-badge.warn, .cal-badge.warn     { background: linear-gradient(135deg, #F59E0B, #D97706); color: #fff; }
+.cal-count-badge.urgent, .cal-badge.urgent { background: linear-gradient(135deg, #F43F5E, #E11D48); color: #fff; }
 
+/* Today RED highlight */
 .cal-cell.today {
-  background: linear-gradient(135deg, #F43F5E 0%, #E11D48 100%) !important;
-  border-color: #E11D48 !important;
-  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.38);
+  background: linear-gradient(135deg, #FF003C 0%, #DC2626 100%) !important;
+  border-color: #DC2626 !important;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5);
 }
 .cal-cell.today .cal-day-num {
   color: #FFFFFF !important;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 12px;
 }
+.cal-cell.today .cal-count-badge,
 .cal-cell.today .cal-badge {
-  background: rgba(255, 255, 255, 0.28) !important;
+  background: rgba(255, 255, 255, 0.3) !important;
   color: #FFFFFF !important;
   border: 1px solid rgba(255, 255, 255, 0.45);
   box-shadow: none;
