@@ -1574,8 +1574,7 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const size = canvas.width = canvas.height = 120;
-  canvas.style.width = '60px';
-  canvas.style.height = '60px';
+  // Let CSS control the display size (60px desktop, 52px mobile via media query)
 
   const progress = getProgressFraction(deadline, deadlineTime);
   const now = new Date();
@@ -2014,6 +2013,105 @@ function createTimerRabbit(status) {
   return rabbit;
 }
 
+// ---- Mobile swipe-to-reveal card actions ----
+// Swipe left → slide card body left, reveal delete/edit/complete strip
+// Swipe right or tap outside → close
+const SWIPE_THRESHOLD = 40;  // px min horizontal drag
+const SWIPE_REVEAL_PX = 96;  // px to reveal (covers 3 × 32px buttons)
+
+function addSwipeReveal(cardDiv, cardBody) {
+  let tx = 0, startX = 0, startY = 0, dragging = false, locked = false;
+
+  function closeAllOtherCards() {
+    document.querySelectorAll('.card-swiped').forEach(c => {
+      if (c !== cardDiv) closeReveal(c);
+    });
+  }
+
+  function closeReveal(card) {
+    const body = card.querySelector('.card-body');
+    if (body) { body.style.transform = ''; body.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)'; }
+    card.classList.remove('card-swiped');
+  }
+
+  function openReveal() {
+    closeAllOtherCards();
+    cardBody.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)';
+    cardBody.style.transform = `translateX(-${SWIPE_REVEAL_PX}px)`;
+    cardDiv.classList.add('card-swiped');
+    // Show action buttons
+    cardDiv.querySelectorAll('.task-action-btn, .delete-task-btn').forEach(b => {
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+    });
+  }
+
+  function closeThis() {
+    cardBody.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)';
+    cardBody.style.transform = '';
+    cardDiv.classList.remove('card-swiped');
+    cardDiv.querySelectorAll('.task-action-btn, .delete-task-btn').forEach(b => {
+      b.style.opacity = '';
+      b.style.pointerEvents = '';
+    });
+  }
+
+  cardDiv.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dragging = true;
+    locked = false;
+    cardBody.style.transition = 'none';
+  }, { passive: true });
+
+  cardDiv.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    // Lock to horizontal if first significant move is horizontal
+    if (!locked) {
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      locked = true;
+      if (Math.abs(dy) > Math.abs(dx)) { dragging = false; return; } // vertical scroll
+    }
+
+    // Prevent page scroll during horizontal swipe
+    e.preventDefault();
+
+    const isSwiped = cardDiv.classList.contains('card-swiped');
+    const base = isSwiped ? -SWIPE_REVEAL_PX : 0;
+    tx = Math.min(0, Math.max(-SWIPE_REVEAL_PX - 8, base + dx));
+    cardBody.style.transform = `translateX(${tx}px)`;
+  }, { passive: false });
+
+  cardDiv.addEventListener('touchend', e => {
+    if (!dragging) return;
+    dragging = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const isSwiped = cardDiv.classList.contains('card-swiped');
+
+    if (!isSwiped && dx < -SWIPE_THRESHOLD) {
+      openReveal();
+    } else if (isSwiped && dx > SWIPE_THRESHOLD) {
+      closeThis();
+    } else if (isSwiped) {
+      openReveal(); // snap back to open
+    } else {
+      closeThis();  // snap back to closed
+    }
+  }, { passive: true });
+
+  // Tap outside any open card → close
+  document.addEventListener('touchstart', e => {
+    if (cardDiv.classList.contains('card-swiped') && !cardDiv.contains(e.target)) {
+      closeThis();
+    }
+  }, { passive: true });
+}
+
+
+
 function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const wsId = item._workspaceId || activeWorkspaceId;
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : arrIdx;
@@ -2150,7 +2248,7 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
         openEditModal(wsIdx, wsId);
       });
 
-      // Show edit/complete on card hover
+      // Desktop hover
       cardDiv.addEventListener('mouseenter', () => {
         editSpan.style.opacity = '1';
         completeSpan.style.opacity = '1';
@@ -2159,6 +2257,10 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
         editSpan.style.opacity = '0';
         completeSpan.style.opacity = '0';
       });
+
+      // Mobile swipe-to-reveal action buttons
+      addSwipeReveal(cardDiv, cardBody);
+
 
       cardBody.appendChild(textDiv);
       cardBody.appendChild(metaDiv);

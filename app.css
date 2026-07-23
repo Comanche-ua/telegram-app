@@ -2891,17 +2891,56 @@ button, input, select, textarea { font-family: inherit; }
   #calendar-section { border-radius: 18px; padding: 14px; background: rgba(255,255,255,.78); }
   .sidebar-cal .cal-cell { min-height: 30px; padding: 6px 0; font-size: 11px; }
   .sidebar-cal .cal-title { color: var(--ink); font-size: 13px; }
-  .card { overflow: hidden; transform: none !important; }
+
+  /* Card: clip body but allow swipe reveal of action strip on right */
+  .card { overflow: hidden; transform: none !important; position: relative; }
   .card:hover { transform: none !important; box-shadow: none; }
-  .card-body { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 13px 46px 12px 14px; }
-  .card-body > .card-text { grid-column: 1 / -1; grid-row: 2; width: 100%; padding: 0; order: initial; font-size: 14px; line-height: 1.35; }
-  .card-body > .card-meta { grid-column: 1 / 3; grid-row: 3; display: flex; min-width: 0; order: initial; }
-  .card-body > .timer-section { grid-column: 3; grid-row: 3; margin: 0; padding: 0; justify-self: end; order: initial; }
-  .card-body > .timer-section canvas { width: 28px !important; height: 28px !important; }
-  .card-body > .timer-section .timer-text { min-width: 0; font-size: 11px; }
+  .card-body {
+    display: grid;
+    grid-template-columns: auto minmax(0,1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 14px;
+    will-change: transform;
+    position: relative;
+    z-index: 1;
+  }
+  .card-body > .card-text  { grid-column: 1 / -1; grid-row: 2; width: 100%; padding: 0; font-size: 14px; line-height: 1.35; }
+  .card-body > .card-meta  { grid-column: 1 / 3; grid-row: 3; display: flex; min-width: 0; }
+  .card-body > .timer-section { grid-column: 3; grid-row: 2 / 4; margin: 0; padding: 0; justify-self: end; align-self: center; }
+  .card-body > .card-num   { grid-column: 1; grid-row: 1; }
+
+  /* Timer orbit — bigger on mobile (52px display, 104px canvas) */
+  .card-body > .timer-section .timer-orbit { width: 52px; height: 52px; flex-basis: 52px; }
+  .card-body > .timer-section canvas.timer-canvas { width: 52px !important; height: 52px !important; }
+  .card-body > .timer-section .timer-rabbit {
+    width: 18px; height: 18px;
+    offset-path: path('M 26,3.5 A 22.5,22.5 0 1 1 25.99,3.5');
+  }
+  .card-body > .timer-section .timer-text { min-width: 0; font-size: 11px; display: none; }
   .card-body > .timer-section .timer-label { display: none; }
-  .card-body > .card-num { grid-column: 1; grid-row: 1; }
-  .task-action-btn, .delete-task-btn { top: 10px; opacity: .9 !important; }
+
+  /* Action buttons: hidden behind right edge, revealed on swipe */
+  .task-action-btn,
+  .delete-task-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity 0.2s ease;
+  }
+  .delete-task-btn, .task-action-delete { right: 6px; }
+  .task-action-complete { right: 48px; }
+  .task-action-edit     { right: 90px; }
+
+  /* When swiped: buttons are visible and tappable (set via JS) */
+  .card-swiped .task-action-btn,
+  .card-swiped .delete-task-btn { pointer-events: auto; }
 }
 
 /* Calendar owns the mobile hero position; preserve its original month-grid density. */
@@ -3014,13 +3053,13 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 @media (max-width: 760px) {
-  .timer-orbit { width: 38px; height: 38px; flex-basis: 38px; }
-  .timer-orbit .timer-canvas { width: 38px !important; height: 38px !important; }
+  .timer-orbit { width: 52px; height: 52px; flex-basis: 52px; }
+  .timer-orbit .timer-canvas { width: 52px !important; height: 52px !important; }
   .timer-rabbit {
-    width: 16px;
-    height: 16px;
-    /* inner circle for 38px display: center 19,19 radius ~14 */
-    offset-path: path('M 19,5 A 14,14 0 1 1 18.99,5');
+    width: 18px;
+    height: 18px;
+    /* inner circle for 52px display: center 26,26 radius 22.5 */
+    offset-path: path('M 26,3.5 A 22.5,22.5 0 1 1 25.99,3.5');
   }
 }
 @media (prefers-reduced-motion: reduce) {
