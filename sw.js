@@ -5,12 +5,8 @@ const ASSETS = [
   './app.css',
   './script.js',
   './manifest.json',
-<<<<<<< HEAD
   './logo-mark.svg',
   './deadline-alert.svg'
-=======
-  './logo-mark.svg'
->>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
 ];
 
 // Install — попередньо кешуємо ключові assets

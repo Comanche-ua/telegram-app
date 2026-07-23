@@ -828,7 +828,6 @@ canvas.timer-canvas {
   .card-text { padding-right: 100px; }
 }
 
-<<<<<<< HEAD
 /* Master 2026 Dark Obsidian Theme - Unified Primary Design */
 .card,
 .dash-widget,
@@ -840,87 +839,6 @@ canvas.timer-canvas {
   box-shadow: 0 26px 60px -26px rgba(0,0,0,0.72), 0 0 0 1px rgba(129,140,248,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-=======
-body.theme-dark {
-  --bg: #070B14;
-  --surface: rgba(15, 23, 38, 0.75);
-  --surface2: rgba(22, 33, 54, 0.75);
-  --border: rgba(255,255,255,0.08);
-  --border2: rgba(255,255,255,0.15);
-  --text: #F8FAFC;
-  --text2: #94A3B8;
-  --text3: #64748B;
-  --green: #34D399;
-  --green-bg: rgba(52,211,153,0.14);
-  --amber: #FBBF24;
-  --amber-bg: rgba(251,191,36,0.14);
-  --red: #FB7185;
-  --red-bg: rgba(251,113,133,0.14);
-  --blue: #818CF8;
-  --blue-bg: rgba(129,140,248,0.14);
-  --accent: #818CF8;
-  --accent-2: #A78BFA;
-  --ink-shadow: rgba(0,0,0,0.55);
-  --button-glow: rgba(129,140,248,0.42);
-  --control-ring: rgba(129,140,248,0.28);
-  --shadow-sm: 0 4px 14px rgba(0,0,0,0.35);
-  --shadow-md: 0 12px 36px rgba(0,0,0,0.45);
-  --shadow-lg: 0 24px 64px rgba(0,0,0,0.60);
-}
-body.theme-dark::before { opacity: 0.18; }
-body.theme-dark .card,
-body.theme-dark .dash-widget,
-body.theme-dark .lock-box,
-body.theme-dark .modal-content {
-  box-shadow: 0 18px 45px -28px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08);
-}
-body.theme-dark .card:hover {
-  box-shadow: 0 26px 60px -26px rgba(0,0,0,0.72), 0 0 0 1px rgba(129,140,248,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
-}
-
-body.theme-light {
-  --bg: #F3F4F6;
-  --surface: rgba(255, 255, 255, 0.85);
-  --surface2: rgba(229, 231, 235, 0.85);
-  --text: #111827;
-  --text2: #4B5563;
-  --border: rgba(0,0,0,0.1);
-  --border2: rgba(0,0,0,0.15);
-}
-body.theme-ocean {
-  --bg: #0A1628;
-  --surface: rgba(15, 33, 56, 0.82);
-  --surface2: rgba(23, 48, 79, 0.82);
-  --text: #E6F1FB;
-  --text2: #93B4D6;
-  --text3: #5D7FA3;
-  --border: rgba(148,197,255,0.10);
-  --border2: rgba(148,197,255,0.18);
-  --blue: #38BDF8;
-  --blue-bg: rgba(56,189,248,0.16);
-  --accent: #0EA5E9;
-  --accent-2: #22D3EE;
-  --button-glow: rgba(14,165,233,0.4);
-  --control-ring: rgba(14,165,233,0.26);
-}
-body.theme-forest {
-  --bg: #04140F;
-  --surface: rgba(6, 58, 45, 0.82);
-  --surface2: rgba(8, 84, 64, 0.82);
-  --text: #E7FBF2;
-  --text2: #92C9B2;
-  --text3: #5C9581;
-  --border: rgba(167,243,208,0.10);
-  --border2: rgba(167,243,208,0.18);
-  --green: #34D399;
-  --blue: #2DD4BF;
-  --accent: #10B981;
-  --accent-2: #34D399;
-  --button-glow: rgba(16,185,129,0.4);
-  --control-ring: rgba(16,185,129,0.26);
-}
-
->>>>>>> 4382c049699f15468a2739c3189ec53e20a07363
 .cal-widget {
   background: var(--surface);
   border: 1px solid var(--border);
