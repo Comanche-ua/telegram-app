@@ -2878,3 +2878,4 @@ button, input, select, textarea { font-family: inherit; }
   .card-body > .card-num { grid-column: 1; grid-row: 1; }
   .task-action-btn, .delete-task-btn { top: 10px; opacity: .9 !important; }
 }
+
