@@ -2203,7 +2203,7 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       canvas.className = 'timer-canvas';
       canvas.width = 120; canvas.height = 120;
       const timerTextWrap = document.createElement('div');
-      timerTextWrap.style = 'display:flex; flex-direction:column; align-items:flex-end;';
+      timerTextWrap.className = 'timer-time-wrap';
       const timerTextSpan = document.createElement('span');
       timerTextSpan.id = `txt_${wsId}_${viewKey}`;
       timerTextSpan.className = `timer-text ${cls}`;
@@ -2214,7 +2214,7 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       timerTextWrap.appendChild(timerTextSpan);
       timerTextWrap.appendChild(timerLabel);
       const timerOrbit = document.createElement('div');
-      timerOrbit.className = 'timer-orbit';
+      timerOrbit.className = 'timer-orbit timer-orbit-wrap';
       timerOrbit.appendChild(canvas);
       timerOrbit.appendChild(createTimerRabbit(cls));
       timerSection.appendChild(timerOrbit);
