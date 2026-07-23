@@ -90,33 +90,6 @@
       </div>
       <div class="cal-grid" id="calendar-grid"></div>
     </div>
-
-    <div class="dash-widget" id="stats-widget" style="display:none;">
-      <h4>📊 Статистика</h4>
-      <div class="stats-grid">
-        <div class="stat-card active" onclick="jumpToSection('container')" title="Показати всі активні завдання">
-          <div class="stat-num" id="stat-active">0</div>
-          <div class="stat-label">Активні</div>
-        </div>
-        <div class="stat-card overdue" onclick="jumpToSection('section-overdue')" title="Перейти до прострочених">
-          <div class="stat-num" id="stat-overdue">0</div>
-          <div class="stat-label">Прострочено</div>
-        </div>
-        <div class="stat-card today" onclick="jumpToSection('section-today')" title="Перейти до завдань на сьогодні">
-          <div class="stat-num" id="stat-today">0</div>
-          <div class="stat-label">Сьогодні</div>
-        </div>
-        <div class="stat-card done" onclick="document.getElementById('completed-section')?.scrollIntoView({behavior:'smooth', block:'start'})" title="Перейти до виконаних">
-          <div class="stat-num" id="stat-done">0</div>
-          <div class="stat-label">Виконано</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="dash-widget" id="top-assignees-widget" style="display:none;">
-      <h4>👥 Топ виконавців</h4>
-      <div id="top-assignees-list"></div>
-    </div>
   </aside>
 
   <div class="dash-main">
