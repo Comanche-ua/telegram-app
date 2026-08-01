@@ -3554,6 +3554,9 @@ function localDateTimeValue(value = new Date()) {
 }
 
 function projectImageToDataUrl(file) {
+  // Ліміт: 499 KB у байтах рядка base64
+  const MAX_BYTES = 499 * 1024;
+
   return new Promise((resolve, reject) => {
     if (!file || !file.type.startsWith('image/')) {
       reject(new Error('Оберіть зображення.'));
@@ -3565,13 +3568,49 @@ function projectImageToDataUrl(file) {
       const image = new Image();
       image.onerror = () => reject(new Error('Не вдалося обробити фото.'));
       image.onload = () => {
-        const maxSide = 1440;
-        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        // Ступені стиснення: [макс. сторона, якість JPEG]
+        const steps = [
+          [1440, 0.85],
+          [1440, 0.72],
+          [1440, 0.60],
+          [1280, 0.75],
+          [1280, 0.60],
+          [1024, 0.80],
+          [1024, 0.65],
+          [1024, 0.50],
+          [ 768, 0.75],
+          [ 768, 0.60],
+          [ 768, 0.45],
+          [ 512, 0.70],
+          [ 512, 0.50],
+          [ 512, 0.35],
+        ];
+
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
+        const ctx = canvas.getContext('2d');
+        let result = null;
+
+        for (const [maxSide, quality] of steps) {
+          const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+          canvas.width  = Math.max(1, Math.round(image.naturalWidth  * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          result = canvas.toDataURL('image/jpeg', quality);
+
+          // Перевіряємо розмір (base64 рядок ~ реальний розмір файлу * 4/3)
+          if (result.length <= MAX_BYTES) {
+            console.log(`[Photo] Стиснено до ${Math.round(result.length / 1024)}KB (${canvas.width}×${canvas.height}, q=${quality})`);
+            break;
+          }
+        }
+
+        // Якщо навіть найменший крок перевищує — повертаємо все одно (краще мати фото ніж нічого)
+        if (result.length > MAX_BYTES) {
+          console.warn(`[Photo] Не вдалося стиснути до 499KB, розмір: ${Math.round(result.length / 1024)}KB`);
+        }
+
+        resolve(result);
       };
       image.src = reader.result;
     };
