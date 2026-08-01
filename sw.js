@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.7-full-signout-data-wipe';
+const CACHE_NAME = 'deadline-tracker-v5.8-timestamp-sync';
 const ASSETS = [
   './',
   './index.html',
