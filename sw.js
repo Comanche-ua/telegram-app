@@ -1,9 +1,12 @@
-const CACHE_NAME = 'deadline-tracker-v1.4-premium';
+const CACHE_NAME = 'deadline-tracker-v4.4-zero-shift-calendar';
 const ASSETS = [
   './',
   './index.html',
+  './app.css',
   './script.js',
-  './manifest.json'
+  './manifest.json',
+  './logo-mark.svg',
+  './deadline-alert.svg'
 ];
 
 // Install — попередньо кешуємо ключові assets
@@ -24,8 +27,8 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — stale-while-revalidate для локальних ресурсів (миттєве завантаження + фонове оновлення),
-// network-only для сторонніх API (Google/Gemini/Telegram)
+// Fetch — Network-first для app.css та script.js (для миттєвого оновлення в Telegram WebApp),
+// Stale-while-revalidate для інших
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -37,37 +40,44 @@ self.addEventListener('fetch', (event) => {
 
   if (isThirdPartyApi) return; // мережа, без кешування
 
-  if (url.origin !== location.origin) {
-    // Зовнішні статичні ресурси (шрифти, telegram-web-app.js) — cache-first
+  // Network-first для локальних JS/CSS ресурсів
+  if (url.origin === location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        const fetchPromise = fetch(event.request)
-          .then((response) => {
-            if (response.ok) {
-              const cloned = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse.ok) {
+            const cloned = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Локальні ресурси — stale-while-revalidate
+  // Для решти локальних файлів — stale-while-revalidate
+  if (url.origin === location.origin) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        cache.match(event.request).then((cached) => {
+          const network = fetch(event.request)
+            .then((response) => {
+              if (response.ok) cache.put(event.request, response.clone());
+              return response;
+            })
+            .catch(() => cached || new Response('Offline', { status: 503 }));
+          return cached || network;
+        })
+      )
+    );
+    return;
+  }
+
+  // Зовнішні статичні ресурси — cache-first
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.match(event.request).then((cached) => {
-        const network = fetch(event.request)
-          .then((response) => {
-            if (response.ok) cache.put(event.request, response.clone());
-            return response;
-          })
-          .catch(() => cached || new Response('Offline — немає мережі', { status: 503 }));
-        return cached || network;
-      })
-    )
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request);
+    })
   );
 });

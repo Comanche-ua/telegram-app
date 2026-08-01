@@ -500,12 +500,25 @@ function clearTasks() {
 }
 
 // ---- Google OAuth ----
+const DEFAULT_CLIENT_ID = '170206231747-am5ds0v9nf10hp1h7k86gs6pdv081737.apps.googleusercontent.com';
+
 function getStoredClientId() {
-  return localStorage.getItem(CLIENT_ID_KEY) || '';
+  // Прибираємо https:// якщо хтось випадково його додав
+  const raw = (localStorage.getItem(CLIENT_ID_KEY) || '').trim().replace(/^https?:\/\//, '');
+  if (raw && raw.includes('.apps.googleusercontent.com')) {
+    return raw;
+  }
+  return DEFAULT_CLIENT_ID;
 }
 
 function saveClientId(clientId) {
-  localStorage.setItem(CLIENT_ID_KEY, clientId);
+  // Прибираємо https:// при збереженні
+  const trimmed = (clientId || '').trim().replace(/^https?:\/\//, '');
+  localStorage.setItem(CLIENT_ID_KEY, trimmed);
+  gisTokenClient = null;
+  if (trimmed && trimmed.includes('.apps.googleusercontent.com')) {
+    initGisClient();
+  }
 }
 
 function initAuth() {
@@ -562,73 +575,90 @@ function initGisClient() {
     return;
   }
   const clientId = getStoredClientId();
-  if (!clientId) {
-    console.log('[Auth] No Client ID configured — skipping GIS init');
+  if (!clientId || !clientId.includes('.apps.googleusercontent.com')) {
+    console.log('[Auth] Missing or invalid Client ID — skipping GIS init');
+    gisTokenClient = null;
     return;
   }
-  gisTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: clientId,
-    scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
-    callback: async (tokenResponse) => {
-      if (tokenResponse.error) {
-        console.error('[Auth] Token error:', tokenResponse.error);
-        alert('Помилка авторизації: ' + (tokenResponse.error_description || tokenResponse.error));
-        renderAuthUI();
-        return;
+  try {
+    gisTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+      callback: async (tokenResponse) => {
+        if (tokenResponse.error) {
+          console.error('[Auth] Token error:', tokenResponse.error);
+          alert('Помилка авторизації Google: ' + (tokenResponse.error_description || tokenResponse.error));
+          renderAuthUI();
+          return;
+        }
+        console.log('[Auth] Token obtained via GIS');
+        localStorage.setItem('google_auth_token', tokenResponse.access_token);
+        await handleAuthSuccess(tokenResponse.access_token);
       }
-      console.log('[Auth] Token obtained via GIS');
-      localStorage.setItem('google_auth_token', tokenResponse.access_token);
-      await handleAuthSuccess(tokenResponse.access_token);
-    }
-  });
+    });
+  } catch(e) {
+    console.warn('[Auth] GIS init failed:', e);
+    gisTokenClient = null;
+  }
 }
 
 function signInWithGoogle() {
-  if (typeof google === 'undefined' || !google.accounts) {
-    // Fallback: спробувати через popup вручну (мобільний резерв)
-    const clientId = getStoredClientId();
-    const redirectUri = window.location.origin + window.location.pathname;
-    const scope = encodeURIComponent('openid email profile https://www.googleapis.com/auth/drive.file');
-    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-      'client_id=' + clientId +
-      '&redirect_uri=' + encodeURIComponent(redirectUri) +
-      '&response_type=token' +
-      '&scope=' + scope +
-      '&prompt=consent';
-    window.location.href = authUrl;
+  const clientId = getStoredClientId();
+  if (!clientId || !clientId.includes('.apps.googleusercontent.com')) {
+    alert('⚠️ Вказано некоректний Google OAuth Client ID!\n\nВідкрийте Налаштування (⚙️ Налаштування → Безпека) і вставте свій дійсний Client ID з Google Cloud Console.');
+    document.getElementById('settings-btn')?.click();
     return;
   }
 
   renderAuthLoading();
-  console.log('[Auth] Starting GIS token flow...');
+  console.log('[Auth] Starting Google login with Client ID:', clientId);
 
-  if (!gisTokenClient) initGisClient();
-  if (gisTokenClient) {
-    gisTokenClient.requestAccessToken();
-  } else {
-    alert('⚠️ Сервіс авторизації Google недоступний. Спробуйте оновити сторінку.');
-    renderAuthUI();
+  const isTelegram = Boolean(window.Telegram && window.Telegram.WebApp && (window.Telegram.WebApp.initData || window.Telegram.WebApp.platform));
+
+  // Якщо це Telegram WebApp — НЕ використовуємо GIS (оскільки gsi/transform зависає у WebView iFrame).
+  // Використовуємо прямий OAuth 2.0 редирект!
+  if (!isTelegram && typeof google !== 'undefined' && google.accounts) {
+    if (!gisTokenClient) initGisClient();
+    if (gisTokenClient) {
+      try {
+        gisTokenClient.requestAccessToken();
+        return;
+      } catch(e) {
+        console.warn('[Auth] GIS requestAccessToken failed, fallback to redirect:', e);
+      }
+    }
   }
+
+  const redirectUri = window.location.origin + window.location.pathname;
+  const scope = encodeURIComponent('openid email profile https://www.googleapis.com/auth/drive.file');
+  const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+    'client_id=' + encodeURIComponent(clientId) +
+    '&redirect_uri=' + encodeURIComponent(redirectUri) +
+    '&response_type=token' +
+    '&scope=' + scope +
+    '&prompt=consent';
+
+  console.log('[Auth] Direct redirect to Google OAuth:', authUrl);
+  window.location.href = authUrl;
 }
 
 function handleRedirectAuth() {
-  // Обробка redirect з implicit grant (якщо GIS popup не спрацював)
+  // Обробка redirect з implicit grant
   const hash = window.location.hash;
   if (hash && hash.includes('access_token')) {
     const params = new URLSearchParams(hash.substring(1));
     const token = params.get('access_token');
     if (token) {
-      // Очищаємо hash з URL
       if (window.history && window.history.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
       localStorage.setItem('google_auth_token', token);
-      handleAuthSuccess(token);
+      handleAuthSuccess(token, true);
     }
   }
 }
 
-async function handleAuthSuccess(accessToken) {
+async function handleAuthSuccess(accessToken, isRedirect = false) {
   try {
     localStorage.setItem('google_auth_token', accessToken);
 
@@ -649,10 +679,75 @@ async function handleAuthSuccess(accessToken) {
     renderAuthUI();
 
     await loadFromDrive();
+
+    // Якщо авторизація відбулася через редирект у зовнішньому браузері
+    if (isRedirect && (!window.Telegram || !window.Telegram.WebApp || !window.Telegram.WebApp.initData)) {
+      showReturnToTelegramScreen(accessToken, currentUser.email);
+    }
   } catch(e) {
     console.error('[Auth] Userinfo error:', e);
     renderAuthUI();
   }
+}
+
+function showReturnToTelegramScreen(token, email) {
+  const existing = document.getElementById('oauth-success-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'oauth-success-modal';
+  modal.style.cssText = `
+    position: fixed; inset: 0; z-index: 99999;
+    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  `;
+
+  modal.innerHTML = `
+    <div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 24px; max-width: 400px; width: 100%; text-align: center; color: #fff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+      <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+      <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #4f8ef7;">Google Drive авторизовано!</h2>
+      <p style="margin: 0 0 16px; font-size: 13px; color: #94a3b8;">Обліковий запис: <b>${escHtml(email)}</b></p>
+      
+      <div style="background: rgba(79, 142, 247, 0.1); border: 1px solid rgba(79, 142, 247, 0.2); border-radius: 12px; padding: 14px; margin-bottom: 20px; font-size: 13px; line-height: 1.5; color: #cbd5e1; text-align: left;">
+        📌 <b>Дані збережено.</b> Тепер ви можете повернутися у додаток Telegram.
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="oauth-return-tg-btn" style="background: #229ED9; color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          ✈️ Повернутися в Telegram
+        </button>
+        <button id="oauth-copy-token-btn" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 10px; font-size: 12px; cursor: pointer;">
+          📋 Скопіювати токен доступу
+        </button>
+        <button id="oauth-close-modal-btn" style="background: transparent; color: #64748b; border: none; padding: 8px; font-size: 12px; cursor: pointer;">
+          Продовжити у браузері
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById('oauth-return-tg-btn')?.addEventListener('click', () => {
+    // Спроба відкрити Telegram
+    window.location.href = 'tg://resolve';
+    setTimeout(() => {
+      window.close();
+    }, 1000);
+  });
+
+  document.getElementById('oauth-copy-token-btn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(token).then(() => {
+      alert('✅ Токен скопійовано! Ви можете вставити його в Налаштуваннях додатка у Telegram.');
+    }).catch(() => {
+      prompt('Ваш токен авторизації:', token);
+    });
+  });
+
+  document.getElementById('oauth-close-modal-btn')?.addEventListener('click', () => {
+    modal.remove();
+  });
 }
 
 // ---- Google Drive Sync ----
@@ -907,59 +1002,106 @@ async function exportToGoogleDoc() {
 function renderAuthUI() {
   console.log('[Auth] renderAuthUI called, currentUser:', currentUser);
   const section = document.getElementById('auth-section');
-  if (!section) { console.error('[Auth] #auth-section not found!'); return; }
+  const settingsBox = document.getElementById('settings-auth-box');
 
   if (currentUser) {
-    section.innerHTML = `
-      <div class="user-profile" id="user-profile" title="${escHtml(currentUser.email)}">
-        ${currentUser.picture
-          ? `<img class="user-avatar" src="${currentUser.picture}" alt="avatar" referrerpolicy="no-referrer">`
-          : `<div class="user-avatar" style="background:var(--blue-bg);display:flex;align-items:center;justify-content:center;font-size:14px;">👤</div>`
-        }
-        <span class="user-name">${escHtml(currentUser.name)}</span>
-        <span class="sync-indicator" id="sync-indicator"><span class="spinner"></span> ☁️</span>
-        <div class="user-dropdown" id="user-dropdown">
-          <div class="user-dropdown-item" style="opacity:0.6;cursor:default;font-size:12px;">${escHtml(currentUser.email)}</div>
-          <div class="user-dropdown-item" style="opacity:0.5;cursor:default;font-size:11px;" id="drive-status">☁️ Google Drive: підключено</div>
-          <div class="user-dropdown-item" id="btn-sync-now">🔄 Синхронізувати зараз</div>
-          <div class="user-dropdown-item danger" id="btn-signout">🚪 Вийти</div>
+    if (section) {
+      section.innerHTML = `
+        <div class="user-profile" id="user-profile" title="${escHtml(currentUser.email)}">
+          ${currentUser.picture
+            ? `<img class="user-avatar" src="${currentUser.picture}" alt="avatar" referrerpolicy="no-referrer">`
+            : `<div class="user-avatar" style="background:var(--blue-bg);display:flex;align-items:center;justify-content:center;font-size:14px;">👤</div>`
+          }
+          <span class="user-name">${escHtml(currentUser.name)}</span>
+          <span class="sync-indicator" id="sync-indicator"><span class="spinner"></span> ☁️</span>
+          <div class="user-dropdown" id="user-dropdown">
+            <div class="user-dropdown-item" style="opacity:0.6;cursor:default;font-size:12px;">${escHtml(currentUser.email)}</div>
+            <div class="user-dropdown-item" style="opacity:0.5;cursor:default;font-size:11px;" id="drive-status">☁️ Google Drive: підключено</div>
+            <div class="user-dropdown-item" id="btn-sync-now">🔄 Синхронізувати зараз</div>
+            <div class="user-dropdown-item danger" id="btn-signout">🚪 Вийти</div>
+          </div>
         </div>
-      </div>
-    `;
+      `;
 
-    const profile = document.getElementById('user-profile');
-    const dropdown = document.getElementById('user-dropdown');
-    profile.addEventListener('click', (e) => {
-      e.stopPropagation();
-      dropdown.classList.toggle('active');
-    });
+      const profile = document.getElementById('user-profile');
+      const dropdown = document.getElementById('user-dropdown');
+      profile?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown?.classList.toggle('active');
+      });
 
-    document.getElementById('btn-signout').addEventListener('click', (e) => {
-      e.stopPropagation();
-      signOutGoogle();
-    });
+      document.getElementById('btn-signout')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        signOutGoogle();
+      });
 
-    document.getElementById('btn-sync-now').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      showSyncIndicator(true);
-      await saveToDrive();
-      await loadFromDrive();
-      showSyncIndicator(false);
-      dropdown.classList.remove('active');
-    });
+      document.getElementById('btn-sync-now')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        showSyncIndicator(true);
+        await saveToDrive();
+        await loadFromDrive();
+        showSyncIndicator(false);
+        dropdown?.classList.remove('active');
+      });
 
-    document.addEventListener('click', () => {
-      dropdown.classList.remove('active');
-    });
+      document.addEventListener('click', () => {
+        dropdown?.classList.remove('active');
+      });
+    }
+
+    if (settingsBox) {
+      settingsBox.innerHTML = `
+        <div style="background:rgba(52,168,83,.1);border:1px solid rgba(52,168,83,.3);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-weight:700;font-size:12px;color:var(--green)">✅ Google авторизовано</div>
+            <div style="font-size:11px;color:var(--text2)">${escHtml(currentUser.email)}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" id="settings-btn-sync" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer">🔄 Синхрон.</button>
+            <button type="button" id="settings-btn-logout" style="background:rgba(255,255,255,.1);color:var(--red);border:1px solid var(--line);border-radius:6px;padding:5px 9px;font-size:11px;cursor:pointer">🚪 Вийти</button>
+          </div>
+        </div>
+      `;
+      document.getElementById('settings-btn-sync')?.addEventListener('click', async () => {
+        showSyncIndicator(true);
+        await saveToDrive();
+        await loadFromDrive();
+        showSyncIndicator(false);
+      });
+      document.getElementById('settings-btn-logout')?.addEventListener('click', () => signOutGoogle());
+    }
+
   } else {
-    section.innerHTML = `
-      <button class="auth-btn" id="btn-google-signin">
-        <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-        Увійти через Google
-      </button>
-    `;
+    if (section) {
+      section.innerHTML = `
+        <button class="auth-btn" id="btn-google-signin">
+          <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Увійти через Google
+        </button>
+      `;
+      document.getElementById('btn-google-signin')?.addEventListener('click', signInWithGoogle);
+    }
 
-    document.getElementById('btn-google-signin').addEventListener('click', signInWithGoogle);
+    if (settingsBox) {
+      settingsBox.innerHTML = `
+        <button class="auth-btn" id="settings-btn-google-signin" style="width:100%;justify-content:center;padding:8px 12px">
+          <svg viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Увійти через Google (для Google Drive)
+        </button>
+        <div style="margin-top:6px;text-align:center;">
+          <button id="settings-manual-token-btn" type="button" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;text-decoration:underline;">🔑 Вставити токен авторизації вручну</button>
+        </div>
+      `;
+      document.getElementById('settings-btn-google-signin')?.addEventListener('click', signInWithGoogle);
+      document.getElementById('settings-manual-token-btn')?.addEventListener('click', () => {
+        const input = prompt('Вставте токен доступу Google (або посилання після авторизації):');
+        if (input && input.trim()) {
+          const match = input.match(/access_token=([^&]+)/);
+          const token = match ? match[1] : input.trim();
+          handleAuthSuccess(token);
+        }
+      });
+    }
   }
 }
 
@@ -1574,8 +1716,7 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const size = canvas.width = canvas.height = 120;
-  canvas.style.width = '60px';
-  canvas.style.height = '60px';
+  // Let CSS control the display size (60px desktop, 52px mobile via media query)
 
   const progress = getProgressFraction(deadline, deadlineTime);
   const now = new Date();
@@ -1591,6 +1732,7 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   const bgColor = 'rgba(0,0,0,0.15)';
   const radius = 54;
   const centerX = 60, centerY = 60;
+  const innerR = radius - 9;
 
   ctx.clearRect(0, 0, size, size);
 
@@ -1624,12 +1766,62 @@ function drawTimer(canvasId, deadline, deadlineTime) {
   ctx.stroke();
   ctx.restore();
 
-  // Inner circle
+  // Inner circle — neon pulsing glow
+  const t = Date.now() / 1000;
+  const pulse = (Math.sin(t * 2.2) + 1) / 2; // 0..1 smooth cycle
+
+  // Pick neon accent colors by status
+  let neonA, neonB;
+  if (isOverdue || progress > 0.7) { neonA = '#FF003C'; neonB = '#FF6B6B'; }
+  else if (progress > 0.4)         { neonA = '#FF8C00'; neonB = '#FFD700'; }
+  else                              { neonA = '#00F5FF'; neonB = '#A78BFA'; }
+
+  // Much brighter glow ranges
+  const glowAlpha = 0.45 + pulse * 0.45; // 0.45..0.90
+  const glowBlur  = 18  + pulse * 32;    // 18..50
+
+  // Dark base fill
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(centerX, centerY, radius - 9, 0, 2 * Math.PI);
-  ctx.fillStyle = 'var(--surface)';
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.fillStyle = '#080C16';
   ctx.fill();
+
+  // Radial gradient — bright neon bloom from center
+  const grad = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, innerR);
+  grad.addColorStop(0,    `${neonA}${Math.round(glowAlpha * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(0.45, `${neonB}${Math.round(glowAlpha * 0.55 * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(0.85, `${neonA}${Math.round(glowAlpha * 0.15 * 255).toString(16).padStart(2,'0')}`);
+  grad.addColorStop(1,    'transparent');
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Outer neon ring glow — thick pass
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR, 0, 2 * Math.PI);
+  ctx.strokeStyle = neonA;
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.55 + pulse * 0.45; // 0.55..1.0
+  ctx.shadowColor = neonA;
+  ctx.shadowBlur = glowBlur;
+  ctx.stroke();
+
+  // Second inner ring pass — tighter, hotter core glow
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, innerR - 3, 0, 2 * Math.PI);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.12 + pulse * 0.35; // 0.12..0.47
+  ctx.shadowColor = neonA;
+  ctx.shadowBlur = glowBlur * 0.6;
+  ctx.stroke();
+
+  ctx.restore();
+
 }
+
 
 function countdownData(deadline, deadlineTime) {
   if (!deadline) return { str: 'Без терміну', cls: 'ok', days: 0, hours: 0, minutes: 0, seconds: 0 };
@@ -1684,6 +1876,81 @@ function completeTaskByIdx(idx, wsIdOverride) {
   updateCalendarVisibility();
 }
 
+// ---- Deadline focus slider (presentation state only; task data is untouched) ----
+const DEADLINE_FILTER_KEY = 'deadline_focus_filter';
+let activeDeadlineFilter = 'all';
+localStorage.removeItem(DEADLINE_FILTER_KEY);
+
+function shouldShowDeadlineSection(key) {
+  return true;
+}
+
+function renderDeadlineFocus() {
+  const items = getActiveItems().filter(item => !item.done);
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const counts = { all: items.length, critical: 0, today: 0, upcoming: 0 };
+
+  items.forEach(item => {
+    if (!item.deadline) { counts.critical++; return; }
+    const deadline = getDeadlineEnd(item.deadline, item.deadlineTime);
+    if (deadline < now) counts.critical++;
+    else if (item.deadline === today) counts.today++;
+    else counts.upcoming++;
+  });
+
+  Object.entries(counts).forEach(([key, value]) => {
+    const element = document.getElementById(`focus-count-${key}`);
+    if (element) element.textContent = value;
+  });
+
+  const labels = { all: 'Усі активні', critical: 'Критичні строки', today: 'Фокус на сьогодні', upcoming: 'Наступні строки' };
+  const label = document.getElementById('deadline-focus-label');
+  if (label) label.textContent = labels[activeDeadlineFilter] || labels.all;
+  document.querySelectorAll('[data-deadline-filter]').forEach(button => {
+    const selected = button.dataset.deadlineFilter === activeDeadlineFilter;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+}
+
+function setDeadlineFocus(filter) {
+  activeDeadlineFilter = ['all', 'critical', 'today', 'upcoming'].includes(filter) ? filter : 'all';
+  localStorage.setItem(DEADLINE_FILTER_KEY, activeDeadlineFilter);
+  renderCards();
+}
+
+function initDeadlineFocusUI() {
+  document.querySelectorAll('[data-deadline-filter]').forEach(button => {
+    button.addEventListener('click', () => setDeadlineFocus(button.dataset.deadlineFilter));
+    button.addEventListener('keydown', event => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+        event.preventDefault();
+        const buttons = [...document.querySelectorAll('[data-deadline-filter]')];
+        const index = buttons.indexOf(button);
+        const next = event.key === 'ArrowRight' ? (index + 1) % buttons.length : (index - 1 + buttons.length) % buttons.length;
+        buttons[next].focus();
+        setDeadlineFocus(buttons[next].dataset.deadlineFilter);
+      }
+    });
+  });
+
+  const slider = document.getElementById('deadline-slider');
+  if (slider) {
+    let startX = null;
+    slider.addEventListener('touchstart', event => { startX = event.changedTouches[0]?.clientX ?? null; }, { passive: true });
+    slider.addEventListener('touchend', event => {
+      const endX = event.changedTouches[0]?.clientX;
+      if (startX === null || endX === undefined || Math.abs(endX - startX) < 42) return;
+      const filters = ['all', 'critical', 'today', 'upcoming'];
+      const index = filters.indexOf(activeDeadlineFilter);
+      const next = endX < startX ? Math.min(index + 1, filters.length - 1) : Math.max(index - 1, 0);
+      if (next !== index) setDeadlineFocus(filters[next]);
+      startX = null;
+    }, { passive: true });
+  }
+}
+
 // ---- Render Cards ----
 function renderCards() {
   const container = document.getElementById('container');
@@ -1735,6 +2002,7 @@ function renderCards() {
     let globalIdx = 0;
     sectionDefs.forEach(def => {
       const list = buckets[def.key];
+      if (!shouldShowDeadlineSection(def.key)) return;
       if (!list.length) return;
 
       const secWrap = document.createElement('div');
@@ -1756,6 +2024,10 @@ function renderCards() {
       container.appendChild(secWrap);
     });
 
+    if (!container.children.length) {
+      container.innerHTML = '<div class="empty empty-state">У цьому фільтрі поки немає завдань. Оберіть інший період або додайте нове.</div>';
+    }
+
     activeItems.forEach(item => {
       const wsId = item._workspaceId || activeWorkspaceId;
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : 0;
@@ -1765,7 +2037,7 @@ function renderCards() {
   }
 
   // Completed section
-  if (completedItems.length > 0) {
+  if (activeDeadlineFilter === 'all' && completedItems.length > 0) {
     compSection.style.display = 'block';
     compContainer.innerHTML = '';
     const compGrid = document.createElement('div');
@@ -1820,17 +2092,182 @@ function renderCards() {
     compSection.style.display = 'none';
   }
 
+  renderDeadlineFocus();
   updateCalendarVisibility();
 }
 
 // ---- Побудова однієї картки завдання (винесено окремо для секцій) ----
+function createTimerRabbit(status) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const rabbit = document.createElementNS(ns, 'svg');
+  rabbit.setAttribute('class', `timer-rabbit ${status}`);
+  rabbit.setAttribute('viewBox', '-8 -8 56 56');
+  rabbit.setAttribute('overflow', 'visible');
+  rabbit.setAttribute('aria-hidden', 'true');
+
+  let bodyFill = '#8B5CF6';
+  let earOuter = '#7C3AED';
+  let earInner = '#F0ABFC';
+  let legFill  = '#3730A3';
+  let bellyFill= '#C4B5FD';
+  let strokeCol= '#1E1B4B';
+
+  if (status === 'warn') {
+    bodyFill = '#F59E0B';
+    earOuter = '#D97706';
+    earInner = '#FEF3C7';
+    legFill  = '#B45309';
+    bellyFill= '#FDE68A';
+    strokeCol= '#78350F';
+  } else if (status === 'urgent' || status === 'critical' || status === 'over') {
+    bodyFill = '#F43F5E';
+    earOuter = '#E11D48';
+    earInner = '#FECDD3';
+    legFill  = '#9F1239';
+    bellyFill= '#FFE4E6';
+    strokeCol= '#4C0519';
+  }
+
+  rabbit.innerHTML = `
+    <g class="hopper" stroke="${strokeCol}" stroke-width="1.1" stroke-linejoin="round">
+      <rect class="leg back" x="20" y="29" width="3.4" height="7" rx="1.6" fill="${legFill}"/>
+      <ellipse cx="17" cy="24" rx="10" ry="8" fill="${bodyFill}"/>
+      <ellipse cx="15" cy="26" rx="5.5" ry="4.5" fill="${bellyFill}" stroke="none"/>
+      <rect class="leg front" x="11" y="29" width="3.4" height="7" rx="1.6" fill="${legFill}"/>
+      <circle cx="26.5" cy="24.5" r="3" fill="#ffffff"/>
+      <circle cx="17" cy="15" r="7.2" fill="${bodyFill}"/>
+      <g class="ear left">
+        <ellipse cx="14" cy="7" rx="3.1" ry="9.5" fill="${earOuter}"/>
+        <ellipse cx="14" cy="8.5" rx="1.4" ry="6.5" fill="${earInner}" stroke="none"/>
+      </g>
+      <g class="ear right">
+        <ellipse cx="20" cy="7" rx="3.1" ry="9.5" fill="${earOuter}"/>
+        <ellipse cx="20" cy="8.5" rx="1.4" ry="6.5" fill="${earInner}" stroke="none"/>
+      </g>
+      <circle cx="13" cy="17" r="2.4" fill="#ffffff" stroke="none"/>
+      <circle cx="11.5" cy="16.7" r="0.8" fill="#EC4899" stroke="none"/>
+      <circle class="rabbit-eye" cx="14.5" cy="13.5" r="1.1" fill="#00F5FF" stroke="none">
+        <animate attributeName="r" values="1.1;1.7;0.9;1.7;1.1" dur="1.8s" repeatCount="indefinite" calcMode="spline" keySplines="0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1; 0.4 0 0.6 1"/>
+        <animate attributeName="fill" values="#00F5FF;#A78BFA;#EC4899;#00F5FF;#F0ABFC;#00F5FF" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="1;0.7;1;0.8;1" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+    </g>`;
+  return rabbit;
+}
+
+// ---- Mobile swipe-to-reveal card actions ----
+// Swipe left → slide card body left, reveal delete/edit/complete strip
+// Swipe right or tap outside → close
+const SWIPE_THRESHOLD = 30;  // px min horizontal drag
+const SWIPE_REVEAL_PX = 126; // px to reveal 3 action buttons (delete, complete, edit)
+
+function addSwipeReveal(cardDiv, cardBody) {
+  let tx = 0, startX = 0, startY = 0, dragging = false, locked = false;
+
+  function closeAllOtherCards() {
+    document.querySelectorAll('.card-swiped').forEach(c => {
+      if (c !== cardDiv) closeReveal(c);
+    });
+  }
+
+  function closeReveal(card) {
+    const body = card.querySelector('.card-body');
+    if (body) { body.style.transform = ''; body.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)'; }
+    card.classList.remove('card-swiped');
+  }
+
+  function openReveal() {
+    closeAllOtherCards();
+    cardBody.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)';
+    cardBody.style.transform = `translateX(-${SWIPE_REVEAL_PX}px)`;
+    cardDiv.classList.add('card-swiped');
+    cardDiv.querySelectorAll('.task-action-btn, .delete-task-btn').forEach(b => {
+      b.style.opacity = '1';
+      b.style.pointerEvents = 'auto';
+    });
+  }
+
+  function closeThis() {
+    cardBody.style.transition = 'transform 0.25s cubic-bezier(.25,.8,.25,1)';
+    cardBody.style.transform = '';
+    cardDiv.classList.remove('card-swiped');
+    cardDiv.querySelectorAll('.task-action-btn, .delete-task-btn').forEach(b => {
+      b.style.opacity = '';
+      b.style.pointerEvents = '';
+    });
+  }
+
+  cardDiv.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    dragging = true;
+    locked = false;
+    cardBody.style.transition = 'none';
+  }, { passive: true });
+
+  cardDiv.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+
+    // Lock to horizontal if first significant move is horizontal
+    if (!locked) {
+      if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+      locked = true;
+      if (Math.abs(dy) > Math.abs(dx)) { dragging = false; return; } // vertical scroll
+    }
+
+    // Prevent page scroll during horizontal swipe
+    e.preventDefault();
+
+    const isSwiped = cardDiv.classList.contains('card-swiped');
+    const base = isSwiped ? -SWIPE_REVEAL_PX : 0;
+    tx = Math.min(0, Math.max(-SWIPE_REVEAL_PX - 8, base + dx));
+    cardBody.style.transform = `translateX(${tx}px)`;
+  }, { passive: false });
+
+  cardDiv.addEventListener('touchend', e => {
+    if (!dragging) return;
+    dragging = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const isSwiped = cardDiv.classList.contains('card-swiped');
+
+    if (!isSwiped && dx < -SWIPE_THRESHOLD) {
+      openReveal();
+    } else if (isSwiped && dx > SWIPE_THRESHOLD) {
+      closeThis();
+    } else if (isSwiped) {
+      openReveal(); // snap back to open
+    } else {
+      closeThis();  // snap back to closed
+    }
+  }, { passive: true });
+
+  // Tap outside any open card → close
+  document.addEventListener('touchstart', e => {
+    if (cardDiv.classList.contains('card-swiped') && !cardDiv.contains(e.target)) {
+      closeThis();
+    }
+  }, { passive: true });
+}
+
+
+
 function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const wsId = item._workspaceId || activeWorkspaceId;
       const wsIdx = item._wsIndex !== undefined ? item._wsIndex : arrIdx;
       const viewKey = item._viewKey || String(wsIdx);
       const { str, cls } = countdownData(item.deadline, item.deadlineTime);
-      const dateObj = item.deadline ? new Date(item.deadline) : null;
-      const dateStr = dateObj ? dateObj.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+      const formatDeadlineWithDow = (ymd) => {
+        if (!ymd) return '';
+        const parts = ymd.split('-');
+        if (parts.length !== 3) return ymd;
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const dowNames = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+        const dow = dowNames[d.getDay()];
+        return `${dow}, ${parts[2].padStart(2, '0')}.${parts[1].padStart(2, '0')}.${parts[0]}`;
+      };
+      const dateStr = item.deadline ? formatDeadlineWithDow(item.deadline) : '';
       const isNearest = (item.deadline === nearestId && nearestId !== null);
       const canvasId = `timer_${wsId}_${viewKey}`;
 
@@ -1867,9 +2304,9 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       if (item.important) {
         const impBadge = document.createElement('span');
         impBadge.className = 'badge-important';
-        impBadge.textContent = '❗❗❗';
+        impBadge.textContent = '❗';
         impBadge.title = 'Важлива задача';
-        impBadge.style = 'font-size:18px; color:var(--red); flex-shrink:0; animation: pulse-important 1.5s ease-in-out infinite;';
+        impBadge.style = 'font-size:16px; color:var(--red); flex-shrink:0;';
         cardBody.appendChild(impBadge);
       }
 
@@ -1915,48 +2352,59 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       canvas.className = 'timer-canvas';
       canvas.width = 120; canvas.height = 120;
       const timerTextWrap = document.createElement('div');
-      timerTextWrap.style = 'display:flex; flex-direction:column; align-items:flex-end;';
+      timerTextWrap.className = 'timer-time-wrap';
       const timerTextSpan = document.createElement('span');
       timerTextSpan.id = `txt_${wsId}_${viewKey}`;
       timerTextSpan.className = `timer-text ${cls}`;
       timerTextSpan.textContent = str;
       const timerLabel = document.createElement('span');
       timerLabel.className = 'timer-label';
-      timerLabel.textContent = isOverdue ? 'ПРОСТРОЧЕНО' : 'ЗАЛИШИЛОСЬ';
+      timerLabel.textContent = isOverdue ? '' : 'ЗАЛИШИЛОСЬ';
       timerTextWrap.appendChild(timerTextSpan);
       timerTextWrap.appendChild(timerLabel);
-      timerSection.appendChild(canvas);
+      const timerOrbit = document.createElement('div');
+      timerOrbit.className = 'timer-orbit timer-orbit-wrap';
+      timerOrbit.appendChild(canvas);
+      timerOrbit.appendChild(createTimerRabbit(cls));
+      timerSection.appendChild(timerOrbit);
       timerSection.appendChild(timerTextWrap);
+
+      // Helper to handle both touch and click reliably on mobile & desktop
+      const bindAction = (el, fn) => {
+        let touchEnded = false;
+        el.addEventListener('touchend', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          touchEnded = true;
+          fn();
+        });
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (touchEnded) { touchEnded = false; return; }
+          fn();
+        });
+      };
 
       // Delete, complete, edit buttons (absolute right)
       const deleteSpan = document.createElement('div');
       deleteSpan.className = 'task-action-btn task-action-delete delete-task-btn';
-      deleteSpan.innerHTML = '';
+      deleteSpan.innerHTML = '🗑️';
       deleteSpan.title = 'Видалити';
-      deleteSpan.addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteTaskByIdx(wsIdx, wsId);
-      });
+      bindAction(deleteSpan, () => deleteTaskByIdx(wsIdx, wsId));
 
       const completeSpan = document.createElement('div');
       completeSpan.className = 'task-action-btn task-action-complete';
-      completeSpan.innerHTML = '';
+      completeSpan.innerHTML = '✅';
       completeSpan.title = 'Виконано';
-      completeSpan.addEventListener('click', (e) => {
-        e.stopPropagation();
-        completeTaskByIdx(wsIdx, wsId);
-      });
+      bindAction(completeSpan, () => completeTaskByIdx(wsIdx, wsId));
 
       const editSpan = document.createElement('div');
       editSpan.className = 'task-action-btn task-action-edit';
-      editSpan.innerHTML = '';
+      editSpan.innerHTML = '✏️';
       editSpan.title = 'Редагувати';
-      editSpan.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openEditModal(wsIdx, wsId);
-      });
+      bindAction(editSpan, () => openEditModal(wsIdx, wsId));
 
-      // Show edit/complete on card hover
+      // Desktop hover
       cardDiv.addEventListener('mouseenter', () => {
         editSpan.style.opacity = '1';
         completeSpan.style.opacity = '1';
@@ -1965,6 +2413,10 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
         editSpan.style.opacity = '0';
         completeSpan.style.opacity = '0';
       });
+
+      // Mobile swipe-to-reveal action buttons
+      addSwipeReveal(cardDiv, cardBody);
+
 
       cardBody.appendChild(textDiv);
       cardBody.appendChild(metaDiv);
@@ -2087,7 +2539,7 @@ function updateTimersAndCounters() {
       // Update timer label
       const timerLabel = cardDiv.querySelector('.timer-label');
       if (timerLabel) {
-        timerLabel.textContent = isOverdue ? 'ПРОСТРОЧЕНО' : 'ЗАЛИШИЛОСЬ';
+        timerLabel.textContent = isOverdue ? '' : 'ЗАЛИШИЛОСЬ';
         timerLabel.style.color = isOverdue ? 'var(--red)' : '';
       }
     }
@@ -2130,7 +2582,26 @@ function startTimers() {
     updateCalendarVisibility();
     saveToLocal();
   }, 1000);
+  startCanvasGlowLoop();
 }
+
+// Smooth 60fps canvas glow loop — only redraws timers, no heavy logic
+let _glowRaf = null;
+function startCanvasGlowLoop() {
+  if (_glowRaf) cancelAnimationFrame(_glowRaf);
+  function loop() {
+    const items = getActiveItems().filter(i => !i.done && i.deadline);
+    items.forEach(item => {
+      const wsId = item._workspaceId || activeWorkspaceId;
+      const wsIdx = item._wsIndex !== undefined ? item._wsIndex : 0;
+      const viewKey = item._viewKey || String(wsIdx);
+      drawTimer(`timer_${wsId}_${viewKey}`, item.deadline, item.deadlineTime);
+    });
+    _glowRaf = requestAnimationFrame(loop);
+  }
+  _glowRaf = requestAnimationFrame(loop);
+}
+
 
 // ---- Календар ----
 let calYear, calMonth;
@@ -2138,36 +2609,13 @@ let calYear, calMonth;
 function updateCalendarVisibility() {
   const section = document.getElementById('calendar-section');
   if (!section) return;
-  const items = getActiveItems();
-  const activeItems = items.filter(i => !i.done);
-  section.style.display = activeItems.length ? 'block' : 'none';
-  if (activeItems.length) renderCalendar();
-  renderStats();
+  section.style.display = 'block';
+  renderCalendar();
   renderTopAssignees();
 }
 
 function renderStats() {
-  const widget = document.getElementById('stats-widget');
-  if (!widget) return;
-  const items = getActiveItems();
-  const active = items.filter(i => !i.done);
-  const doneCount = items.filter(i => i.done).length;
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  let overdueCount = 0;
-  let todayCount = 0;
-  active.forEach(it => {
-    if (!it.deadline) return;
-    const end = getDeadlineEnd(it.deadline, it.deadlineTime);
-    if (end < now) overdueCount++;
-    if (it.deadline === todayStr) todayCount++;
-  });
-  const shown = active.length > 0 || doneCount > 0;
-  widget.style.display = shown ? 'block' : 'none';
-  document.getElementById('stat-active').textContent = active.length;
-  document.getElementById('stat-overdue').textContent = overdueCount;
-  document.getElementById('stat-today').textContent = todayCount;
-  document.getElementById('stat-done').textContent = doneCount;
+  // Stats widget removed per user request
 }
 
 function renderTopAssignees() {
@@ -2209,7 +2657,10 @@ function renderCalendar() {
   title.textContent = `${monthNames[calMonth]} ${calYear}`;
 
   const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
-  let html = dayNames.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  let html = dayNames.map((d, idx) => {
+    const isWeekend = idx >= 5;
+    return `<div class="cal-dow dow-${idx} ${isWeekend ? 'weekend-dow' : ''}">${d}</div>`;
+  }).join('');
 
   const firstDay = new Date(calYear, calMonth, 1);
   let startDow = firstDay.getDay() - 1; if (startDow < 0) startDow = 6;
@@ -2224,6 +2675,7 @@ function renderCalendar() {
   const nowDate = new Date();
   items.filter(i => !i.done).forEach(item => {
     const key = item.deadline;
+    if (!key) return;
     deadlineMap.set(key, (deadlineMap.get(key) || 0) + 1);
     const end = getDeadlineEnd(item.deadline, item.deadlineTime);
     if (end < nowDate) urgentSet.add(key);
@@ -2233,30 +2685,43 @@ function renderCalendar() {
 
   const todayStr = now.toISOString().split('T')[0];
 
+  // Previous month cells
   for (let i = startDow - 1; i >= 0; i--) {
     const d = daysInPrev - i;
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    const colIndex = (startDow - 1 - i) % 7;
+    const isWeekend = colIndex >= 5;
+    html += `<div class="cal-cell other-month ${isWeekend ? 'weekend-cell' : ''}">${d}</div>`;
   }
 
+  // Current month cells
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const colIndex = (startDow + d - 1) % 7;
+    const isWeekend = colIndex >= 5;
     let cls = 'cal-cell';
+    if (isWeekend) cls += ' weekend-cell';
     if (dateStr === todayStr) cls += ' today';
+
     const count = deadlineMap.get(dateStr) || 0;
-    let barHtml = '';
+    let badgeHtml = '';
     if (count > 0) {
       cls += ' has-events';
-      if (urgentSet.has(dateStr)) barHtml = '<span class="dot urgent"></span>';
-      else if (warnSet.has(dateStr)) barHtml = '<span class="dot warn"></span>';
-      else barHtml = '<span class="dot normal"></span>';
+      let urgencyCls = 'normal';
+      if (urgentSet.has(dateStr)) urgencyCls = 'urgent';
+      else if (warnSet.has(dateStr)) urgencyCls = 'warn';
+      badgeHtml = `<span class="cal-count-badge ${urgencyCls}">${count}</span>`;
     }
-    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')">${d}${barHtml}</div>`;
+
+    html += `<div class="${cls}" data-date="${dateStr}" onclick="showDayEvents('${dateStr}')"><span class="cal-day-num">${d}</span>${badgeHtml}</div>`;
   }
 
+  // Next month cells
   const totalCells = startDow + daysInMonth;
   const remaining = totalCells % 7 ? 7 - (totalCells % 7) : 0;
   for (let d = 1; d <= remaining; d++) {
-    html += `<div class="cal-cell other-month">${d}</div>`;
+    const colIndex = (totalCells + d - 1) % 7;
+    const isWeekend = colIndex >= 5;
+    html += `<div class="cal-cell other-month ${isWeekend ? 'weekend-cell' : ''}">${d}</div>`;
   }
 
   grid.innerHTML = html;
@@ -2376,6 +2841,7 @@ function quickAddTask() {
   setStatus(`Завдання додано у "${targetWs.name}"`);
   renderTabBar();
   startTimers();
+  closeModal();
 
   setTimeout(() => setStatus(''), 2000);
 }
@@ -2452,6 +2918,7 @@ function closeModal() {
 
 function openSettings() {
   renderAssigneeChips();
+  renderAuthUI();
   document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -2461,7 +2928,9 @@ function closeSettings() {
 
 // ---- Edit mode (UI chrome visibility) ----
 function loadEditMode() {
-  return localStorage.getItem(EDIT_MODE_KEY) === 'true'; // default: OFF
+  const stored = localStorage.getItem(EDIT_MODE_KEY);
+  if (stored === null) return true; // default: ON
+  return stored === 'true';
 }
 
 function applyEditMode() {
@@ -2508,8 +2977,6 @@ function addNewTab() {
 
 // ---- Settings Init ----
 function initSettings() {
-  const savedTheme = localStorage.getItem('ext_theme') || 'neutral';
-  const savedWp = localStorage.getItem('ext_wp') || 'none';
   const savedSize = localStorage.getItem('ext_card_size') || 'normal';
 
   // Screen lock (password protect)
@@ -2564,8 +3031,6 @@ function initSettings() {
     });
   }
 
-  applyTheme(savedTheme);
-  applyWallpaper(savedWp);
   applyCardSize(savedSize);
 
   // Size Settings
@@ -2669,89 +3134,6 @@ function initSettings() {
     });
   }
 
-  // Theme Settings
-  document.querySelectorAll('.theme-option').forEach(el => {
-    const themeVal = el.dataset.theme;
-    if (themeVal === savedTheme || (!themeVal && savedTheme === 'neutral')) {
-      el.classList.add('active');
-    } else {
-      el.classList.remove('active');
-    }
-
-    el.addEventListener('click', (e) => {
-      document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
-      e.target.classList.add('active');
-      const t = e.target.dataset.theme || 'neutral';
-      localStorage.setItem('ext_theme', t);
-      applyTheme(t);
-    });
-  });
-
-  const customWpInput = document.getElementById('custom-wp-url');
-  customWpInput.addEventListener('input', (e) => {
-    const url = e.target.value.trim();
-    if (url) {
-      document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-      localStorage.setItem('ext_wp', url);
-      applyWallpaper(url);
-    }
-  });
-
-  const customWpBtn = document.getElementById('custom-wp-btn');
-  const customWpFile = document.getElementById('custom-wp-file');
-
-  if (customWpBtn && customWpFile) {
-    customWpBtn.addEventListener('click', () => {
-      customWpFile.click();
-    });
-
-    customWpFile.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        try {
-          localStorage.setItem('custom_wp_data', dataUrl);
-          localStorage.setItem('ext_wp', 'custom_upload');
-          customWpInput.value = '';
-          document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-          applyWallpaper('custom_upload');
-        } catch (err) {
-          alert("Зображення занадто велике! Виберіть файл меншого розміру (до 2-3 МБ).");
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  document.querySelectorAll('.wp-option').forEach(el => {
-    if (el.dataset.wp === savedWp) {
-      el.classList.add('active');
-    } else el.classList.remove('active');
-
-    el.addEventListener('click', (e) => {
-      customWpInput.value = '';
-      document.querySelectorAll('.wp-option').forEach(o => o.classList.remove('active'));
-      e.target.classList.add('active');
-      const w = e.target.dataset.wp;
-      localStorage.setItem('ext_wp', w);
-      applyWallpaper(w);
-    });
-  });
-
-  if (savedWp !== 'none' && !document.querySelector(`.wp-option[data-wp="${savedWp}"]`)) {
-    customWpInput.value = savedWp;
-  }
-}
-
-function applyTheme(theme) {
-  document.body.className = document.body.className.replace(/theme-\w+/g, '').trim();
-  if (theme === 'dark') document.body.classList.add('theme-dark');
-  else if (theme === 'light') document.body.classList.add('theme-light');
-  else if (theme === 'ocean') document.body.classList.add('theme-ocean');
-  else if (theme === 'forest') document.body.classList.add('theme-forest');
 }
 
 function applyCardSize(size) {
@@ -2782,6 +3164,7 @@ function applyWallpaper(wp) {
 // ---- Operations Workspace ----
 const APP_MODE_KEY = 'app_active_mode';
 const OPS_DATA_KEY = 'ops_workspace_data';
+const PROJECTS_DATA_KEY = 'projects_workspace_data_v1';
 let activeAppMode = localStorage.getItem(APP_MODE_KEY) || 'deadlines';
 
 function getDefaultOpsData() {
@@ -2829,32 +3212,51 @@ function getOpsTotals(data) {
 function setAppMode(mode) {
   if (mode === 'ops') activeAppMode = 'ops';
   else if (mode === 'shtat') activeAppMode = 'shtat';
+  else if (mode === 'projects') activeAppMode = 'projects';
+  else if (mode === 'pmm') activeAppMode = 'pmm';
   else activeAppMode = 'deadlines';
   localStorage.setItem(APP_MODE_KEY, activeAppMode);
 
-  document.body.classList.remove('ops-mode', 'shtat-mode');
+  document.body.classList.remove('ops-mode', 'shtat-mode', 'projects-mode', 'pmm-mode');
   if (activeAppMode === 'ops') document.body.classList.add('ops-mode');
   if (activeAppMode === 'shtat') document.body.classList.add('shtat-mode');
+  if (activeAppMode === 'projects') document.body.classList.add('projects-mode');
+  if (activeAppMode === 'pmm') document.body.classList.add('pmm-mode');
 
   document.querySelectorAll('.app-mode-btn').forEach(btn => {
     const isActive = btn.dataset.mode === activeAppMode;
     btn.classList.toggle('active', isActive);
     btn.setAttribute('aria-selected', String(isActive));
   });
+  document.querySelectorAll('.mobile-nav-item').forEach(btn => {
+    const isActive = btn.dataset.mode === activeAppMode;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-current', isActive ? 'page' : 'false');
+    // Scroll active item into center of the nav bar
+    if (isActive) {
+      requestAnimationFrame(() => {
+        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      });
+    }
+  });
 
   // Show/hide sections
   const dashLayout = document.querySelector('.dash-layout');
   const opsWorkspace = document.getElementById('ops-workspace');
   const shtatWorkspace = document.getElementById('shtat-workspace');
+  const projectsWorkspace = document.getElementById('projects-workspace');
+  const pmmWorkspace = document.getElementById('pmm-workspace');
   const tabBar = document.getElementById('tab-bar');
   const fabContainer = document.querySelector('.fab-container');
 
   if (dashLayout) dashLayout.style.display = activeAppMode === 'deadlines' ? '' : 'none';
   if (opsWorkspace) opsWorkspace.style.display = (activeAppMode === 'deadlines' || activeAppMode === 'ops') ? '' : 'none';
   if (shtatWorkspace) shtatWorkspace.style.display = activeAppMode === 'shtat' ? '' : 'none';
-  if (tabBar) tabBar.style.display = activeAppMode === 'shtat' ? 'none' : '';
+  if (projectsWorkspace) projectsWorkspace.style.display = activeAppMode === 'projects' ? '' : 'none';
+  if (pmmWorkspace) pmmWorkspace.style.display = activeAppMode === 'pmm' ? '' : 'none';
+  if (tabBar) tabBar.style.display = activeAppMode === 'deadlines' ? '' : 'none';
 
-  // FAB: always show settings + lock, hide add-btn in shtat/ops mode
+  // FAB: always show settings + lock, hide add-btn in shtat/ops/projects/pmm mode
   if (fabContainer) fabContainer.style.display = '';
   const fabAdd = document.getElementById('add-btn');
   const fabLock = document.getElementById('lock-now-btn');
@@ -2863,7 +3265,373 @@ function setAppMode(mode) {
 
   if (activeAppMode === 'ops') renderOpsWorkspace();
   else if (activeAppMode === 'shtat') initShtatMode();
+  else if (activeAppMode === 'projects') renderProjectsWorkspace();
+  else if (activeAppMode === 'pmm') renderPmmWorkspace();
   else updateAddButton();
+}
+
+// ---- Projects: independent local activity chains ----
+function getDefaultProjectsData() {
+  return { projects: [], activeProjectId: null };
+}
+
+function loadProjectsData() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROJECTS_DATA_KEY) || 'null');
+    if (!saved || !Array.isArray(saved.projects)) return getDefaultProjectsData();
+    return {
+      projects: saved.projects.filter(project => project && typeof project.title === 'string').map(project => ({
+        id: String(project.id || createProjectId()),
+        title: project.title.slice(0, 120),
+        createdAt: project.createdAt || new Date().toISOString(),
+        entries: Array.isArray(project.entries) ? project.entries : []
+      })),
+      activeProjectId: saved.activeProjectId || null
+    };
+  } catch (error) {
+    console.warn('Projects data reset:', error);
+    return getDefaultProjectsData();
+  }
+}
+
+function saveProjectsData(data) {
+  localStorage.setItem(PROJECTS_DATA_KEY, JSON.stringify(data));
+}
+
+function createProjectId() {
+  return window.crypto && crypto.randomUUID ? crypto.randomUUID() : `project-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function escapeProjectText(value) {
+  return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[char]);
+}
+
+function projectDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Щойно';
+  return new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+}
+
+function localDateTimeValue(value = new Date()) {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function projectImageToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Оберіть зображення.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Не вдалося прочитати фото.'));
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Не вдалося обробити фото.'));
+      image.onload = () => {
+        const maxSide = 1440;
+        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function addProject(title) {
+  const cleanTitle = String(title || '').trim();
+  if (!cleanTitle) return null;
+  const data = loadProjectsData();
+  const project = { id: createProjectId(), title: cleanTitle.slice(0, 120), createdAt: new Date().toISOString(), entries: [] };
+  data.projects.unshift(project);
+  data.activeProjectId = project.id;
+  saveProjectsData(data);
+  return project;
+}
+
+function renderProjectsWorkspace() {
+  const list = document.getElementById('projects-list');
+  const detail = document.getElementById('project-detail');
+  if (!list || !detail) return;
+  const data = loadProjectsData();
+  const active = data.projects.find(project => project.id === data.activeProjectId) || data.projects[0] || null;
+  if (active && data.activeProjectId !== active.id) {
+    data.activeProjectId = active.id;
+    saveProjectsData(data);
+  }
+
+  const pencilIcon = `<svg class="project-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+  const trashIcon = `<svg class="project-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+  const checkIcon = `<svg class="project-btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+  list.innerHTML = data.projects.length
+    ? data.projects.map(project => {
+        const done = project.entries.filter(entry => entry.done).length;
+        return `<button class="project-list-item ${project.id === active?.id ? 'active' : ''}" type="button" data-project-id="${escapeProjectText(project.id)}"><span>${escapeProjectText(project.title)}</span><small>${done}/${project.entries.length} кроків</small></button>`;
+      }).join('')
+    : '<p class="projects-list-empty">Створіть перший проєкт — тут збереться вся його історія.</p>';
+
+  if (!active) {
+    detail.innerHTML = `<section class="project-empty-state"><span class="project-empty-mark">⌘</span><p class="projects-eyebrow">Від ідеї до результату</p><h1>Створіть перший проєкт</h1><p>Наприклад, «Побудувати будинок». Далі додавайте кроки з датою та відмічайте виконане.</p><form class="project-first-form" id="project-first-form"><label for="project-first-title">Назва проєкту</label><div><input id="project-first-title" maxlength="120" autocomplete="off" placeholder="Побудувати будинок" required><button type="submit">Створити</button></div></form></section>`;
+    document.getElementById('project-first-form')?.addEventListener('submit', event => {
+      event.preventDefault();
+      const input = document.getElementById('project-first-title');
+      if (addProject(input.value)) renderProjectsWorkspace();
+    });
+    return;
+  }
+
+  const entries = [...active.entries].sort((a, b) => new Date(b.createdAt || b.scheduledAt || 0) - new Date(a.createdAt || a.scheduledAt || 0));
+  const done = entries.filter(entry => entry.done).length;
+
+  detail.innerHTML = `
+    <div class="project-detail-header">
+      <div class="project-header-main">
+        <span class="projects-eyebrow">Активний проєкт</span>
+        <div class="project-title-row" id="project-title-container">
+          <h1 class="project-title-text" id="project-title-val">${escapeProjectText(active.title)}</h1>
+          <button class="project-icon-btn" type="button" id="btn-edit-project-title" title="Редагувати назву">${pencilIcon}</button>
+          <button class="project-icon-btn danger" type="button" id="btn-delete-project" title="Видалити проєкт">${trashIcon}</button>
+        </div>
+        <p class="project-meta-info">${done} із ${entries.length} кроків виконано · створено ${projectDateTime(active.createdAt)}</p>
+      </div>
+      <div class="project-progress" aria-label="Виконано ${done} із ${entries.length}">
+        <span style="width:${entries.length ? Math.round(done / entries.length * 100) : 0}%"></span>
+      </div>
+    </div>
+    <div class="project-chain" aria-label="Хронологія кроків">
+      ${entries.length ? entries.map((entry, index) => `
+        <article class="project-entry ${entry.done ? 'is-done' : ''}" data-entry-card-id="${escapeProjectText(entry.id)}">
+          <div class="project-entry-node">${entries.length - index}</div>
+          <div class="project-entry-card">
+            <div class="project-entry-top">
+              <time datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+              <div class="project-entry-actions">
+                <button class="project-icon-btn" type="button" data-edit-entry="${escapeProjectText(entry.id)}" title="Редагувати крок">${pencilIcon}</button>
+                <button class="project-icon-btn danger" type="button" data-delete-entry="${escapeProjectText(entry.id)}" title="Видалити крок">${trashIcon}</button>
+                <button class="project-entry-toggle" type="button" data-entry-id="${escapeProjectText(entry.id)}" aria-pressed="${entry.done ? 'true' : 'false'}" title="${entry.done ? 'Скасувати' : 'Виконати'}">
+                  ${checkIcon} ${entry.done ? 'Виконано' : 'Виконати'}
+                </button>
+              </div>
+            </div>
+            ${entry.imageData ? `<img class="project-entry-image" src="${escapeProjectText(entry.imageData)}" alt="${escapeProjectText(entry.text || 'Фото кроку проєкту')}">` : ''}
+            <div class="project-entry-body" id="entry-body-${escapeProjectText(entry.id)}">
+              ${entry.text ? `<p class="project-entry-text">${escapeProjectText(entry.text)}</p>` : ''}
+            </div>
+          </div>
+        </article>
+      `).join('') : '<div class="project-chain-empty">Поки що немає кроків. Додайте перший — він стане початком ланцюжка.</div>'}
+    </div>
+    <form class="project-composer" id="project-entry-form">
+      <div class="project-composer-fields">
+        <input id="project-entry-text" name="text" maxlength="500" autocomplete="off" placeholder="Наступний крок чи запис...">
+        <label class="project-photo-picker" for="project-entry-image" title="Додати фото">
+          📷 Фото<input id="project-entry-image" name="image" type="file" accept="image/*" capture="environment">
+        </label>
+        <input id="project-entry-time" name="time" type="datetime-local" value="${localDateTimeValue()}" aria-label="Дата та час">
+        <button type="submit" class="project-composer-submit">Додати</button>
+      </div>
+      <div class="project-image-status" id="project-image-status" aria-live="polite"></div>
+    </form>
+  `;
+
+  // Select project from sidebar
+  list.querySelectorAll('[data-project-id]').forEach(button => button.addEventListener('click', () => {
+    const next = loadProjectsData();
+    next.activeProjectId = button.dataset.projectId;
+    saveProjectsData(next);
+    renderProjectsWorkspace();
+  }));
+
+  // Toggle done status
+  detail.querySelectorAll('[data-entry-id]').forEach(button => button.addEventListener('click', () => {
+    const next = loadProjectsData();
+    const project = next.projects.find(item => item.id === active.id);
+    const entry = project?.entries.find(item => item.id === button.dataset.entryId);
+    if (entry) {
+      entry.done = !entry.done;
+      entry.completedAt = entry.done ? new Date().toISOString() : null;
+      saveProjectsData(next);
+      renderProjectsWorkspace();
+    }
+  }));
+
+  // Inline edit project title
+  const editTitleBtn = detail.querySelector('#btn-edit-project-title');
+  if (editTitleBtn) {
+    editTitleBtn.addEventListener('click', () => {
+      const container = detail.querySelector('#project-title-container');
+      const currentTitle = active.title;
+      if (!container) return;
+      container.innerHTML = `
+        <form class="project-inline-edit-form" id="form-edit-project-title">
+          <input class="project-inline-input" id="input-edit-project-title" value="${escapeProjectText(currentTitle)}" maxlength="120" required autocomplete="off">
+          <button type="submit" class="project-inline-save-btn">Зберегти</button>
+          <button type="button" class="project-inline-cancel-btn" id="btn-cancel-edit-title">Скасувати</button>
+        </form>
+      `;
+      const input = container.querySelector('#input-edit-project-title');
+      if (input) { input.focus(); input.select(); }
+      container.querySelector('#form-edit-project-title')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newTitle = input.value.trim();
+        if (newTitle && newTitle !== currentTitle) {
+          const next = loadProjectsData();
+          const project = next.projects.find(item => item.id === active.id);
+          if (project) { project.title = newTitle.slice(0, 120); saveProjectsData(next); }
+        }
+        renderProjectsWorkspace();
+      });
+      container.querySelector('#btn-cancel-edit-title')?.addEventListener('click', () => renderProjectsWorkspace());
+    });
+  }
+
+  // Delete project
+  detail.querySelector('#btn-delete-project')?.addEventListener('click', () => {
+    const container = detail.querySelector('#project-title-container');
+    if (!container) return;
+    container.innerHTML = `
+      <div class="project-inline-confirm">
+        <span>Видалити проєкт і всі кроки?</span>
+        <button type="button" class="project-inline-save-btn danger" id="btn-confirm-delete-project">Так, видалити</button>
+        <button type="button" class="project-inline-cancel-btn" id="btn-cancel-delete-project">Скасувати</button>
+      </div>
+    `;
+    container.querySelector('#btn-confirm-delete-project')?.addEventListener('click', () => {
+      const next = loadProjectsData();
+      next.projects = next.projects.filter(p => p.id !== active.id);
+      next.activeProjectId = next.projects[0]?.id || null;
+      saveProjectsData(next);
+      renderProjectsWorkspace();
+    });
+    container.querySelector('#btn-cancel-delete-project')?.addEventListener('click', () => renderProjectsWorkspace());
+  });
+
+  // Inline edit entry message
+  detail.querySelectorAll('[data-edit-entry]').forEach(button => button.addEventListener('click', () => {
+    const entryId = button.dataset.editEntry;
+    const bodyEl = detail.querySelector(`#entry-body-${entryId}`);
+    if (!bodyEl) return;
+    const next = loadProjectsData();
+    const project = next.projects.find(item => item.id === active.id);
+    const entry = project?.entries.find(item => item.id === entryId);
+    if (!entry) return;
+
+    const currentText = entry.text || '';
+    bodyEl.innerHTML = `
+      <form class="project-entry-edit-form" data-edit-entry-form="${escapeProjectText(entryId)}">
+        <textarea class="project-entry-textarea" rows="2" maxlength="500">${escapeProjectText(currentText)}</textarea>
+        <div class="project-entry-edit-btns">
+          <button type="submit" class="project-inline-save-btn">Зберегти</button>
+          <button type="button" class="project-inline-cancel-btn" data-cancel-edit-entry="${escapeProjectText(entryId)}">Скасувати</button>
+        </div>
+      </form>
+    `;
+    const textarea = bodyEl.querySelector('.project-entry-textarea');
+    if (textarea) { textarea.focus(); textarea.setSelectionRange(textarea.value.length, textarea.value.length); }
+
+    bodyEl.querySelector('.project-entry-edit-form')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const updatedText = textarea.value.trim().slice(0, 500);
+      const dataStore = loadProjectsData();
+      const prj = dataStore.projects.find(item => item.id === active.id);
+      const ent = prj?.entries.find(item => item.id === entryId);
+      if (ent) {
+        ent.text = updatedText;
+        ent.updatedAt = new Date().toISOString();
+        saveProjectsData(dataStore);
+      }
+      renderProjectsWorkspace();
+    });
+
+    bodyEl.querySelector(`[data-cancel-edit-entry]`)?.addEventListener('click', () => renderProjectsWorkspace());
+  }));
+
+  // Delete entry
+  detail.querySelectorAll('[data-delete-entry]').forEach(button => button.addEventListener('click', () => {
+    const entryId = button.dataset.deleteEntry;
+    const bodyEl = detail.querySelector(`#entry-body-${entryId}`);
+    if (!bodyEl) return;
+    bodyEl.innerHTML = `
+      <div class="project-inline-confirm">
+        <span>Видалити цей крок?</span>
+        <button type="button" class="project-inline-save-btn danger" data-confirm-delete-entry="${escapeProjectText(entryId)}">Видалити</button>
+        <button type="button" class="project-inline-cancel-btn" data-cancel-delete-entry="${escapeProjectText(entryId)}">Скасувати</button>
+      </div>
+    `;
+    bodyEl.querySelector('[data-confirm-delete-entry]')?.addEventListener('click', () => {
+      const dataStore = loadProjectsData();
+      const prj = dataStore.projects.find(item => item.id === active.id);
+      if (prj) {
+        prj.entries = prj.entries.filter(e => e.id !== entryId);
+        saveProjectsData(dataStore);
+      }
+      renderProjectsWorkspace();
+    });
+    bodyEl.querySelector('[data-cancel-delete-entry]')?.addEventListener('click', () => renderProjectsWorkspace());
+  }));
+
+  // Image status feedback
+  detail.querySelector('#project-entry-image')?.addEventListener('change', event => {
+    const file = event.currentTarget.files?.[0];
+    const status = detail.querySelector('#project-image-status');
+    if (status) status.textContent = file ? `📷 Обрано фото: ${file.name}` : '';
+  });
+
+  // Submit new step
+  detail.querySelector('#project-entry-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const text = form.elements.text.value.trim();
+    const imageFile = form.elements.image.files?.[0];
+    const status = detail.querySelector('#project-image-status');
+    if (!text && !imageFile) {
+      if (status) status.textContent = 'Введіть текст або оберіть фото.';
+      return;
+    }
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = '…'; }
+    let imageData = null;
+    try {
+      if (imageFile) imageData = await projectImageToDataUrl(imageFile);
+      const next = loadProjectsData();
+      const project = next.projects.find(item => item.id === active.id);
+      if (!project) return;
+      project.entries.unshift({
+        id: createProjectId(),
+        text: text.slice(0, 500),
+        imageData,
+        scheduledAt: form.elements.time.value ? new Date(form.elements.time.value).toISOString() : new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        done: false
+      });
+      saveProjectsData(next);
+      renderProjectsWorkspace();
+    } catch (error) {
+      console.warn('Project image was not saved:', error);
+      if (status) status.textContent = error.name === 'QuotaExceededError' ? 'Мало місця у сховищі для фото.' : error.message || 'Помилка додавання фото.';
+      if (submitButton) { submitButton.disabled = false; submitButton.textContent = 'Додати'; }
+    }
+  });
+}
+
+function initProjectsWorkspace() {
+  document.getElementById('project-create-btn')?.addEventListener('click', () => {
+    const data = loadProjectsData();
+    const newPrj = addProject(`Новий проєкт ${data.projects.length + 1}`);
+    if (newPrj) {
+      renderProjectsWorkspace();
+      setTimeout(() => {
+        const editBtn = document.getElementById('btn-edit-project-title');
+        if (editBtn) editBtn.click();
+      }, 50);
+    }
+  });
 }
 
 function renderOpsWorkspace() {
@@ -3320,6 +4088,8 @@ document.addEventListener('DOMContentLoaded', () => {
   on('edit-modal-close-btn', 'click', closeEditModal);
   on('btn-save-edit', 'click', saveEditedTask);
   on('tab-add-btn', 'click', addNewTab);
+  document.querySelectorAll('.mobile-nav-item').forEach(btn => btn.addEventListener('click', () => setAppMode(btn.dataset.mode)));
+  initDeadlineFocusUI();
   const requiredToggleBtn = document.getElementById('required-toggle-btn');
   if (requiredToggleBtn) requiredToggleBtn.addEventListener('click', () => setRequiredUndatedVisible(!shouldShowRequiredUndated()));
   updateRequiredToggleUI();
@@ -3330,6 +4100,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initSettings();
   initSettingsNav();
+  initProjectsWorkspace();
   initOpsWorkspace();
   initVoiceInput();
   populateDatalist();
@@ -3372,18 +4143,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const tg = window.Telegram.WebApp;
     tg.ready();
     tg.expand();
-
-    // Adapt to Telegram theme
-    if (tg.colorScheme === 'dark') {
-      document.body.classList.add('theme-dark');
-    }
-    tg.onEvent('themeChanged', () => {
-      if (tg.colorScheme === 'dark') {
-        document.body.classList.add('theme-dark');
-      } else {
-        document.body.classList.remove('theme-dark', 'theme-light', 'theme-ocean', 'theme-forest');
-      }
-    });
 
     // Show share button
     const shareBtn = document.getElementById('share-btn');
@@ -3657,6 +4416,743 @@ document.addEventListener('DOMContentLoaded', () => {
     sheetsImportBtn.addEventListener('click', importStaffFromSheets);
   }
 
+  // ---- PMM Custom Google Sheet URL Settings ----
+  const pmmUrlInput = document.getElementById('pmm-sheets-url');
+  const pmmSaveBtn = document.getElementById('pmm-sheets-save-btn');
+  const pmmResetBtn = document.getElementById('pmm-sheets-reset-btn');
+  const pmmStatusSpan = document.getElementById('pmm-sheets-status');
+
+  if (pmmUrlInput) {
+    const savedCustomUrl = localStorage.getItem(PMM_CUSTOM_URL_KEY);
+    if (savedCustomUrl) pmmUrlInput.value = savedCustomUrl;
+  }
+
+  if (pmmSaveBtn) {
+    pmmSaveBtn.addEventListener('click', async () => {
+      const raw = pmmUrlInput ? pmmUrlInput.value.trim() : '';
+      if (!raw) {
+        localStorage.removeItem(PMM_CUSTOM_URL_KEY);
+        if (pmmStatusSpan) pmmStatusSpan.textContent = 'Використовується стандартне посилання';
+      } else {
+        localStorage.setItem(PMM_CUSTOM_URL_KEY, raw);
+        if (pmmStatusSpan) pmmStatusSpan.textContent = 'Збережено!';
+      }
+      fetchPmmData().then(freshData => {
+        if (freshData && activeAppMode === 'pmm') {
+          renderPmmWorkspace();
+        }
+      });
+      setTimeout(() => { if (pmmStatusSpan) pmmStatusSpan.textContent = ''; }, 3000);
+    });
+  }
+
+  if (pmmResetBtn) {
+    pmmResetBtn.addEventListener('click', () => {
+      localStorage.removeItem(PMM_CUSTOM_URL_KEY);
+      if (pmmUrlInput) pmmUrlInput.value = '';
+      if (pmmStatusSpan) pmmStatusSpan.textContent = 'Скинуто до стандартного';
+      fetchPmmData().then(freshData => {
+        if (freshData && activeAppMode === 'pmm') {
+          renderPmmWorkspace();
+        }
+      });
+      setTimeout(() => { if (pmmStatusSpan) pmmStatusSpan.textContent = ''; }, 3000);
+    });
+  }
+
   // Ініціалізація дашборду Штату
   initShtatMode();
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// ⛽ ПММ (Пально-Мастильні Матеріали) — Google Sheet Integration & Infographics
+// ═══════════════════════════════════════════════════════════════════
+const PMM_CUSTOM_URL_KEY = 'deadline_pmm_custom_sheet_url';
+const PMM_CACHE_KEY = 'deadline_pmm_cache_v1';
+
+let pmmSearchQuery = '';
+let pmmActiveFilter = 'all'; // 'all', 'low'
+
+// Returns null if no URL has been configured by the user
+function getPmmCustomUrl() {
+  const v = localStorage.getItem(PMM_CUSTOM_URL_KEY);
+  return (v && v.trim()) ? v.trim() : null;
+}
+
+function getCandidateCsvUrls() {
+  const url = getPmmCustomUrl();
+  if (!url) return []; // no URL configured — nothing to try
+
+  // Apps Script URL — use directly (no CORS issues)
+  if (url.includes('script.google.com/macros')) {
+    return [url];
+  }
+
+  // Google Sheets URL — derive CSV export variants
+  const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return [url]; // unknown format, try as-is
+  const docId = idMatch[1];
+  const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+
+  return [
+    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`
+  ];
+}
+
+async function tryFetchCsv(url) {
+  // Attempt 1: direct with cache bypass + credentials
+  try {
+    const r1 = await fetch(url, { cache: 'no-store', credentials: 'include', redirect: 'follow' });
+    console.log(`PMM fetch [creds] ${url.slice(0, 60)} => status:${r1.status}`);
+    if (r1.ok) {
+      const t = await r1.text();
+      console.log(`PMM response preview: ${t.slice(0, 120).replace(/\n/g, '|')}`);
+      if (t && !t.trimStart().startsWith('<') && t.includes(',')) return t;
+      console.warn('PMM: response looks like HTML, not CSV');
+    }
+  } catch (e) { console.warn('PMM fetch [creds] error:', e.message); }
+
+  // Attempt 2: simple fetch without credentials (for public sheets with CORS)
+  try {
+    const r2 = await fetch(url, { cache: 'no-store', redirect: 'follow' });
+    console.log(`PMM fetch [no-creds] ${url.slice(0, 60)} => status:${r2.status}`);
+    if (r2.ok) {
+      const t = await r2.text();
+      console.log(`PMM response preview: ${t.slice(0, 120).replace(/\n/g, '|')}`);
+      if (t && !t.trimStart().startsWith('<') && t.includes(',')) return t;
+      console.warn('PMM: response looks like HTML, not CSV');
+    }
+  } catch (e) { console.warn('PMM fetch [no-creds] error:', e.message); }
+
+  return null;
+}
+
+async function fetchPmmData() {
+  const candidateUrls = getCandidateCsvUrls();
+
+  // No URL configured by user — don't try anything
+  if (candidateUrls.length === 0) {
+    console.info('PMM: no URL configured, skipping fetch');
+    return null;
+  }
+
+  let csvText = null;
+
+  for (const url of candidateUrls) {
+    csvText = await tryFetchCsv(url);
+    if (csvText) {
+      console.log('PMM: loaded CSV from', url.slice(0, 70));
+      break;
+    }
+    console.warn('PMM: no valid CSV from', url.slice(0, 70));
+  }
+
+  if (csvText) {
+    const data = parsePmmCsv(csvText);
+    data.lastFetchedAt = new Date().toISOString();
+    localStorage.setItem(PMM_CACHE_KEY, JSON.stringify(data));
+    return data;
+  }
+
+  console.warn('PMM: all candidates failed, loading from cache');
+  const cached = localStorage.getItem(PMM_CACHE_KEY);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) { /* corrupted cache */ }
+  }
+  return null;
+}
+
+function parseCsvLines(csvText) {
+  const lines = [];
+  let currentField = '';
+  let inQuotes = false;
+  let currentRow = [];
+
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        currentField += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentField.trim());
+      currentField = '';
+    } else if ((char === '\r' || char === '\n') && !inQuotes) {
+      if (char === '\r' && nextChar === '\n') i++;
+      currentRow.push(currentField.trim());
+      if (currentRow.some(field => field.length > 0)) lines.push(currentRow);
+      currentRow = [];
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some(field => field.length > 0)) lines.push(currentRow);
+  }
+  return lines;
+}
+
+function parseNumber(val) {
+  if (!val) return 0;
+  const clean = String(val).replace(/\s+/g, '').replace(',', '.');
+  const num = parseFloat(clean);
+  return Number.isNaN(num) ? 0 : num;
+}
+
+function parsePmmCsv(csvText) {
+  const rows = parseCsvLines(csvText);
+  let asOfDate = 'Сьогодні';
+  const units = [];
+  let currentUnit = null;
+
+  let overallStock = { dt: 0, petrol: 0, foam: 0 };
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.length < 4) continue;
+
+    // Check for date row: "Станом на", "31.07.2026"
+    for (let j = 0; j < row.length; j++) {
+      if (row[j].includes('Станом на')) {
+        asOfDate = row[j + 1] || asOfDate;
+      }
+    }
+
+    // Check for "ВСЬОГО ПО ЗАГОНУ НА СКЛАДІ"
+    if (row.some(cell => cell.includes('ВСЬОГО ПО ЗАГОНУ НА СКЛАДІ'))) {
+      const type = (row[6] || '').toLowerCase();
+      const amount = parseNumber(row[8]);
+      if (type.includes('дт') || type.includes('дп')) overallStock.dt = amount;
+      if (type.includes('бензин')) overallStock.petrol = amount;
+      if (type.includes('піноутворювач')) overallStock.foam = amount;
+      continue;
+    }
+
+    const unitNameRaw = row[1] ? row[1].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    const mark = row[3] ? row[3].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    const model = row[6] ? row[6].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    const plate = row[7] ? row[7].replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    const inTank = parseNumber(row[8]);
+    const consumption = parseNumber(row[9]);
+    const capacity = parseNumber(row[10]);
+    const fuelType = (row[11] || '').trim().toLowerCase();
+
+    // If unit name is present in col 1, start a new unit
+    if (unitNameRaw && unitNameRaw !== 'Підрозділ') {
+      currentUnit = {
+        name: unitNameRaw,
+        vehicles: [],
+        generators: [],
+        stock: { dt: 0, petrol: 0, foam: 0 }
+      };
+      units.push(currentUnit);
+    }
+
+    if (!currentUnit || !mark) continue;
+
+    // Check if this row is warehouse stock ("Склад")
+    if (mark === 'Склад' || mark.toLowerCase().includes('склад')) {
+      const itemType = model.toLowerCase();
+      if (itemType.includes('дп') || itemType.includes('дт')) currentUnit.stock.dt = inTank;
+      else if (itemType.includes('бензин')) currentUnit.stock.petrol = inTank;
+      else if (itemType.includes('піноутворювач')) currentUnit.stock.foam = inTank;
+
+      // Also check next rows if they belong to stock
+      let k = i + 1;
+      while (k < rows.length && (!rows[k][1] || rows[k][1].trim() === '') && (!rows[k][3] || rows[k][3].trim() === '')) {
+        const subType = (rows[k][6] || '').toLowerCase();
+        const subVal = parseNumber(rows[k][8]);
+        if (subType.includes('дп') || subType.includes('дт')) currentUnit.stock.dt = subVal;
+        else if (subType.includes('бензин')) currentUnit.stock.petrol = subVal;
+        else if (subType.includes('піноутворювач')) currentUnit.stock.foam = subVal;
+        k++;
+      }
+      i = k - 1;
+      continue;
+    }
+
+    // Check if this row is generator / equipment
+    if (mark.toLowerCase().includes('генератор') || mark.toLowerCase().includes('агрегат') || mark.toLowerCase().includes('мотопомпа')) {
+      currentUnit.generators.push({
+        name: mark + (model ? ` (${model})` : ''),
+        inTank,
+        consumption,
+        fuelType: fuelType || (mark.toLowerCase().includes('дизель') ? 'дп' : 'бензин')
+      });
+      continue;
+    }
+
+    // Otherwise, it's a vehicle
+    currentUnit.vehicles.push({
+      mark,
+      model,
+      plate,
+      inTank,
+      consumption,
+      capacity,
+      fuelType: fuelType || 'дп'
+    });
+  }
+
+  // Fallback for overall stock if summary row wasn't present
+  if (!overallStock.dt && !overallStock.petrol && !overallStock.foam) {
+    units.forEach(u => {
+      overallStock.dt += u.stock.dt;
+      overallStock.petrol += u.stock.petrol;
+      overallStock.foam += u.stock.foam;
+    });
+  }
+
+  // Calculate totals
+  let totalVehicles = 0;
+  let totalTankFuel = 0;
+  let lowFuelCount = 0;
+
+  units.forEach(u => {
+    u.vehicles.forEach(v => {
+      totalVehicles++;
+      totalTankFuel += v.inTank;
+      if (v.capacity > 0 && (v.inTank / v.capacity) < 0.3) {
+        lowFuelCount++;
+      }
+    });
+  });
+
+  return {
+    asOfDate,
+    units,
+    overallStock,
+    kpi: {
+      totalVehicles,
+      totalTankFuel,
+      lowFuelCount
+    }
+  };
+}
+
+
+
+function loadPmmDataFromCache() {
+  try {
+    const cached = localStorage.getItem(PMM_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function showPmmManualCsvInput() {
+  const overlay = document.createElement('div');
+  overlay.id = 'pmm-csv-overlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);
+    display:flex;align-items:center;justify-content:center;padding:16px;
+  `;
+  overlay.innerHTML = `
+    <div style="
+      background:#1e2030;border-radius:16px;padding:20px;
+      width:100%;max-width:520px;max-height:90vh;overflow-y:auto;
+      border:1px solid rgba(255,255,255,.12);
+    ">
+      <h3 style="margin:0 0 8px;font-size:16px;color:#e2e8f0">📋 Вставити CSV вручну</h3>
+      <p style="font-size:12px;color:#94a3b8;margin:0 0 12px">
+        Відкрийте Google Таблицю → Файл → Завантажити → CSV (.csv),<br>
+        потім вставте вміст файлу нижче:
+      </p>
+      <textarea id="pmm-csv-textarea" rows="10" style="
+        width:100%;box-sizing:border-box;
+        background:#0d1117;color:#e2e8f0;
+        border:1px solid rgba(255,255,255,.15);border-radius:8px;
+        padding:10px;font-size:11px;font-family:monospace;resize:vertical;
+      " placeholder="Вставте CSV тут…"></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button id="pmm-csv-apply" style="
+          flex:1;background:linear-gradient(135deg,#4f8ef7,#7c5ce8);
+          color:#fff;border:none;border-radius:8px;padding:10px;
+          font-size:14px;cursor:pointer;
+        ">✅ Завантажити</button>
+        <button id="pmm-csv-cancel" style="
+          flex:1;background:rgba(255,255,255,.08);
+          color:#e2e8f0;border:none;border-radius:8px;padding:10px;
+          font-size:14px;cursor:pointer;
+        ">Скасувати</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('pmm-csv-cancel')?.addEventListener('click', () => overlay.remove());
+  document.getElementById('pmm-csv-apply')?.addEventListener('click', () => {
+    const text = document.getElementById('pmm-csv-textarea')?.value?.trim();
+    if (!text) return;
+    try {
+      const data = parsePmmCsv(text);
+      data.lastFetchedAt = new Date().toISOString();
+      data._manual = true;
+      localStorage.setItem(PMM_CACHE_KEY, JSON.stringify(data));
+      overlay.remove();
+      renderPmmWorkspace();
+    } catch (e) {
+      alert('Помилка розбору CSV: ' + e.message);
+    }
+  });
+}
+
+async function renderPmmWorkspace() {
+  const container = document.getElementById('pmm-workspace');
+  if (!container) return;
+
+  let data = loadPmmDataFromCache();
+
+  // Initial loader if no cache
+  if (!data) {
+    if (getPmmCustomUrl()) {
+      container.innerHTML = `
+        <div class="pmm-loading-box">
+          <div class="pmm-spinner"></div>
+          <p>Завантажуємо інформацію з Google Таблиці ПММ…</p>
+        </div>
+      `;
+    }
+    data = await fetchPmmData();
+  }
+
+  if (!data || !data.units || data.units.length === 0) {
+    const configuredUrl = getPmmCustomUrl();
+    const hasAppsScript = configuredUrl && configuredUrl.includes('script.google.com/macros');
+
+    // ── State 1: No URL configured at all ──────────────────────────────
+    if (!configuredUrl) {
+      container.innerHTML = `
+        <div class="pmm-empty-box" style="text-align:center;max-width:380px;margin:0 auto">
+          <span style="font-size:48px">⛽</span>
+          <h2 style="margin:12px 0 8px;font-size:18px">Розділ ПММ</h2>
+          <p style="font-size:13px;color:#94a3b8;margin:0 0 20px;line-height:1.6">
+            Щоб завантажувати дані пального,<br>вкажіть URL таблиці у налаштуваннях.
+          </p>
+          <button type="button" class="pmm-btn-primary" id="pmm-open-settings-btn"
+            style="width:100%;max-width:260px">
+            ⚙️ Відкрити налаштування
+          </button>
+        </div>
+      `;
+      document.getElementById('pmm-open-settings-btn')?.addEventListener('click', () => {
+        document.getElementById('settings-btn')?.click();
+      });
+      return;
+    }
+
+    // ── State 2: URL configured but fetch failed ────────────────────────
+    const debugInfo = data
+      ? `CSV завантажено, але розпізнано 0 підрозділів.`
+      : hasAppsScript
+        ? `Apps Script URL не відповідає або повертає помилку.`
+        : `Google Таблиця заблокована для прямого доступу (CORS/авторизація).`;
+
+    container.innerHTML = `
+      <div class="pmm-empty-box" style="text-align:left;max-width:480px;margin:0 auto">
+        <div style="text-align:center;margin-bottom:16px">
+          <span style="font-size:36px">⛽</span>
+          <h2 style="margin:8px 0 4px;font-size:17px">Не вдалося завантажити ПММ</h2>
+          <p style="font-size:13px;opacity:.7;margin:0">${debugInfo}</p>
+        </div>
+
+        <div style="background:rgba(79,142,247,.08);border:1px solid rgba(79,142,247,.25);border-radius:12px;padding:14px;margin-bottom:12px">
+          <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#4f8ef7">⚡ Рішення: Google Apps Script (1 хв)</p>
+          <ol style="margin:0;padding-left:18px;font-size:12px;line-height:1.8;color:#cbd5e0">
+            <li>Відкрий <b>script.google.com</b> → «Новий проєкт»</li>
+            <li>Встав код (кнопка нижче → скопіювати)</li>
+            <li>«Розгорнути» → «Нове розгортання» → Тип: <b>Вебзасток</b></li>
+            <li>Доступ: <b>Усі (анонімні)</b> → Розгорнути</li>
+            <li>Скопіюй URL виду <code style="font-size:10px">script.google.com/macros/s/…/exec</code></li>
+            <li>Встав його в <b>Налаштування → URL таблиці ПММ</b></li>
+          </ol>
+          <button id="pmm-copy-script-btn" type="button" style="
+            margin-top:12px;width:100%;
+            background:rgba(79,142,247,.2);border:1px solid rgba(79,142,247,.4);
+            color:#4f8ef7;border-radius:8px;padding:9px;font-size:13px;cursor:pointer;
+          ">📋 Скопіювати код скрипту</button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button type="button" class="pmm-btn-primary" id="pmm-retry-btn">🔄 Спробувати знову</button>
+          <button type="button" class="pmm-btn-secondary" id="pmm-manual-csv-btn">📄 Вставити CSV вручну</button>
+        </div>
+      </div>
+    `;
+
+    // Build Apps Script code — user must set the sheet URL in settings first;
+    // we extract the doc ID from their configured URL for the template
+    const scriptDocUrl = getPmmCustomUrl() || '';
+    const docIdForScript = (() => {
+      const m = scriptDocUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      return m ? m[1] : 'PASTE_YOUR_SPREADSHEET_ID_HERE';
+    })();
+
+    const APPS_SCRIPT_CODE = `function doGet() {
+  var ss = SpreadsheetApp.openById('${docIdForScript}');
+  var sheet = ss.getSheets()[0];
+  var data = sheet.getDataRange().getValues();
+  var csv = data.map(function(row) {
+    return row.map(function(cell) {
+      var s = String(cell == null ? '' : cell);
+      if (s.indexOf(',') >= 0 || s.indexOf('"') >= 0 || s.indexOf('\\n') >= 0)
+        return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }).join(',');
+  }).join('\\n');
+  return ContentService.createTextOutput(csv)
+    .setMimeType(ContentService.MimeType.TEXT);
+}`;
+
+    document.getElementById('pmm-copy-script-btn')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(APPS_SCRIPT_CODE).then(() => {
+        const btn = document.getElementById('pmm-copy-script-btn');
+        if (btn) { btn.textContent = '✅ Скопійовано!'; setTimeout(() => { btn.textContent = '📋 Скопіювати код скрипту'; }, 2000); }
+      }).catch(() => {
+        prompt('Скопіюй код вручну:', APPS_SCRIPT_CODE);
+      });
+    });
+    document.getElementById('pmm-retry-btn')?.addEventListener('click', () => {
+      localStorage.removeItem(PMM_CACHE_KEY);
+      renderPmmWorkspace();
+    });
+    document.getElementById('pmm-manual-csv-btn')?.addEventListener('click', () => {
+      showPmmManualCsvInput();
+    });
+    return;
+  }
+
+  // Filter units & vehicles
+  const query = pmmSearchQuery.toLowerCase().trim();
+
+  const filteredUnits = data.units.map(unit => {
+    const matchesUnit = unit.name.toLowerCase().includes(query);
+    const matchingVehicles = unit.vehicles.filter(v => {
+      if (pmmActiveFilter === 'low') {
+        const isLow = v.capacity > 0 && (v.inTank / v.capacity) < 0.3;
+        if (!isLow) return false;
+      }
+      if (!query) return true;
+      return matchesUnit || v.mark.toLowerCase().includes(query) || v.model.toLowerCase().includes(query) || v.plate.toLowerCase().includes(query) || (v.fuelType && v.fuelType.toLowerCase().includes(query));
+    });
+
+    return {
+      ...unit,
+      matchingVehicles,
+      hasMatch: matchesUnit || matchingVehicles.length > 0 || (query.includes('склад') && (unit.stock.dt || unit.stock.petrol || unit.stock.foam))
+    };
+  }).filter(u => u.hasMatch);
+
+  const formatLiters = (num) => `${Math.round(num).toLocaleString('uk-UA')} л`;
+
+  container.innerHTML = `
+    <div class="pmm-shell">
+      <!-- Top Control Bar -->
+      <header class="pmm-header">
+        <div class="pmm-title-block">
+          <span class="pmm-eyebrow">Моніторинг пального та резервів</span>
+          <h1 class="pmm-main-title">⛽ Запас та витрата ПММ</h1>
+          <p class="pmm-subtitle">
+            Дані з Google Таблиці · Станом на <strong>${escapeProjectText(data.asOfDate)}</strong>
+            ${data.lastFetchedAt ? `· Оновлено ${new Date(data.lastFetchedAt).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </p>
+        </div>
+        <div class="pmm-header-actions">
+          <button type="button" class="pmm-btn-refresh" id="pmm-sync-btn" title="Оновити з Google Таблиці">
+            <span class="pmm-refresh-icon">🔄</span> Оновити дані
+          </button>
+        </div>
+      </header>
+
+      <!-- KPI Dashboard Grid -->
+      <div class="pmm-kpi-grid">
+        <div class="pmm-kpi-card blue">
+          <div class="pmm-kpi-icon">🛢️</div>
+          <div class="pmm-kpi-content">
+            <div class="pmm-kpi-label">Склад ДТ</div>
+            <div class="pmm-kpi-value">${formatLiters(data.overallStock.dt)}</div>
+            <div class="pmm-kpi-sub">Загальний резерв ДП</div>
+          </div>
+        </div>
+
+        <div class="pmm-kpi-card amber">
+          <div class="pmm-kpi-icon">⛽</div>
+          <div class="pmm-kpi-content">
+            <div class="pmm-kpi-label">Склад Бензин</div>
+            <div class="pmm-kpi-value">${formatLiters(data.overallStock.petrol)}</div>
+            <div class="pmm-kpi-sub">Загальний резерв А-92/95</div>
+          </div>
+        </div>
+
+        <div class="pmm-kpi-card green">
+          <div class="pmm-kpi-icon">🧯</div>
+          <div class="pmm-kpi-content">
+            <div class="pmm-kpi-label">Піноутворювач</div>
+            <div class="pmm-kpi-value">${formatLiters(data.overallStock.foam)}</div>
+            <div class="pmm-kpi-sub">На складах підрозділів</div>
+          </div>
+        </div>
+
+        <div class="pmm-kpi-card purple">
+          <div class="pmm-kpi-icon">🚒</div>
+          <div class="pmm-kpi-content">
+            <div class="pmm-kpi-label">Спецтехніка</div>
+            <div class="pmm-kpi-value">${data.kpi.totalVehicles} <small>од.</small></div>
+            <div class="pmm-kpi-sub">Запас в баках: ${formatLiters(data.kpi.totalTankFuel)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters and Search Controls -->
+      <div class="pmm-toolbar">
+        <div class="pmm-search-wrap">
+          <span class="pmm-search-icon">🔍</span>
+          <input type="text" class="pmm-search-input" id="pmm-search-input" value="${escapeProjectText(pmmSearchQuery)}" placeholder="Пошук підрозділу, авто (марка, держномер)...">
+          ${pmmSearchQuery ? `<button type="button" class="pmm-search-clear" id="pmm-search-clear">✕</button>` : ''}
+        </div>
+        <div class="pmm-filter-group">
+          <button type="button" class="pmm-filter-btn ${pmmActiveFilter === 'all' ? 'active' : ''}" data-pmm-filter="all">Всі підрозділи</button>
+          <button type="button" class="pmm-filter-btn ${pmmActiveFilter === 'low' ? 'active' : ''}" data-pmm-filter="low">
+            ⚠️ Низький запас ${data.kpi.lowFuelCount > 0 ? `<span class="pmm-badge-alert">${data.kpi.lowFuelCount}</span>` : ''}
+          </button>
+        </div>
+      </div>
+
+      <!-- Units Grid -->
+      <div class="pmm-units-grid">
+        ${filteredUnits.length ? filteredUnits.map(unit => {
+          const unitVehicles = pmmActiveFilter === 'low' ? unit.matchingVehicles : unit.vehicles;
+          return `
+            <div class="pmm-unit-card">
+              <div class="pmm-unit-header">
+                <div>
+                  <span class="pmm-unit-tag">Підрозділ</span>
+                  <h3 class="pmm-unit-title">${escapeProjectText(unit.name)}</h3>
+                </div>
+                <div class="pmm-unit-stock-pills">
+                  <span class="pmm-pill dt" title="Запас ДТ на складі">🛢️ ДТ: ${unit.stock.dt} л</span>
+                  <span class="pmm-pill petrol" title="Запас Бензину на складі">⛽ Б: ${unit.stock.petrol} л</span>
+                  ${unit.stock.foam ? `<span class="pmm-pill foam" title="Запас піноутворювача">🧯 П: ${unit.stock.foam} л</span>` : ''}
+                </div>
+              </div>
+
+              <!-- Vehicles Table / Cards -->
+              <div class="pmm-vehicles-list">
+                ${unitVehicles.length ? unitVehicles.map(v => {
+                  const fillPct = v.capacity > 0 ? Math.min(100, Math.round((v.inTank / v.capacity) * 100)) : (v.inTank > 0 ? 100 : 0);
+                  let fillStatus = 'good';
+                  if (fillPct < 30) fillStatus = 'low';
+                  else if (fillPct < 60) fillStatus = 'warn';
+
+                  return `
+                    <div class="pmm-vehicle-row ${fillStatus === 'low' ? 'is-low' : ''}">
+                      <div class="pmm-vehicle-info">
+                        <div class="pmm-vehicle-name">${escapeProjectText(v.mark)}</div>
+                        <div class="pmm-vehicle-sub">
+                          ${v.model ? `<span class="pmm-v-tag">${escapeProjectText(v.model)}</span>` : ''}
+                          ${v.plate ? `<span class="pmm-v-plate">${escapeProjectText(v.plate)}</span>` : ''}
+                          <span class="pmm-v-fueltype">${v.fuelType ? v.fuelType.toUpperCase() : ''}</span>
+                        </div>
+                      </div>
+
+                      <div class="pmm-vehicle-tank">
+                        <div class="pmm-tank-header">
+                          <span class="pmm-tank-text">
+                            <strong>${v.inTank} л</strong> ${v.capacity ? `/ ${v.capacity} л` : ''}
+                            ${v.consumption ? `<small class="pmm-consumption">(витрата ${v.consumption}л)</small>` : ''}
+                          </span>
+                          <span class="pmm-tank-pct ${fillStatus}">${v.capacity ? `${fillPct}%` : ''}</span>
+                        </div>
+                        ${v.capacity ? `
+                          <div class="pmm-tank-bar-track">
+                            <div class="pmm-tank-bar-fill ${fillStatus}" style="width: ${fillPct}%"></div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    </div>
+                  `;
+                }).join('') : '<div class="pmm-no-vehicles">Немає авто за обраними критеріями.</div>'}
+              </div>
+
+              ${unit.generators && unit.generators.length ? `
+                <div class="pmm-generators-section">
+                  <div class="pmm-gen-title">⚡ Генератори та агрегати:</div>
+                  <div class="pmm-gen-tags">
+                    ${unit.generators.map(g => `
+                      <span class="pmm-gen-tag">
+                        ${escapeProjectText(g.name)}: <strong>${g.inTank} л</strong> (${g.fuelType})
+                      </span>
+                    `).join('')}
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('') : '<div class="pmm-empty-search">За вашим запитом нічого не знайдено.</div>'}
+      </div>
+    </div>
+  `;
+
+  // Attach event listeners
+  const syncBtn = container.querySelector('#pmm-sync-btn');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      syncBtn.disabled = true;
+      syncBtn.innerHTML = `<span class="pmm-refresh-icon spinning">🔄</span> Оновлюємо…`;
+      await fetchPmmData();
+      renderPmmWorkspace();
+    });
+  }
+
+  const searchInput = container.querySelector('#pmm-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      pmmSearchQuery = e.target.value;
+      renderPmmWorkspace();
+      const updatedInput = container.querySelector('#pmm-search-input');
+      if (updatedInput) {
+        updatedInput.focus();
+        updatedInput.setSelectionRange(pmmSearchQuery.length, pmmSearchQuery.length);
+      }
+    });
+  }
+
+  const searchClear = container.querySelector('#pmm-search-clear');
+  if (searchClear) {
+    searchClear.addEventListener('click', () => {
+      pmmSearchQuery = '';
+      renderPmmWorkspace();
+    });
+  }
+
+  container.querySelectorAll('[data-pmm-filter]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pmmActiveFilter = btn.dataset.pmmFilter;
+      renderPmmWorkspace();
+    });
+  });
+
+  // Background fetch silently if cache is older than 5 minutes
+  if (data && data.lastFetchedAt) {
+    const ageMs = Date.now() - new Date(data.lastFetchedAt).getTime();
+    if (ageMs > 5 * 60 * 1000) {
+      fetchPmmData().then(freshData => {
+        if (freshData && activeAppMode === 'pmm') {
+          renderPmmWorkspace();
+        }
+      });
+    }
+  }
+}
+

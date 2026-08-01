@@ -5,20 +5,20 @@
   "start_url": ".",
   "id": "/",
   "display": "standalone",
-  "background_color": "#060910",
-  "theme_color": "#4F46E5",
+  "background_color": "#F6F4EF",
+  "theme_color": "#20213A",
   "orientation": "portrait-primary",
   "categories": ["productivity", "business"],
   "lang": "uk",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%22100%22 y2=%22100%22><stop offset=%220%22 stop-color=%22%234F46E5%22/><stop offset=%220.55%22 stop-color=%22%237C3AED%22/><stop offset=%221%22 stop-color=%22%2306B6D4%22/></linearGradient></defs><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22url(%23g)%22/><text x=%2250%22 y=%22.65em%22 text-anchor=%22middle%22 font-size=%2252%22>📋</text></svg>",
+      "src": "logo-mark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><defs><linearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%22100%22 y2=%22100%22><stop offset=%220%22 stop-color=%22%234F46E5%22/><stop offset=%220.55%22 stop-color=%22%237C3AED%22/><stop offset=%221%22 stop-color=%22%2306B6D4%22/></linearGradient></defs><rect width=%22100%22 height=%22100%22 fill=%22url(%23g)%22/><text x=%2250%22 y=%22.65em%22 text-anchor=%22middle%22 font-size=%2260%22>📋</text></svg>",
+      "src": "logo-mark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"
