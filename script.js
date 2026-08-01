@@ -767,6 +767,16 @@ async function driveApiFetch(url, options = {}) {
       ...(options.headers || {})
     }
   });
+
+  if (resp && resp.status === 401) {
+    console.warn('[Drive] 401 Unauthorized — Token expired or invalid');
+    const statusEl = document.getElementById('drive-status');
+    if (statusEl) {
+      statusEl.innerHTML = '⚠️ Потрібно оновити вхід Google';
+      statusEl.style.color = 'var(--red)';
+    }
+  }
+
   return resp;
 }
 
@@ -774,13 +784,25 @@ async function findDriveFile() {
   const q = `name='${DRIVE_FILE_NAME}' and trashed=false`;
   console.log('[Drive] Searching for file:', DRIVE_FILE_NAME);
   const resp = await driveApiFetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime)`
   );
   if (!resp) { console.log('[Drive] No response from API'); return null; }
-  if (!resp.ok) { console.error('[Drive] API error:', resp.status, await resp.text()); return null; }
+  if (!resp.ok) { console.error('[Drive] API error:', resp.status); return null; }
   const data = await resp.json();
-  console.log('[Drive] Found files:', data.files ? data.files.length : 0);
-  return data.files && data.files.length > 0 ? data.files[0] : null;
+  const files = data.files || [];
+  console.log('[Drive] Found files:', files.length);
+
+  if (files.length === 0) return null;
+
+  // Видаляємо дублікати якщо вони випадково виникли
+  if (files.length > 1) {
+    console.warn('[Drive] Cleaning up duplicate files count:', files.length);
+    for (let i = 1; i < files.length; i++) {
+      driveApiFetch(`https://www.googleapis.com/drive/v3/files/${files[i].id}`, { method: 'DELETE' }).catch(() => {});
+    }
+  }
+
+  return files[0];
 }
 
 async function saveToDrive() {
