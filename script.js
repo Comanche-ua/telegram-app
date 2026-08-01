@@ -1045,8 +1045,12 @@ async function loadFromDrive() {
 
       // Перемальовуємо UI
       const items = getActiveItems();
-      if (items.length) startTimers();
-      else renderEmpty();
+      if (items.length) {
+        renderCards();
+        startTimers();
+      } else {
+        renderEmpty();
+      }
       renderTabBar();
       renderAssigneeChips();
       populateDatalist();
@@ -1828,6 +1832,7 @@ async function parseWithGemini() {
 
     targetWs.items.sort(sortItemsByDeadline);
     saveWorkspaces();
+    saveToDrive(); // Негайне відправлення нових завдань у хмару
     setStatus(`Додано ${addedCount} нових завдань у "${targetWs.name}".`);
     renderTabBar();
 
@@ -2996,6 +3001,7 @@ function quickAddTask() {
   if (assignee) addAssigneeToDB(assignee);
 
   saveWorkspaces();
+  saveToDrive(); // Негайне відправлення нового завдання в хмару
 
   // Очистити форму швидкого додавання
   document.getElementById('quick-task-text').value = '';
