@@ -3605,7 +3605,34 @@ function saveProjectsData(data) {
   }
 }
 
-// ---- Проста галерея для перегляду фото на весь екран ----
+// ---- Проста галерея з підтримкою наближення колесиком та пальцями (pinch-zoom) ----
+let galleryZoomState = {
+  scale: 1,
+  translateX: 0,
+  translateY: 0,
+  isDragging: false,
+  startX: 0,
+  startY: 0
+};
+
+function updateGalleryImageTransform() {
+  const img = document.getElementById('photo-gallery-img');
+  if (!img) return;
+  galleryZoomState.scale = Math.min(Math.max(galleryZoomState.scale, 1), 5);
+  if (galleryZoomState.scale === 1) {
+    galleryZoomState.translateX = 0;
+    galleryZoomState.translateY = 0;
+  }
+  img.style.transform = `translate(${galleryZoomState.translateX}px, ${galleryZoomState.translateY}px) scale(${galleryZoomState.scale})`;
+}
+
+function resetGalleryZoom() {
+  galleryZoomState.scale = 1;
+  galleryZoomState.translateX = 0;
+  galleryZoomState.translateY = 0;
+  updateGalleryImageTransform();
+}
+
 function showPhotoGallery(src) {
   if (!src) return;
   let overlay = document.getElementById('photo-gallery-overlay');
@@ -3619,6 +3646,8 @@ function showPhotoGallery(src) {
     `;
     document.body.appendChild(overlay);
 
+    const img = overlay.querySelector('#photo-gallery-img');
+
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay || e.target.classList.contains('photo-gallery-close')) {
         closePhotoGallery();
@@ -3630,10 +3659,91 @@ function showPhotoGallery(src) {
         closePhotoGallery();
       }
     });
+
+    // 1. Колесико миші на ПК
+    overlay.addEventListener('wheel', (e) => {
+      if (!overlay.classList.contains('active')) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 1.2 : 0.8;
+      galleryZoomState.scale *= delta;
+      updateGalleryImageTransform();
+    }, { passive: false });
+
+    // 2. Подвійний клік / тапом (1x <-> 2.5x)
+    img.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      if (galleryZoomState.scale > 1.2) {
+        resetGalleryZoom();
+      } else {
+        galleryZoomState.scale = 2.5;
+        updateGalleryImageTransform();
+      }
+    });
+
+    // 3. Перетягування мишкою при наближенні
+    img.addEventListener('mousedown', (e) => {
+      if (galleryZoomState.scale <= 1 || e.button !== 0) return;
+      e.preventDefault();
+      galleryZoomState.isDragging = true;
+      galleryZoomState.startX = e.clientX - galleryZoomState.translateX;
+      galleryZoomState.startY = e.clientY - galleryZoomState.translateY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!galleryZoomState.isDragging || !overlay.classList.contains('active')) return;
+      galleryZoomState.translateX = e.clientX - galleryZoomState.startX;
+      galleryZoomState.translateY = e.clientY - galleryZoomState.startY;
+      updateGalleryImageTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      galleryZoomState.isDragging = false;
+    });
+
+    // 4. Pinch-to-zoom (2 пальці на телефоні) & Drag (1 палець)
+    let initialPinchDist = 0;
+    let initialScale = 1;
+
+    overlay.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        initialPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        initialScale = galleryZoomState.scale;
+      } else if (e.touches.length === 1 && galleryZoomState.scale > 1) {
+        galleryZoomState.isDragging = true;
+        galleryZoomState.startX = e.touches[0].clientX - galleryZoomState.translateX;
+        galleryZoomState.startY = e.touches[0].clientY - galleryZoomState.translateY;
+      }
+    }, { passive: true });
+
+    overlay.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && initialPinchDist > 0) {
+        e.preventDefault();
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        galleryZoomState.scale = initialScale * (dist / initialPinchDist);
+        updateGalleryImageTransform();
+      } else if (e.touches.length === 1 && galleryZoomState.isDragging) {
+        e.preventDefault();
+        galleryZoomState.translateX = e.touches[0].clientX - galleryZoomState.startX;
+        galleryZoomState.translateY = e.touches[0].clientY - galleryZoomState.startY;
+        updateGalleryImageTransform();
+      }
+    }, { passive: false });
+
+    overlay.addEventListener('touchend', () => {
+      initialPinchDist = 0;
+      galleryZoomState.isDragging = false;
+    });
   }
 
-  const img = overlay.querySelector('#photo-gallery-img');
-  if (img) img.src = src;
+  const imgEl = overlay.querySelector('#photo-gallery-img');
+  if (imgEl) imgEl.src = src;
+  resetGalleryZoom();
   overlay.classList.add('active');
   document.body.style.overflow = 'hidden';
 }
@@ -3643,6 +3753,7 @@ function closePhotoGallery() {
   if (overlay) {
     overlay.classList.remove('active');
     document.body.style.overflow = '';
+    resetGalleryZoom();
   }
 }
 

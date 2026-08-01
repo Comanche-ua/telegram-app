@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.5-simple-photo-gallery';
+const CACHE_NAME = 'deadline-tracker-v5.6-gallery-pinch-wheel-zoom';
 const ASSETS = [
   './',
   './index.html',
