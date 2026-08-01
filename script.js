@@ -318,6 +318,40 @@ function markWorkspaceAsDeleted(id) {
   saveDeletedWorkspaces(map);
 }
 
+// ---- Tombstones для проєктів та кроків ----
+const DELETED_PROJECTS_KEY = 'deadline_tracker_deleted_projects';
+const DELETED_ENTRIES_KEY = 'deadline_tracker_deleted_entries';
+
+function getDeletedProjects() {
+  try { return JSON.parse(localStorage.getItem(DELETED_PROJECTS_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+function saveDeletedProjects(map) {
+  localStorage.setItem(DELETED_PROJECTS_KEY, JSON.stringify(map));
+}
+
+function getDeletedProjectEntries() {
+  try { return JSON.parse(localStorage.getItem(DELETED_ENTRIES_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+function saveDeletedProjectEntries(map) {
+  localStorage.setItem(DELETED_ENTRIES_KEY, JSON.stringify(map));
+}
+
+function markProjectAsDeleted(id) {
+  if (!id) return;
+  const map = getDeletedProjects();
+  map[id] = Date.now();
+  saveDeletedProjects(map);
+}
+
+function markProjectEntryAsDeleted(id) {
+  if (!id) return;
+  const map = getDeletedProjectEntries();
+  map[id] = Date.now();
+  saveDeletedProjectEntries(map);
+}
+
 function deleteWorkspace(id) {
   if (id === ALL_WORKSPACE_ID) return false;
   const ws = workspaces[id];
@@ -864,6 +898,8 @@ async function saveToDrive() {
       projectsData: loadProjectsData(),
       deletedKeys: getDeletedKeys(),
       deletedWorkspaces: getDeletedWorkspaces(),
+      deletedProjects: getDeletedProjects(),
+      deletedEntries: getDeletedProjectEntries(),
       savedAt: new Date().toISOString(),
       savedBy: currentUser.email
     }, null, 2);
@@ -1077,40 +1113,75 @@ async function loadFromDrive() {
       try { renderTopSites('top-sites', true); } catch(e) {}
       try { renderTopSites('lock-top-sites', false); } catch(e) {}
 
-      // Зливаємо дані проєктів (ланцюжки + фото)
-      if (cloudData.projectsData && Array.isArray(cloudData.projectsData.projects)) {
-        const localProjects = loadProjectsData();
-        const localIds = new Set(localProjects.projects.map(p => p.id));
-        let projectsChanged = false;
+      // Зливаємо реєстр видалень проєктів та кроків
+      if (cloudData.deletedProjects) {
+        const localDelPrj = getDeletedProjects();
+        Object.assign(localDelPrj, cloudData.deletedProjects);
+        saveDeletedProjects(localDelPrj);
+      }
+      if (cloudData.deletedEntries) {
+        const localDelEnt = getDeletedProjectEntries();
+        Object.assign(localDelEnt, cloudData.deletedEntries);
+        saveDeletedProjectEntries(localDelEnt);
+      }
 
-        // Додаємо проєкти з хмари яких немає локально
+      const deletedProjectsMap = getDeletedProjects();
+      const deletedEntriesMap = getDeletedProjectEntries();
+
+      // Застосовуємо видалення локально
+      let localProjects = loadProjectsData();
+      let prjDataChanged = false;
+
+      const origPrjCount = localProjects.projects.length;
+      localProjects.projects = localProjects.projects.filter(p => !deletedProjectsMap[p.id]);
+      if (localProjects.projects.length !== origPrjCount) {
+        prjDataChanged = true;
+        dataChanged = true;
+      }
+
+      localProjects.projects.forEach(p => {
+        if (Array.isArray(p.entries)) {
+          const origEntCount = p.entries.length;
+          p.entries = p.entries.filter(e => !deletedEntriesMap[e.id]);
+          if (p.entries.length !== origEntCount) {
+            prjDataChanged = true;
+            dataChanged = true;
+          }
+        }
+      });
+
+      // Зливаємо з хмарними проєктами
+      if (cloudData.projectsData && Array.isArray(cloudData.projectsData.projects)) {
+        const localIds = new Set(localProjects.projects.map(p => p.id));
+
         cloudData.projectsData.projects.forEach(cp => {
+          if (deletedProjectsMap[cp.id]) return; // Пропускаємо видалений проєкт
+
           if (!localIds.has(cp.id)) {
+            cp.entries = (cp.entries || []).filter(e => !deletedEntriesMap[e.id]);
             localProjects.projects.push(cp);
-            projectsChanged = true;
+            prjDataChanged = true;
             dataChanged = true;
           } else {
-            // Мержимо записи (entries) всередині проєкту
             const lp = localProjects.projects.find(p => p.id === cp.id);
             if (lp) {
               const localEntryIds = new Set((lp.entries || []).map(e => e.id));
               (cp.entries || []).forEach(ce => {
-                if (!localEntryIds.has(ce.id)) {
+                if (!deletedEntriesMap[ce.id] && !localEntryIds.has(ce.id)) {
                   lp.entries = lp.entries || [];
                   lp.entries.push(ce);
-                  projectsChanged = true;
+                  prjDataChanged = true;
                   dataChanged = true;
                 }
               });
             }
           }
         });
+      }
 
-        if (projectsChanged) {
-          saveProjectsData(localProjects);
-          // Перемальовуємо проєкти якщо відкриті
-          try { renderProjectsWorkspace(); } catch(e) {}
-        }
+      if (prjDataChanged) {
+        saveProjectsData(localProjects);
+        try { renderProjectsWorkspace(); } catch(e) {}
       }
     }
   } catch(e) {
@@ -3694,7 +3765,7 @@ function renderProjectsWorkspace() {
                 </button>
               </div>
             </div>
-            ${entry.imageData ? `<div class="project-entry-image-wrapper" data-zoom-src="${escapeProjectText(entry.imageData)}"><img class="project-entry-image" src="${escapeProjectText(entry.imageData)}" alt="${escapeProjectText(entry.text || 'Фото кроку проєкту')}" loading="lazy"></div>` : ''}
+            ${entry.imageData ? `<a class="project-entry-image-wrapper" href="${escapeProjectText(entry.imageData)}" target="_blank" rel="noopener" title="Відкрити фото"><img class="project-entry-image" src="${escapeProjectText(entry.imageData)}" alt="${escapeProjectText(entry.text || 'Фото кроку проєкту')}" loading="lazy"></a>` : ''}
             <div class="project-entry-body" id="entry-body-${escapeProjectText(entry.id)}">
               ${entry.text ? `<p class="project-entry-text">${escapeProjectText(entry.text)}</p>` : ''}
             </div>
@@ -3779,6 +3850,7 @@ function renderProjectsWorkspace() {
     `;
     container.querySelector('#btn-confirm-delete-project')?.addEventListener('click', () => {
       const next = loadProjectsData();
+      markProjectAsDeleted(active.id);
       next.projects = next.projects.filter(p => p.id !== active.id);
       next.activeProjectId = next.projects[0]?.id || null;
       saveProjectsData(next);
@@ -3843,6 +3915,7 @@ function renderProjectsWorkspace() {
       const dataStore = loadProjectsData();
       const prj = dataStore.projects.find(item => item.id === active.id);
       if (prj) {
+        markProjectEntryAsDeleted(entryId);
         prj.entries = prj.entries.filter(e => e.id !== entryId);
         saveProjectsData(dataStore);
       }
@@ -3909,188 +3982,7 @@ function initProjectsWorkspace() {
   });
 }
 
-// ---- Full Interactive Image Lightbox & Zoom Viewer ----
-let lightboxState = {
-  scale: 1,
-  translateX: 0,
-  translateY: 0,
-  isDragging: false,
-  startX: 0,
-  startY: 0
-};
 
-function openLightbox(imageSrc) {
-  const modal = document.getElementById('imageLightboxModal');
-  const img = document.getElementById('lightbox-img');
-  if (!modal || !img) return;
-
-  img.src = imageSrc;
-  lightboxResetZoom();
-  modal.classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
-
-function closeLightbox() {
-  const modal = document.getElementById('imageLightboxModal');
-  const img = document.getElementById('lightbox-img');
-  if (!modal) return;
-
-  modal.classList.remove('active');
-  document.body.style.overflow = '';
-  setTimeout(() => {
-    if (img) img.src = '';
-  }, 250);
-}
-
-function updateLightboxTransform() {
-  const img = document.getElementById('lightbox-img');
-  const info = document.getElementById('lightbox-zoom-val');
-  if (!img) return;
-
-  lightboxState.scale = Math.min(Math.max(lightboxState.scale, 0.5), 6);
-
-  if (lightboxState.scale <= 1) {
-    lightboxState.translateX = 0;
-    lightboxState.translateY = 0;
-  }
-
-  img.style.transform = `translate(${lightboxState.translateX}px, ${lightboxState.translateY}px) scale(${lightboxState.scale})`;
-  if (info) info.textContent = `${Math.round(lightboxState.scale * 100)}%`;
-}
-
-function lightboxResetZoom() {
-  lightboxState.scale = 1;
-  lightboxState.translateX = 0;
-  lightboxState.translateY = 0;
-  updateLightboxTransform();
-}
-
-function initImageLightbox() {
-  const modal = document.getElementById('imageLightboxModal');
-  const stage = document.getElementById('lightbox-stage');
-  const img = document.getElementById('lightbox-img');
-  const zoomInBtn = document.getElementById('lightbox-zoom-in');
-  const zoomOutBtn = document.getElementById('lightbox-zoom-out');
-  const zoomResetBtn = document.getElementById('lightbox-zoom-reset');
-  const closeBtn = document.getElementById('lightbox-close');
-
-  if (!modal || !stage || !img) return;
-
-  // Global delegation for opening lightbox on photo click
-  document.addEventListener('click', (e) => {
-    const wrapper = e.target.closest('[data-zoom-src], .project-entry-image-wrapper');
-    if (wrapper) {
-      const src = wrapper.dataset.zoomSrc || wrapper.querySelector('img')?.getAttribute('src');
-      if (src) {
-        e.preventDefault();
-        openLightbox(src);
-      }
-    }
-  });
-
-  closeBtn?.addEventListener('click', closeLightbox);
-  zoomInBtn?.addEventListener('click', () => {
-    lightboxState.scale = Math.min(lightboxState.scale + 0.35, 6);
-    updateLightboxTransform();
-  });
-  zoomOutBtn?.addEventListener('click', () => {
-    lightboxState.scale = Math.max(lightboxState.scale - 0.35, 0.5);
-    updateLightboxTransform();
-  });
-  zoomResetBtn?.addEventListener('click', lightboxResetZoom);
-
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal || e.target === stage) {
-      closeLightbox();
-    }
-  });
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal.classList.contains('active')) {
-      closeLightbox();
-    }
-  });
-
-  stage.addEventListener('wheel', (e) => {
-    if (!modal.classList.contains('active')) return;
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-    lightboxState.scale *= zoomFactor;
-    updateLightboxTransform();
-  }, { passive: false });
-
-  stage.addEventListener('dblclick', (e) => {
-    if (e.target.closest('.lightbox-toolbar')) return;
-    e.preventDefault();
-    if (lightboxState.scale > 1.2) {
-      lightboxResetZoom();
-    } else {
-      lightboxState.scale = 2.5;
-      updateLightboxTransform();
-    }
-  });
-
-  stage.addEventListener('mousedown', (e) => {
-    if (lightboxState.scale <= 1 || e.button !== 0) return;
-    lightboxState.isDragging = true;
-    lightboxState.startX = e.clientX - lightboxState.translateX;
-    lightboxState.startY = e.clientY - lightboxState.translateY;
-    stage.classList.add('is-dragging');
-  });
-
-  window.addEventListener('mousemove', (e) => {
-    if (!lightboxState.isDragging) return;
-    lightboxState.translateX = e.clientX - lightboxState.startX;
-    lightboxState.translateY = e.clientY - lightboxState.startY;
-    updateLightboxTransform();
-  });
-
-  window.addEventListener('mouseup', () => {
-    if (lightboxState.isDragging) {
-      lightboxState.isDragging = false;
-      stage.classList.remove('is-dragging');
-    }
-  });
-
-  let initialPinchDist = 0;
-  let initialPinchScale = 1;
-
-  stage.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) {
-      initialPinchDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      initialPinchScale = lightboxState.scale;
-    } else if (e.touches.length === 1 && lightboxState.scale > 1) {
-      lightboxState.isDragging = true;
-      lightboxState.startX = e.touches[0].clientX - lightboxState.translateX;
-      lightboxState.startY = e.touches[0].clientY - lightboxState.translateY;
-    }
-  }, { passive: true });
-
-  stage.addEventListener('touchmove', (e) => {
-    if (e.touches.length === 2 && initialPinchDist > 0) {
-      e.preventDefault();
-      const currentDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      lightboxState.scale = initialPinchScale * (currentDist / initialPinchDist);
-      updateLightboxTransform();
-    } else if (e.touches.length === 1 && lightboxState.isDragging) {
-      e.preventDefault();
-      lightboxState.translateX = e.touches[0].clientX - lightboxState.startX;
-      lightboxState.translateY = e.touches[0].clientY - lightboxState.startY;
-      updateLightboxTransform();
-    }
-  }, { passive: false });
-
-  stage.addEventListener('touchend', () => {
-    initialPinchDist = 0;
-    lightboxState.isDragging = false;
-  });
-}
 
 function renderOpsWorkspace() {
   const root = document.getElementById('ops-workspace');
@@ -4559,7 +4451,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initSettings();
   initSettingsNav();
   initProjectsWorkspace();
-  initImageLightbox();
   initOpsWorkspace();
   initVoiceInput();
   populateDatalist();
