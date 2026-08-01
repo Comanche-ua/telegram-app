@@ -861,6 +861,7 @@ async function saveToDrive() {
       workspaceOrder: workspaceOrder,
       assignees: loadAssigneeDB(),
       topSites: customTopSites,
+      projectsData: loadProjectsData(),
       deletedKeys: getDeletedKeys(),
       deletedWorkspaces: getDeletedWorkspaces(),
       savedAt: new Date().toISOString(),
@@ -1075,6 +1076,42 @@ async function loadFromDrive() {
       // Перемальовуємо посилання на обох блоках
       try { renderTopSites('top-sites', true); } catch(e) {}
       try { renderTopSites('lock-top-sites', false); } catch(e) {}
+
+      // Зливаємо дані проєктів (ланцюжки + фото)
+      if (cloudData.projectsData && Array.isArray(cloudData.projectsData.projects)) {
+        const localProjects = loadProjectsData();
+        const localIds = new Set(localProjects.projects.map(p => p.id));
+        let projectsChanged = false;
+
+        // Додаємо проєкти з хмари яких немає локально
+        cloudData.projectsData.projects.forEach(cp => {
+          if (!localIds.has(cp.id)) {
+            localProjects.projects.push(cp);
+            projectsChanged = true;
+            dataChanged = true;
+          } else {
+            // Мержимо записи (entries) всередині проєкту
+            const lp = localProjects.projects.find(p => p.id === cp.id);
+            if (lp) {
+              const localEntryIds = new Set((lp.entries || []).map(e => e.id));
+              (cp.entries || []).forEach(ce => {
+                if (!localEntryIds.has(ce.id)) {
+                  lp.entries = lp.entries || [];
+                  lp.entries.push(ce);
+                  projectsChanged = true;
+                  dataChanged = true;
+                }
+              });
+            }
+          }
+        });
+
+        if (projectsChanged) {
+          saveProjectsData(localProjects);
+          // Перемальовуємо проєкти якщо відкриті
+          try { renderProjectsWorkspace(); } catch(e) {}
+        }
+      }
     }
   } catch(e) {
     console.error('[Drive] Помилка завантаження:', e);
@@ -3491,6 +3528,10 @@ function loadProjectsData() {
 
 function saveProjectsData(data) {
   localStorage.setItem(PROJECTS_DATA_KEY, JSON.stringify(data));
+  // Миттєва синхронізація проєктів (з фото) в Google Drive
+  if (typeof saveToDrive === 'function' && currentUser) {
+    saveToDrive();
+  }
 }
 
 function createProjectId() {
