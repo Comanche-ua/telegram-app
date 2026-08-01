@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v4.5-calendar-fit';
+const CACHE_NAME = 'deadline-tracker-v4.6-smart-drive-sync';
 const ASSETS = [
   './',
   './index.html',

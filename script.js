@@ -407,7 +407,7 @@ function syncToDriveDebounced() {
       await saveToDrive();
       showSyncIndicator(false);
     }
-  }, 10000);
+  }, 2000);
 }
 
 function showSyncIndicator(show) {
@@ -848,48 +848,105 @@ async function loadFromDrive() {
   try {
     const existing = await findDriveFile();
     if (!existing) {
-      console.log('[Drive] Файл не знайдено в Drive, використовуємо локальні дані');
+      console.log('[Drive] Файл не знайдено в Drive, створюємо з локальних даних...');
+      await saveToDrive();
+      showSyncIndicator(false);
       return;
     }
 
     const resp = await driveApiFetch(
       `https://www.googleapis.com/drive/v3/files/${existing.id}?alt=media`
     );
-    if (!resp || !resp.ok) return;
+    if (!resp || !resp.ok) {
+      showSyncIndicator(false);
+      return;
+    }
 
     const cloudData = await resp.json();
 
-    // Завантажуємо workspaces з хмари
     if (cloudData.workspaces && typeof cloudData.workspaces === 'object') {
-      const cloudTime = new Date(cloudData.savedAt).getTime();
-      const localTime = workspaceOrder.length > 0 ? Date.now() : 0;
+      let dataChanged = false;
 
-      if (cloudTime > localTime || workspaceOrder.length === 0) {
-        workspaces = cloudData.workspaces;
-        workspaceOrder = cloudData.workspaceOrder || Object.keys(workspaces);
-        // Фільтруємо неіснуючі
-        workspaceOrder = workspaceOrder.filter(wid => workspaces[wid]);
-        saveWorkspaces();
-        console.log('[Drive] Завантажено з Drive:', workspaceOrder.length, 'вкладок');
-      } else {
-        console.log('[Drive] Локальні дані новіші, синхронізуємо в Drive');
-        await saveToDrive();
+      // 1. Об'єднуємо всі вкладки та завдання (розумне злиття хмари та локалу)
+      const allWsKeys = new Set([...Object.keys(workspaces), ...Object.keys(cloudData.workspaces)]);
+
+      allWsKeys.forEach(wsKey => {
+        const localWs = workspaces[wsKey];
+        const cloudWs = cloudData.workspaces[wsKey];
+
+        if (!localWs && cloudWs) {
+          workspaces[wsKey] = cloudWs;
+          dataChanged = true;
+        } else if (localWs && cloudWs) {
+          // Зливаємо масиви завдань без дублікатів
+          const itemMap = new Map();
+
+          // Локальні завдання
+          (localWs.items || []).forEach(it => {
+            const itemKey = `${(it.text || '').trim()}_${it.created || ''}_${it.deadline || ''}`;
+            itemMap.set(itemKey, { ...it });
+          });
+
+          // Завдання з хмари
+          (cloudWs.items || []).forEach(cItem => {
+            const itemKey = `${(cItem.text || '').trim()}_${cItem.created || ''}_${cItem.deadline || ''}`;
+            if (!itemMap.has(itemKey)) {
+              itemMap.set(itemKey, { ...cItem });
+              dataChanged = true;
+            } else {
+              // Якщо задача є і там і там — оновлюємо статус виконання та додаткові поля
+              const existing = itemMap.get(itemKey);
+              if (cItem.done && !existing.done) {
+                existing.done = true;
+                dataChanged = true;
+              }
+              if (cItem.assignee && !existing.assignee) {
+                existing.assignee = cItem.assignee;
+                dataChanged = true;
+              }
+            }
+          });
+
+          localWs.items = Array.from(itemMap.values());
+        }
+      });
+
+      // 2. Зливаємо workspaceOrder
+      if (Array.isArray(cloudData.workspaceOrder)) {
+        cloudData.workspaceOrder.forEach(wid => {
+          if (workspaces[wid] && !workspaceOrder.includes(wid)) {
+            workspaceOrder.push(wid);
+            dataChanged = true;
+          }
+        });
       }
+      workspaceOrder = workspaceOrder.filter(wid => workspaces[wid]);
 
-      // Завантажуємо базу виконавців
+      // Зберігаємо об'єднані дані локально
+      localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
+      localStorage.setItem(WORKSPACE_ORDER_KEY, JSON.stringify(workspaceOrder));
+
+      // 3. Зливаємо базу виконавців
       if (cloudData.assignees && Array.isArray(cloudData.assignees)) {
         const localDB = loadAssigneeDB();
         const merged = [...new Set([...localDB, ...cloudData.assignees])].sort((a, b) => a.localeCompare(b, 'uk'));
         saveAssigneeDB(merged);
       }
 
-      // Перемальовуємо UI
+      // Якщо відбулися зміни (наприклад додали з іншого пристрою), оновлюємо хмару об'єднаним результатом
+      if (dataChanged) {
+        console.log('[Drive] Злиття завершено, оновлюємо хмару злитими даними');
+        await saveToDrive();
+      }
+
+      // Оновлюємо інтерфейс
       const items = getActiveItems();
       if (items.length) startTimers();
       else renderEmpty();
       renderTabBar();
       renderAssigneeChips();
       populateDatalist();
+      updateCalendarVisibility();
     }
   } catch(e) {
     console.error('[Drive] Помилка завантаження:', e);
@@ -4105,6 +4162,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initVoiceInput();
   populateDatalist();
   loadFromLocal();
+
+  // Автоматична двостороння синхронізація з Google Drive
+  window.addEventListener('focus', () => {
+    if (currentUser) loadFromDrive();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && currentUser) loadFromDrive();
+  });
+  setInterval(() => {
+    if (currentUser) loadFromDrive();
+  }, 15000);
 
   try { initTopSites(); } catch (e) { console.warn('TopSites unavailable:', e); }
 
