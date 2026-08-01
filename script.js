@@ -1034,8 +1034,18 @@ async function loadFromDrive() {
             } else {
               const existing = itemMap.get(itemKey);
               if (cItem.done !== existing.done) {
-                existing.done = cItem.done;
-                dataChanged = true;
+                // Last-write-wins: compare completedAt timestamps
+                const cloudTime = cItem.completedAt ? new Date(cItem.completedAt).getTime() : 0;
+                const localTime = existing.completedAt ? new Date(existing.completedAt).getTime() : 0;
+                if (cloudTime > localTime) {
+                  // Cloud version is newer — take it
+                  existing.done = cItem.done;
+                  existing.completedAt = cItem.completedAt;
+                  dataChanged = true;
+                } else {
+                  // Local version is newer — push it to cloud
+                  dataChanged = true;
+                }
               }
             }
           });
@@ -1166,12 +1176,32 @@ async function loadFromDrive() {
             const lp = localProjects.projects.find(p => p.id === cp.id);
             if (lp) {
               const localEntryIds = new Set((lp.entries || []).map(e => e.id));
+              const localEntryMap = new Map((lp.entries || []).map(e => [e.id, e]));
               (cp.entries || []).forEach(ce => {
-                if (!deletedEntriesMap[ce.id] && !localEntryIds.has(ce.id)) {
-                  lp.entries = lp.entries || [];
-                  lp.entries.push(ce);
-                  prjDataChanged = true;
-                  dataChanged = true;
+                if (!deletedEntriesMap[ce.id]) {
+                  if (!localEntryIds.has(ce.id)) {
+                    // New entry from cloud — add it
+                    lp.entries = lp.entries || [];
+                    lp.entries.push(ce);
+                    prjDataChanged = true;
+                    dataChanged = true;
+                  } else {
+                    // Entry exists on both — sync done state via last-write-wins
+                    const le = localEntryMap.get(ce.id);
+                    if (le && ce.done !== le.done) {
+                      const cloudTime = ce.completedAt ? new Date(ce.completedAt).getTime() : 0;
+                      const localTime = le.completedAt ? new Date(le.completedAt).getTime() : 0;
+                      if (cloudTime > localTime) {
+                        le.done = ce.done;
+                        le.completedAt = ce.completedAt;
+                        prjDataChanged = true;
+                        dataChanged = true;
+                      } else {
+                        prjDataChanged = true;
+                        dataChanged = true;
+                      }
+                    }
+                  }
                 }
               });
             }
@@ -2661,7 +2691,26 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const dateSpan = document.createElement('span');
       dateSpan.className = 'card-date';
       const timeStr = item.deadlineTime ? ' ' + item.deadlineTime : '';
-      dateSpan.textContent = `📅 ${dateStr}${timeStr}`;
+
+      let ringHtml = '';
+      if (item.deadline) {
+        let pct = Math.round(progressFrac * 100);
+        if (item.created || item.createdAt) {
+          const end = getDeadlineEnd(item.deadline, item.deadlineTime);
+          const start = new Date(item.created || item.createdAt);
+          const now = new Date();
+          const total = end - start;
+          const elapsed = now - start;
+          if (total > 0) {
+            pct = Math.min(Math.max(Math.round((elapsed / total) * 100), 0), 100);
+          } else {
+            pct = 100;
+          }
+        }
+        ringHtml = ` <span class="deadline-ring" style="--pct: ${pct}"><span class="deadline-ring-dot"></span></span>`;
+      }
+
+      dateSpan.innerHTML = `📅 ${dateStr}${timeStr}${ringHtml}`;
       metaDiv.appendChild(dateSpan);
       if (item.assignee) {
         const assigneeSpan = document.createElement('span');

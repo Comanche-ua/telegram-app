@@ -1,0 +1,404 @@
+/* =========================================================================
+   КОНТРОЛЬ ДЕДЛАЙНІВ — редизайн, концепція "Пункт управління"
+   Підключати ПІСЛЯ app.css: <link rel="stylesheet" href="design-concept.css?v=1">
+   Файл лише перевизначає токени та ключові компоненти — script.js не чіпаємо.
+   ========================================================================= */
+
+/* -------------------------------------------------------------------------
+   1. ТОКЕНИ. Темна тема — основна (Telegram Mini App частіше відкривають
+   у темному режимі), світла — через [data-theme="light"] на <html>/<body>,
+   якщо у вас вже є перемикач теми в script.js.
+   ---------------------------------------------------------------------- */
+:root{
+  /* поверхні */
+  --bg:        #0B0D14;
+  --surface:   #12141F;
+  --surface2:  #1A1D2B;
+  --surface3:  #222639;
+  --border:    #262A3D;
+  --border-soft: #1D2032;
+
+  /* текст */
+  --text:      #EEF0FA;
+  --text2:     #A6ABC7;
+  --text3:     #676C88;
+
+  /* акцент — той самий indigo, що вже у theme-color #4F46E5,
+     трохи піднятий по яскравості для темного фону */
+  --blue:      #6366F1;
+  --blue-600:  #4F46E5;
+  --blue-soft: rgba(99,102,241,.14);
+
+  /* статуси дедлайнів — головна смислова система кольору у продукті */
+  --green:     #22C55E;
+  --green-soft:rgba(34,197,94,.14);
+  --amber:     #F5A623;
+  --amber-soft:rgba(245,166,35,.14);
+  --red:       #EF4444;
+  --red-soft:  rgba(239,68,68,.14);
+  --cyan:      #38BDF8;
+
+  /* геометрія */
+  --radius-sm: 10px;
+  --radius:    16px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+
+  /* тіні — м'які, з відтінком indigo, а не чорні "з коробки" */
+  --shadow-1: 0 1px 2px rgba(8,9,16,.4), 0 8px 24px -12px rgba(79,70,229,.25);
+  --shadow-2: 0 12px 40px -8px rgba(8,9,16,.55), 0 4px 16px -4px rgba(79,70,229,.3);
+
+  /* типографіка: Inter — інтерфейс, JetBrains Mono — усе, що є даними:
+     дати, лічильники, відсотки штату, суми ПММ. Це і є "підпис" стилю. */
+  --font-ui:   'Inter', sans-serif;
+  --font-data: 'JetBrains Mono', monospace;
+
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px;
+
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+[data-theme="light"]{
+  --bg:        #F5F6FB;
+  --surface:   #FFFFFF;
+  --surface2:  #EEF0F8;
+  --surface3:  #E4E7F4;
+  --border:    #E1E4F0;
+  --border-soft:#EBEDF7;
+  --text:      #12141F;
+  --text2:     #565B78;
+  --text3:     #8A8FB0;
+  --blue:      #4F46E5;
+  --blue-600:  #4338CA;
+  --shadow-1: 0 1px 2px rgba(20,22,40,.06), 0 8px 20px -10px rgba(79,70,229,.18);
+  --shadow-2: 0 16px 40px -12px rgba(20,22,40,.18);
+}
+
+html, body{ background:var(--bg); color:var(--text); font-family:var(--font-ui); }
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+::-webkit-scrollbar{ width:8px; height:8px; }
+::-webkit-scrollbar-thumb{ background:var(--border); border-radius:99px; }
+
+/* всюди, де відображається число, дата, лічильник, ID — моноширинний шрифт
+   з табличними цифрами, щоб колонки не "стрибали" */
+.cal-title, .top-assignees-list, .items-grid .deadline,
+.ops-nav-item small, #ops-nav-fuel, #ops-nav-procurement, #ops-nav-budgets,
+.shtat-workspace, .pmm-workspace, input[type="date"], input[type="time"]{
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------------------------------
+   2. ШАПКА — "командна панель": скляна підкладка + сегментований перемикач
+   режимів замість рядка звичайних кнопок.
+   ---------------------------------------------------------------------- */
+.topbar{
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--border-soft);
+  padding: var(--space-3) var(--space-4);
+}
+.topbar-icon img{ width:28px; height:28px; }
+.topbar-title{
+  font-weight:800; letter-spacing:-.01em; font-size:15px; color:var(--text);
+}
+
+.app-mode-switch{
+  display:flex; gap:2px; padding:3px;
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.app-mode-btn{
+  border:none; background:transparent; color:var(--text2);
+  font-size:13px; font-weight:600; padding:7px 14px;
+  border-radius: var(--radius-pill);
+  transition: background .18s var(--ease), color .18s var(--ease);
+  white-space:nowrap;
+}
+.app-mode-btn:hover{ color:var(--text); }
+.app-mode-btn.active{
+  background: var(--blue); color:#fff;
+  box-shadow: 0 4px 12px -2px rgba(79,70,229,.5);
+}
+
+.share-btn{ border-radius: var(--radius-pill) !important; }
+
+/* -------------------------------------------------------------------------
+   3. СТРІЧКА ВКЛАДОК — чіпи замість прямокутних табів
+   ---------------------------------------------------------------------- */
+.tab-bar{
+  display:flex; align-items:center; gap:var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background:var(--bg); border-bottom:1px solid var(--border-soft);
+}
+.tab-list{ display:flex; gap:6px; overflow-x:auto; }
+.tab-list::-webkit-scrollbar{ display:none; }
+.tab-list > *{
+  border-radius: var(--radius-pill) !important;
+  border:1px solid var(--border) !important;
+  background:var(--surface2) !important;
+  font-size:13px; font-weight:600;
+  transition: all .16s var(--ease);
+}
+.tab-list > .active, .tab-list > [aria-selected="true"]{
+  background:var(--blue-soft) !important;
+  border-color: var(--blue) !important;
+  color:var(--blue) !important;
+}
+.required-toggle-btn{
+  border-radius: var(--radius-pill); border:1px dashed var(--border);
+  color:var(--text2); font-size:12px; font-weight:600; padding:6px 12px;
+}
+.tab-add-btn{ border-radius: var(--radius-pill); }
+
+/* -------------------------------------------------------------------------
+   4. КАРТКИ ЗАВДАНЬ (items-grid) — статус кодується кольоровою смугою
+   зліва + фоновим світінням, а не лише текстом.
+   Класи карток генеруються у script.js — базові невідомі, тому цілимось
+   у типові прямі нащадки #container / .items-grid.
+   ---------------------------------------------------------------------- */
+.items-grid{
+  display:grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(280px,1fr));
+}
+.items-grid > *{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-1);
+  transition: transform .15s var(--ease), box-shadow .15s var(--ease), border-color .15s var(--ease);
+}
+.items-grid > *:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+/* статусні модифікатори — додати клас у script.js при рендері картки:
+   card.classList.add('status-overdue' | 'status-soon' | 'status-ok' | 'status-done') */
+.items-grid > .status-overdue{ border-left-color: var(--red); background: linear-gradient(180deg, var(--red-soft), transparent 40%), var(--surface); }
+.items-grid > .status-soon{    border-left-color: var(--amber); background: linear-gradient(180deg, var(--amber-soft), transparent 40%), var(--surface); }
+.items-grid > .status-ok{      border-left-color: var(--green); }
+.items-grid > .status-done{    border-left-color: var(--text3); opacity:.6; }
+
+.empty.empty-state{
+  text-align:center; padding: var(--space-10) var(--space-4);
+  color:var(--text3); font-size:13px;
+  background: var(--surface2); border:1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/* -------------------------------------------------------------------------
+   5. "ПУЛЬС ДЕДЛАЙНУ" — фірмовий елемент: кільце-таймер навколо дати.
+   Заповнення кільця = частка часу, що минула до дедлайну.
+   Розмітка (додати у script.js при рендері дати на картці):
+
+   <span class="deadline-ring" style="--pct: 72"><span class="deadline-ring-dot"></span></span>
+
+   де --pct: 0..100 (0 = щойно поставили, 100 = дедлайн настав).
+   Колір кільця сам підхопиться з класу status-* картки-батька.
+   ---------------------------------------------------------------------- */
+.deadline-ring{
+  --pct: 0;
+  width:34px; height:34px; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center;
+  background: conic-gradient(var(--ring-color, var(--blue)) calc(var(--pct)*1%), var(--surface3) 0);
+  flex-shrink:0;
+}
+.deadline-ring::before{
+  content:""; position:absolute; width:26px; height:26px; border-radius:50%;
+  background:var(--surface);
+}
+.status-overdue .deadline-ring{ --ring-color: var(--red); }
+.status-soon .deadline-ring{ --ring-color: var(--amber); }
+.status-ok .deadline-ring{ --ring-color: var(--green); }
+.deadline-ring-dot{ position:relative; z-index:1; font-family:var(--font-data); font-size:9px; font-weight:700; }
+
+/* -------------------------------------------------------------------------
+   6. FAB-КЛАСТЕР
+   ---------------------------------------------------------------------- */
+.fab-container{ display:flex; flex-direction:column; gap:var(--space-3); }
+.fab-btn{
+  border-radius:50%; box-shadow: var(--shadow-2);
+  transition: transform .15s var(--ease);
+}
+.fab-btn:active{ transform: scale(.92); }
+.fab-add{
+  width:56px; height:56px;
+  background: linear-gradient(145deg, var(--blue), var(--blue-600));
+}
+.fab-settings, .fab-lock{
+  width:44px; height:44px;
+  background:var(--surface2); border:1px solid var(--border);
+}
+
+/* -------------------------------------------------------------------------
+   7. НИЖНЯ МОБІЛЬНА НАВІГАЦІЯ — плаваюча капсула
+   ---------------------------------------------------------------------- */
+.mobile-nav{
+  display:flex; justify-content:space-around;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(16px);
+  border:1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  margin: 0 var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom));
+  padding: 6px;
+  box-shadow: var(--shadow-2);
+}
+.mobile-nav-item{
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  border-radius: var(--radius); padding: 6px 10px;
+  color:var(--text3); font-size:10px; font-weight:600;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.mobile-nav-icon{ font-size:18px; }
+.mobile-nav-item.active{ background:var(--blue-soft); color:var(--blue); }
+
+/* -------------------------------------------------------------------------
+   8. КАЛЕНДАР
+   ---------------------------------------------------------------------- */
+.calendar-command-card{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-4);
+  box-shadow: var(--shadow-1);
+}
+.eyebrow{
+  font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--text3);
+}
+.calendar-command-heading h1{ font-size:17px; font-weight:800; margin:2px 0 0; }
+.cal-header{ display:flex; align-items:center; justify-content:space-between; margin: var(--space-3) 0; }
+.cal-title{ font-family:var(--font-data); font-weight:700; font-size:13px; }
+.cal-grid{ display:grid; grid-template-columns: repeat(7,1fr); gap:4px; }
+.cal-grid > *{
+  aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  border-radius:8px; font-family:var(--font-data); font-size:12px;
+  color:var(--text2); transition: background .15s var(--ease);
+}
+.cal-grid > *:hover{ background:var(--surface2); cursor:pointer; }
+.cal-grid > .today{ background:var(--blue); color:#fff; font-weight:700; }
+.cal-grid > .has-deadline{ box-shadow: inset 0 -2px 0 var(--amber); }
+
+/* -------------------------------------------------------------------------
+   9. ОПЕРАТИВНА ОБЛАСТЬ / ШТАТ / ПРОЄКТИ / ПММ — спільний "рейковий" каркас
+   ---------------------------------------------------------------------- */
+.ops-rail, .projects-rail{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-4);
+}
+.ops-rail-title, .projects-eyebrow{
+  font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  color:var(--text3); margin-bottom:var(--space-3); display:block;
+}
+.ops-nav-item, .project-create-btn{
+  border-radius: var(--radius); transition: background .15s var(--ease);
+}
+.ops-nav-item{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 12px; color:var(--text2); font-size:13px; font-weight:600;
+}
+.ops-nav-item::before{
+  content:""; width:8px; height:8px; border-radius:50%;
+  background:var(--ops-dot, var(--blue)); margin-right:8px; display:inline-block;
+}
+.ops-nav-item.active{ background:var(--surface2); color:var(--text); }
+.ops-nav-item small{
+  font-family:var(--font-data); background:var(--surface2);
+  padding:1px 7px; border-radius: var(--radius-pill); font-size:11px;
+}
+
+.ops-register-panel, .ops-module, .shtat-dashboard, .project-detail{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  box-shadow: var(--shadow-1);
+}
+.ops-kicker{ font-size:11px; font-weight:700; text-transform:uppercase; color:var(--blue); letter-spacing:.06em; }
+.ops-title{ font-size:19px; font-weight:800; margin:4px 0; }
+.ops-subtitle{ color:var(--text2); font-size:13px; line-height:1.55; }
+.ops-soft-btn{
+  border-radius: var(--radius-pill); border:1px solid var(--border);
+  background:var(--surface2); color:var(--text); font-size:13px; font-weight:600;
+  padding:8px 16px; transition: all .15s var(--ease);
+}
+.ops-soft-btn:hover{ border-color:var(--blue); color:var(--blue); }
+.ops-module-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:var(--space-4); }
+
+/* -------------------------------------------------------------------------
+   10. МОДАЛКИ
+   ---------------------------------------------------------------------- */
+.modal-overlay{
+  background: rgba(6,7,12,.6); backdrop-filter: blur(4px);
+}
+.modal-content{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+  animation: modal-in .18s var(--ease);
+}
+@keyframes modal-in{ from{ opacity:0; transform:translateY(8px) scale(.98);} to{ opacity:1; transform:none;} }
+.modal-header{ border-bottom:1px solid var(--border-soft); padding-bottom:var(--space-3); margin-bottom:var(--space-4); }
+.modal-title{ font-weight:800; font-size:16px; }
+.modal-close{ border-radius:50%; width:28px; height:28px; }
+
+/* -------------------------------------------------------------------------
+   11. ФОРМИ / КНОПКИ
+   ---------------------------------------------------------------------- */
+input, select, textarea{
+  font-family:var(--font-ui);
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+input:focus, select:focus, textarea:focus{
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 3px var(--blue-soft);
+  outline:none;
+}
+.btn-primary{
+  background: linear-gradient(145deg, var(--blue), var(--blue-600));
+  border:none; border-radius: var(--radius-sm);
+  font-weight:700; letter-spacing:.01em;
+  box-shadow: 0 6px 16px -6px rgba(79,70,229,.6);
+  transition: transform .12s var(--ease), box-shadow .12s var(--ease);
+}
+.btn-primary:hover{ box-shadow: 0 8px 20px -6px rgba(79,70,229,.75); }
+.btn-primary:active{ transform: scale(.97); }
+.btn-secondary{
+  background:var(--surface2); border:1px solid var(--border);
+  border-radius: var(--radius-sm); font-weight:600;
+  transition: border-color .15s var(--ease);
+}
+.btn-secondary:hover{ border-color:var(--text3); }
+
+/* -------------------------------------------------------------------------
+   12. НАЛАШТУВАННЯ — вертикальні таби зліва
+   ---------------------------------------------------------------------- */
+.settings-nav-item{
+  border-radius: var(--radius-sm); padding:9px 12px; font-size:13px; font-weight:600;
+  color:var(--text2); transition: background .15s var(--ease), color .15s var(--ease);
+}
+.settings-nav-item.active{ background:var(--blue-soft); color:var(--blue); }
+.settings-section{
+  background:var(--surface2); border:1px solid var(--border-soft);
+  border-radius: var(--radius); padding:var(--space-4); margin-bottom:var(--space-3);
+}
+.settings-section h3{ font-size:13px; font-weight:800; margin:0 0 8px; }
+
+/* -------------------------------------------------------------------------
+   13. ЕКРАН БЛОКУВАННЯ / БАНЕР ВСТАНОВЛЕННЯ
+   ---------------------------------------------------------------------- */
+.lock-screen{ background: radial-gradient(circle at 50% 20%, var(--blue-soft), transparent 60%), var(--bg); }
+.lock-box{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
+}
+.install-banner{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-2);
+}
+
+/* -------------------------------------------------------------------------
+   14. ДОСТУПНІСТЬ ТА РУХ
+   ---------------------------------------------------------------------- */
+:focus-visible{ outline:2px solid var(--blue); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.001ms !important; transition-duration:.001ms !important; }
+}
