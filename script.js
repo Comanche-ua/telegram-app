@@ -281,18 +281,62 @@ function addWorkspace(name) {
   return id;
 }
 
+// ---- Tombstone Sync (Синхронізація видалень) ----
+const DELETED_KEYS_KEY = 'deadline_tracker_deleted_keys';
+const DELETED_WS_KEY = 'deadline_tracker_deleted_workspaces';
+
+function getDeletedKeys() {
+  try { return JSON.parse(localStorage.getItem(DELETED_KEYS_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+
+function saveDeletedKeys(map) {
+  localStorage.setItem(DELETED_KEYS_KEY, JSON.stringify(map));
+}
+
+function getDeletedWorkspaces() {
+  try { return JSON.parse(localStorage.getItem(DELETED_WS_KEY)) || {}; }
+  catch(e) { return {}; }
+}
+
+function saveDeletedWorkspaces(map) {
+  localStorage.setItem(DELETED_WS_KEY, JSON.stringify(map));
+}
+
+function markTaskAsDeleted(item) {
+  if (!item || !item.text) return;
+  const key = `${(item.text || '').trim()}_${item.created || ''}_${item.deadline || ''}`;
+  const map = getDeletedKeys();
+  map[key] = Date.now();
+  saveDeletedKeys(map);
+}
+
+function markWorkspaceAsDeleted(id) {
+  if (!id) return;
+  const map = getDeletedWorkspaces();
+  map[id] = Date.now();
+  saveDeletedWorkspaces(map);
+}
+
 function deleteWorkspace(id) {
   if (id === ALL_WORKSPACE_ID) return false;
   const ws = workspaces[id];
   if (!ws) return false;
   const name = ws.name;
   if (!confirm(`⚠️ ВИ ВПЕВНЕНІ? Видалити вкладку "${name}" разом з усіма завданнями?`)) return false;
+
+  if (Array.isArray(ws.items)) {
+    ws.items.forEach(it => markTaskAsDeleted(it));
+  }
+  markWorkspaceAsDeleted(id);
+
   delete workspaces[id];
   workspaceOrder = workspaceOrder.filter(wid => wid !== id);
   if (activeWorkspaceId === id) {
     activeWorkspaceId = ALL_WORKSPACE_ID;
   }
   saveWorkspaces();
+  saveToDrive(); // Негайне видалення з Google Drive
   return true;
 }
 
@@ -816,6 +860,8 @@ async function saveToDrive() {
       workspaces: workspaces,
       workspaceOrder: workspaceOrder,
       assignees: loadAssigneeDB(),
+      deletedKeys: getDeletedKeys(),
+      deletedWorkspaces: getDeletedWorkspaces(),
       savedAt: new Date().toISOString(),
       savedBy: currentUser.email
     }, null, 2);
@@ -886,13 +932,37 @@ async function loadFromDrive() {
 
     const cloudData = await resp.json();
 
+    // 0. Об'єднуємо реєстр видалень (Tombstones) між локалом та хмарою
+    const localDeletedKeys = getDeletedKeys();
+    const cloudDeletedKeys = cloudData.deletedKeys || {};
+    const mergedDeletedKeys = { ...localDeletedKeys, ...cloudDeletedKeys };
+    saveDeletedKeys(mergedDeletedKeys);
+
+    const localDeletedWs = getDeletedWorkspaces();
+    const cloudDeletedWs = cloudData.deletedWorkspaces || {};
+    const mergedDeletedWs = { ...localDeletedWs, ...cloudDeletedWs };
+    saveDeletedWorkspaces(mergedDeletedWs);
+
     if (cloudData.workspaces && typeof cloudData.workspaces === 'object') {
       let dataChanged = false;
 
-      // 1. Об'єднуємо всі вкладки та завдання (розумне злиття хмари та локалу)
+      // 1. Очищаємо видалені вкладки
+      Object.keys(mergedDeletedWs).forEach(delId => {
+        if (workspaces[delId]) {
+          delete workspaces[delId];
+          dataChanged = true;
+        }
+      });
+
+      // 2. Зливаємо вкладки та завдання з урахуванням видалень
       const allWsKeys = new Set([...Object.keys(workspaces), ...Object.keys(cloudData.workspaces)]);
 
       allWsKeys.forEach(wsKey => {
+        if (mergedDeletedWs[wsKey]) {
+          delete workspaces[wsKey];
+          return;
+        }
+
         const localWs = workspaces[wsKey];
         const cloudWs = cloudData.workspaces[wsKey];
 
@@ -900,30 +970,33 @@ async function loadFromDrive() {
           workspaces[wsKey] = cloudWs;
           dataChanged = true;
         } else if (localWs && cloudWs) {
-          // Зливаємо масиви завдань без дублікатів
           const itemMap = new Map();
 
-          // Локальні завдання
+          // Локальні завдання (тільки не видалені)
           (localWs.items || []).forEach(it => {
             const itemKey = `${(it.text || '').trim()}_${it.created || ''}_${it.deadline || ''}`;
-            itemMap.set(itemKey, { ...it });
+            if (!mergedDeletedKeys[itemKey]) {
+              itemMap.set(itemKey, { ...it });
+            } else {
+              dataChanged = true;
+            }
           });
 
-          // Завдання з хмари
+          // Хмарні завдання (тільки не видалені)
           (cloudWs.items || []).forEach(cItem => {
             const itemKey = `${(cItem.text || '').trim()}_${cItem.created || ''}_${cItem.deadline || ''}`;
+            if (mergedDeletedKeys[itemKey]) {
+              dataChanged = true;
+              return;
+            }
+
             if (!itemMap.has(itemKey)) {
               itemMap.set(itemKey, { ...cItem });
               dataChanged = true;
             } else {
-              // Якщо задача є і там і там — оновлюємо статус виконання та додаткові поля
               const existing = itemMap.get(itemKey);
-              if (cItem.done && !existing.done) {
-                existing.done = true;
-                dataChanged = true;
-              }
-              if (cItem.assignee && !existing.assignee) {
-                existing.assignee = cItem.assignee;
+              if (cItem.done !== existing.done) {
+                existing.done = cItem.done;
                 dataChanged = true;
               }
             }
@@ -931,37 +1004,46 @@ async function loadFromDrive() {
 
           localWs.items = Array.from(itemMap.values());
         }
+
+        // Застосовуємо фільтр видалень до кожної вкладки
+        if (workspaces[wsKey] && Array.isArray(workspaces[wsKey].items)) {
+          const origCount = workspaces[wsKey].items.length;
+          workspaces[wsKey].items = workspaces[wsKey].items.filter(it => {
+            const itemKey = `${(it.text || '').trim()}_${it.created || ''}_${it.deadline || ''}`;
+            return !mergedDeletedKeys[itemKey];
+          });
+          if (workspaces[wsKey].items.length !== origCount) dataChanged = true;
+        }
       });
 
-      // 2. Зливаємо workspaceOrder
+      // 3. Зливаємо workspaceOrder і прибираємо видалені вкладки
       if (Array.isArray(cloudData.workspaceOrder)) {
         cloudData.workspaceOrder.forEach(wid => {
-          if (workspaces[wid] && !workspaceOrder.includes(wid)) {
+          if (workspaces[wid] && !workspaceOrder.includes(wid) && !mergedDeletedWs[wid]) {
             workspaceOrder.push(wid);
             dataChanged = true;
           }
         });
       }
-      workspaceOrder = workspaceOrder.filter(wid => workspaces[wid]);
+      workspaceOrder = workspaceOrder.filter(wid => workspaces[wid] && !mergedDeletedWs[wid]);
 
-      // Зберігаємо об'єднані дані локально
+      // Зберігаємо локально
       localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaces));
       localStorage.setItem(WORKSPACE_ORDER_KEY, JSON.stringify(workspaceOrder));
 
-      // 3. Зливаємо базу виконавців
+      // Зливаємо базу виконавців
       if (cloudData.assignees && Array.isArray(cloudData.assignees)) {
         const localDB = loadAssigneeDB();
         const merged = [...new Set([...localDB, ...cloudData.assignees])].sort((a, b) => a.localeCompare(b, 'uk'));
         saveAssigneeDB(merged);
       }
 
-      // Якщо відбулися зміни (наприклад додали з іншого пристрою), оновлюємо хмару об'єднаним результатом
       if (dataChanged) {
-        console.log('[Drive] Злиття завершено, оновлюємо хмару злитими даними');
+        console.log('[Drive] Синхронізація видалень завершена, оновлюємо файл в Drive...');
         await saveToDrive();
       }
 
-      // Оновлюємо інтерфейс
+      // Перемальовуємо UI
       const items = getActiveItems();
       if (items.length) startTimers();
       else renderEmpty();
@@ -1614,8 +1696,14 @@ function deleteTaskByIdx(idx, wsIdOverride) {
   if (!ws) return;
 
   if (idx >= 0 && idx < ws.items.length) {
+    const deletedItem = ws.items[idx];
+    if (deletedItem) {
+      markTaskAsDeleted(deletedItem); // Записуємо у файл Tombstone для синхронізації видалення
+    }
     ws.items.splice(idx, 1);
     saveWorkspaces();
+    saveToDrive(); // Негайна відправка видалення в Google Drive
+
     const items = getActiveItems();
     if (items.length === 0) {
       if (ticker) clearInterval(ticker);
