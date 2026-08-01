@@ -2691,7 +2691,26 @@ function buildTaskCard(item, arrIdx, isAllView, nearestId) {
       const dateSpan = document.createElement('span');
       dateSpan.className = 'card-date';
       const timeStr = item.deadlineTime ? ' ' + item.deadlineTime : '';
-      dateSpan.textContent = `📅 ${dateStr}${timeStr}`;
+
+      let ringHtml = '';
+      if (item.deadline) {
+        let pct = Math.round(progressFrac * 100);
+        if (item.created || item.createdAt) {
+          const end = getDeadlineEnd(item.deadline, item.deadlineTime);
+          const start = new Date(item.created || item.createdAt);
+          const now = new Date();
+          const total = end - start;
+          const elapsed = now - start;
+          if (total > 0) {
+            pct = Math.min(Math.max(Math.round((elapsed / total) * 100), 0), 100);
+          } else {
+            pct = 100;
+          }
+        }
+        ringHtml = ` <span class="deadline-ring" style="--pct: ${pct}"><span class="deadline-ring-dot"></span></span>`;
+      }
+
+      dateSpan.innerHTML = `📅 ${dateStr}${timeStr}${ringHtml}`;
       metaDiv.appendChild(dateSpan);
       if (item.assignee) {
         const assigneeSpan = document.createElement('span');

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.8-timestamp-sync';
+const CACHE_NAME = 'deadline-tracker-v5.9-deadline-ring';
 const ASSETS = [
   './',
   './index.html',
