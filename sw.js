@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v4.4-zero-shift-calendar';
+const CACHE_NAME = 'deadline-tracker-v4.5-calendar-fit';
 const ASSETS = [
   './',
   './index.html',

@@ -3319,33 +3319,24 @@ body.edit-mode-off .card.card-swiped .delete-task-btn {
   }
   .calendar-command-card,
   .calendar-command-card#calendar-section {
-    width: 320px !important;
-    min-width: 320px !important;
+    width: 100% !important;
     max-width: 320px !important;
-    height: 380px !important;
-    min-height: 380px !important;
-    max-height: 380px !important;
     box-sizing: border-box !important;
     margin: 0 0 20px 0 !important;
-    overflow: hidden !important;
-    position: relative !important;
+    /* НЕ фіксуємо висоту — вона визначається вмістом (кількість рядків дат) */
   }
   .calendar-command-card .cal-grid {
     display: grid !important;
     grid-template-columns: repeat(7, 1fr) !important;
-    grid-template-rows: auto repeat(6, 36px) !important;
-    gap: 3px !important;
-    height: 260px !important;
-    min-height: 260px !important;
-    max-height: 260px !important;
-    align-content: start !important;
+    gap: 2px !important;
     box-sizing: border-box !important;
+    /* НЕ фіксуємо висоту grid — вона визначається рядками клітинок */
   }
   .calendar-command-card .cal-cell {
     aspect-ratio: auto !important;
-    height: 36px !important;
-    min-height: 36px !important;
-    max-height: 36px !important;
+    height: 34px !important;
+    min-height: 34px !important;
+    max-height: 34px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -3353,18 +3344,27 @@ body.edit-mode-off .card.card-swiped .delete-task-btn {
     position: relative !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
-    padding: 2px 0 !important;
+    padding: 0 !important;
   }
-  .cal-count-badge {
+  .calendar-command-card .cal-dow {
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+  .calendar-command-card .cal-count-badge {
     position: absolute !important;
-    bottom: 2px !important;
+    bottom: 1px !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
     margin: 0 !important;
-    font-size: 8px !important;
+    font-size: 7px !important;
     line-height: 1 !important;
-    padding: 1px 3px !important;
-    border-radius: 4px !important;
+    padding: 1px 2px !important;
+    border-radius: 3px !important;
     pointer-events: none !important;
   }
   .cal-events-list {
