@@ -3712,3 +3712,188 @@ body.pmm-mode #pmm-workspace { display: block !important; }
   .pmm-kpi-icon { width: 36px; height: 36px; font-size: 18px; }
   .pmm-kpi-value { font-size: 16px; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   HIGH CONTRAST & BUTTON BORDER SYSTEM REFRESH
+   Ensures strong contrast (no white-on-white / black-on-black)
+   and visible, defined borders on all interactive controls.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  --line: rgba(17, 24, 39, 0.18);
+  --line-strong: rgba(17, 24, 39, 0.32);
+  --ink: #0f172a;
+  --ink-soft: #334155;
+  --ink-faint: #64748b;
+}
+
+/* 1. Buttons & Action Outlines */
+.btn-primary {
+  background: var(--brand, #5b5ce2) !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(0, 0, 0, 0.25) !important;
+  box-shadow: 0 4px 14px rgba(91, 92, 226, 0.35) !important;
+  font-weight: 700 !important;
+}
+
+.btn-primary:hover {
+  background: var(--brand-strong, #4546c8) !important;
+  border-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.btn-secondary,
+.auth-btn,
+.ops-soft-btn,
+.tab-add-btn,
+.project-create-btn,
+.project-first-form button,
+.project-composer-submit,
+.project-inline-save-btn,
+.project-inline-cancel-btn {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1.5px solid rgba(17, 24, 39, 0.28) !important;
+  box-shadow: 0 2px 5px rgba(17, 24, 39, 0.08) !important;
+  font-weight: 600 !important;
+}
+
+.btn-secondary:hover,
+.auth-btn:hover,
+.ops-soft-btn:hover {
+  background: #f8fafc !important;
+  border-color: var(--brand, #5b5ce2) !important;
+  color: var(--brand, #5b5ce2) !important;
+}
+
+/* 2. Floating Action Buttons (FAB) */
+.fab-settings,
+.fab-lock {
+  border: 2px solid #0f172a !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22) !important;
+}
+
+.fab-settings:hover,
+.fab-lock:hover {
+  border-color: var(--brand, #5b5ce2) !important;
+  color: var(--brand, #5b5ce2) !important;
+}
+
+.fab-add {
+  border: 2px solid rgba(0, 0, 0, 0.2) !important;
+  box-shadow: 0 8px 22px rgba(91, 92, 226, 0.45) !important;
+}
+
+/* 3. Tab Bar & Navigation Buttons */
+.tab-item {
+  border: 1.5px solid rgba(17, 24, 39, 0.22) !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+
+.tab-item.active {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+.tab-item.active .tab-count {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+.project-list-item {
+  border: 1.5px solid rgba(17, 24, 39, 0.16) !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+}
+
+.project-list-item.active {
+  border-color: var(--brand, #5b5ce2) !important;
+  background: #eff6ff !important;
+  color: var(--brand, #5b5ce2) !important;
+  font-weight: 700 !important;
+}
+
+/* 4. Form Inputs & Textareas */
+input,
+select,
+textarea,
+.input-box textarea,
+.api-key-input,
+.project-inline-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1.5px solid rgba(17, 24, 39, 0.28) !important;
+  font-weight: 500 !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.project-inline-input:focus {
+  border-color: var(--brand, #5b5ce2) !important;
+  box-shadow: 0 0 0 3px rgba(91, 92, 226, 0.22) !important;
+}
+
+/* 5. Cards & Badges Contrast */
+.card,
+.project-entry-card,
+.dash-widget,
+.stat-card {
+  border: 1.5px solid rgba(17, 24, 39, 0.18) !important;
+  background: #ffffff !important;
+}
+
+.card-num,
+.card-date,
+.section-count {
+  background: #f1f5f9 !important;
+  color: #1e293b !important;
+  border: 1px solid rgba(15, 23, 42, 0.2) !important;
+  font-weight: 700 !important;
+}
+
+.assignee-badge {
+  background: #e0e7ff !important;
+  color: #3730a3 !important;
+  border: 1px solid rgba(79, 70, 229, 0.35) !important;
+  font-weight: 700 !important;
+}
+
+.badge-nearest {
+  background: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border: 1px solid rgba(225, 29, 72, 0.4) !important;
+  font-weight: 800 !important;
+}
+
+.modal-content {
+  background: #ffffff !important;
+  border: 2px solid rgba(17, 24, 39, 0.3) !important;
+  color: #0f172a !important;
+  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35) !important;
+}
+
+.modal-close {
+  border: 1.5px solid rgba(17, 24, 39, 0.25) !important;
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.project-icon-btn,
+.project-entry-toggle {
+  border: 1.5px solid rgba(17, 24, 39, 0.22) !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+}
+
+.project-icon-btn:hover,
+.project-entry-toggle:hover {
+  border-color: var(--brand, #5b5ce2) !important;
+  color: var(--brand, #5b5ce2) !important;
+}
+
