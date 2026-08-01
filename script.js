@@ -860,6 +860,7 @@ async function saveToDrive() {
       workspaces: workspaces,
       workspaceOrder: workspaceOrder,
       assignees: loadAssigneeDB(),
+      topSites: customTopSites,
       deletedKeys: getDeletedKeys(),
       deletedWorkspaces: getDeletedWorkspaces(),
       savedAt: new Date().toISOString(),
@@ -1038,12 +1039,28 @@ async function loadFromDrive() {
         saveAssigneeDB(merged);
       }
 
+      // Зливаємо посилання (topSites)
+      if (cloudData.topSites && Array.isArray(cloudData.topSites)) {
+        const localIds = new Set(customTopSites.map(s => s.id));
+        let sitesChanged = false;
+        cloudData.topSites.forEach(cs => {
+          if (!localIds.has(cs.id)) {
+            customTopSites.push(cs);
+            sitesChanged = true;
+            dataChanged = true;
+          }
+        });
+        if (sitesChanged) {
+          saveCustomTopSites();
+        }
+      }
+
       if (dataChanged) {
-        console.log('[Drive] Синхронізація видалень завершена, оновлюємо файл в Drive...');
+        console.log('[Drive] Синхронізація завершена, оновлюємо файл в Drive...');
         await saveToDrive();
       }
 
-      // Перемальовуємо UI
+      // Повна перемальовка всього UI
       const items = getActiveItems();
       if (items.length) {
         renderCards();
@@ -1055,6 +1072,9 @@ async function loadFromDrive() {
       renderAssigneeChips();
       populateDatalist();
       updateCalendarVisibility();
+      // Перемальовуємо посилання на обох блоках
+      try { renderTopSites('top-sites', true); } catch(e) {}
+      try { renderTopSites('lock-top-sites', false); } catch(e) {}
     }
   } catch(e) {
     console.error('[Drive] Помилка завантаження:', e);
@@ -1625,6 +1645,7 @@ function removeTopSite(id) {
   if (!confirm(`Видалити сайт "${site.title}" зі списку часто відвідуваних?`)) return;
   customTopSites = customTopSites.filter(s => s.id !== id);
   saveCustomTopSites();
+  saveToDrive();
   renderTopSites('top-sites', true);
   renderTopSites('lock-top-sites', false);
 }
@@ -1680,6 +1701,7 @@ function saveTopSiteFromModal() {
   }
 
   saveCustomTopSites();
+  saveToDrive();
   renderTopSites('top-sites', true);
   renderTopSites('lock-top-sites', false);
   closeTopSiteEditor();
@@ -4288,7 +4310,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   setInterval(() => {
     if (currentUser) loadFromDrive();
-  }, 15000);
+  }, 16000);
 
   try { initTopSites(); } catch (e) { console.warn('TopSites unavailable:', e); }
 

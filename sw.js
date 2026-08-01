@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v4.9-instant-add-sync';
+const CACHE_NAME = 'deadline-tracker-v5.0-full-sync-16s';
 const ASSETS = [
   './',
   './index.html',
