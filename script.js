@@ -1200,14 +1200,38 @@ function signOutGoogle() {
   currentUser = null;
   localStorage.removeItem(AUTH_USER_KEY);
   localStorage.removeItem('google_auth_token');
+
+  // Очищаємо всі дані акаунту з локального сховища
+  localStorage.removeItem(WORKSPACES_KEY);
+  localStorage.removeItem(WORKSPACE_ORDER_KEY);
+  localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+  localStorage.removeItem(OLD_ITEMS_KEY);
+  localStorage.removeItem(DELETED_KEYS_KEY);
+  localStorage.removeItem(DELETED_WS_KEY);
+  localStorage.removeItem(DELETED_PROJECTS_KEY);
+  localStorage.removeItem(DELETED_ENTRIES_KEY);
+  localStorage.removeItem(PROJECTS_DATA_KEY);
+  localStorage.removeItem(TOPSITES_KEY);
+  localStorage.removeItem(ASSIGNEES_DB_KEY);
+
+  // Скидаємо всі змінні в пам'яті
   workspaces = {};
   workspaceOrder = [];
   activeWorkspaceId = ALL_WORKSPACE_ID;
+  customTopSites = [];
+
   if (ticker) clearInterval(ticker);
+
+  // Оновлюємо та очищаємо весь UI
   renderEmpty();
   renderTabBar();
   renderAuthUI();
   updateCalendarVisibility();
+  try { renderProjectsWorkspace(); } catch(e) {}
+  try { renderAssigneeChips(); } catch(e) {}
+  try { populateDatalist(); } catch(e) {}
+  try { renderTopSites('top-sites', true); } catch(e) {}
+  try { renderTopSites('lock-top-sites', false); } catch(e) {}
 }
 
 async function exportToGoogleDoc() {

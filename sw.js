@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.6-gallery-pinch-wheel-zoom';
+const CACHE_NAME = 'deadline-tracker-v5.7-full-signout-data-wipe';
 const ASSETS = [
   './',
   './index.html',
