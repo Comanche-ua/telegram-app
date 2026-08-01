@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.2-photo-compress-499kb';
+const CACHE_NAME = 'deadline-tracker-v5.3-image-zoom-lightbox';
 const ASSETS = [
   './',
   './index.html',

@@ -532,7 +532,21 @@
 
       </div>
     </div>
+</div>
+
+<!-- Image Lightbox & Zoom Modal -->
+<div class="image-lightbox" id="imageLightboxModal" role="dialog" aria-label="Перегляд зображення">
+  <div class="lightbox-toolbar">
+    <button class="lightbox-btn" id="lightbox-zoom-out" title="Зменшити (−)">−</button>
+    <span class="lightbox-zoom-info" id="lightbox-zoom-val">100%</span>
+    <button class="lightbox-btn" id="lightbox-zoom-in" title="Збільшити (+)">+</button>
+    <button class="lightbox-btn" id="lightbox-zoom-reset" title="Скинути (100%)">⟲</button>
+    <button class="lightbox-btn" id="lightbox-close" title="Закрити (Esc)">✕</button>
   </div>
+  <div class="lightbox-img-stage" id="lightbox-stage">
+    <img id="lightbox-img" src="" alt="Перегляд фото">
+  </div>
+  <div class="lightbox-hint">💡 Колесо / 2х-клік / Pinch для наближення · Перетягуйте мишкою</div>
 </div>
 
 <script src="script.js?v=2.1"></script>
