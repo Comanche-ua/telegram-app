@@ -3503,6 +3503,63 @@ body.projects-mode #projects-workspace { display: block !important; }
   max-height: 480px;
   object-fit: contain;
   margin: 0 auto;
+  cursor: pointer;
+}
+
+/* Simple Photo Gallery Modal */
+.photo-gallery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(10, 10, 15, 0.94);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.photo-gallery-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.photo-gallery-img {
+  max-width: 95vw;
+  max-height: 94vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 16px 56px rgba(0, 0, 0, 0.85);
+  cursor: default;
+}
+
+.photo-gallery-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font: 700 20px/1 'Inter', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.15s ease;
+  backdrop-filter: blur(8px);
+}
+
+.photo-gallery-close:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(1.08);
 }
 
 .project-composer button:disabled { cursor: wait; opacity: .65; }

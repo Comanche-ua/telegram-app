@@ -3605,6 +3605,47 @@ function saveProjectsData(data) {
   }
 }
 
+// ---- Проста галерея для перегляду фото на весь екран ----
+function showPhotoGallery(src) {
+  if (!src) return;
+  let overlay = document.getElementById('photo-gallery-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'photo-gallery-overlay';
+    overlay.className = 'photo-gallery-overlay';
+    overlay.innerHTML = `
+      <button class="photo-gallery-close" title="Закрити (Esc)">✕</button>
+      <img id="photo-gallery-img" src="" class="photo-gallery-img" alt="Перегляд фото">
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target.classList.contains('photo-gallery-close')) {
+        closePhotoGallery();
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && overlay.classList.contains('active')) {
+        closePhotoGallery();
+      }
+    });
+  }
+
+  const img = overlay.querySelector('#photo-gallery-img');
+  if (img) img.src = src;
+  overlay.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePhotoGallery() {
+  const overlay = document.getElementById('photo-gallery-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+}
+
 function createProjectId() {
   return window.crypto && crypto.randomUUID ? crypto.randomUUID() : `project-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -3765,7 +3806,7 @@ function renderProjectsWorkspace() {
                 </button>
               </div>
             </div>
-            ${entry.imageData ? `<a class="project-entry-image-wrapper" href="${escapeProjectText(entry.imageData)}" target="_blank" rel="noopener" title="Відкрити фото"><img class="project-entry-image" src="${escapeProjectText(entry.imageData)}" alt="${escapeProjectText(entry.text || 'Фото кроку проєкту')}" loading="lazy"></a>` : ''}
+            ${entry.imageData ? `<div class="project-entry-image-wrapper" onclick="showPhotoGallery('${escapeProjectText(entry.imageData)}')"><img class="project-entry-image" src="${escapeProjectText(entry.imageData)}" alt="${escapeProjectText(entry.text || 'Фото кроку проєкту')}" loading="lazy"></div>` : ''}
             <div class="project-entry-body" id="entry-body-${escapeProjectText(entry.id)}">
               ${entry.text ? `<p class="project-entry-text">${escapeProjectText(entry.text)}</p>` : ''}
             </div>

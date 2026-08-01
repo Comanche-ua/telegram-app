@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v5.4-project-tombstones-sync';
+const CACHE_NAME = 'deadline-tracker-v5.5-simple-photo-gallery';
 const ASSETS = [
   './',
   './index.html',
