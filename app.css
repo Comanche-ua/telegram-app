@@ -3714,89 +3714,174 @@ body.pmm-mode #pmm-workspace { display: block !important; }
 }
 
 /* ─────────────────────────────────────────────────────────────
-   HIGH CONTRAST & BUTTON BORDER SYSTEM REFRESH
-   Ensures strong contrast (no white-on-white / black-on-black)
-   and visible, defined borders on all interactive controls.
+   EXECUTIVE DARK GLASS DESIGN SYSTEM (v7.0)
+   Ultra-modern deep obsidian background with ambient mesh gradients,
+   frosted glassmorphism surfaces, glowing neon indigo/cyan accents,
+   high-contrast 100% white crisp typography, and luminous controls.
    ───────────────────────────────────────────────────────────── */
 
 :root {
-  --line: rgba(17, 24, 39, 0.18);
-  --line-strong: rgba(17, 24, 39, 0.32);
-  --ink: #0f172a;
-  --ink-soft: #334155;
-  --ink-faint: #64748b;
+  --bg: #0b0f19;
+  --paper: #0b0f19;
+  --paper-deep: #070a12;
+  --surface: rgba(17, 24, 39, 0.75);
+  --surface2: rgba(30, 41, 59, 0.85);
+  --surface-card: rgba(17, 24, 39, 0.8);
+  --ink: #ffffff;
+  --ink-soft: #cbd5e1;
+  --ink-faint: #94a3b8;
+  --text: #ffffff;
+  --text2: #cbd5e1;
+  --text3: #94a3b8;
+  --line: rgba(255, 255, 255, 0.16);
+  --line-strong: rgba(255, 255, 255, 0.28);
+  --border: rgba(255, 255, 255, 0.16);
+  --border2: rgba(255, 255, 255, 0.28);
+  --brand: #6366f1;
+  --brand-strong: #4f46e5;
+  --brand-wash: rgba(99, 102, 241, 0.18);
+  --accent: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-3: #06b6d4;
+  --critical: #ef4444;
+  --critical-wash: rgba(239, 68, 68, 0.2);
+  --today: #f59e0b;
+  --today-wash: rgba(245, 158, 11, 0.2);
+  --complete: #10b981;
+  --complete-wash: rgba(16, 185, 129, 0.2);
+  --blue: #6366f1;
+  --blue-bg: rgba(99, 102, 241, 0.2);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.2);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245, 158, 11, 0.2);
+  --green: #10b981;
+  --green-bg: rgba(16, 185, 129, 0.2);
 }
 
-/* 1. Buttons & Action Outlines */
-.btn-primary {
-  background: var(--brand, #5b5ce2) !important;
+html {
+  background: #0b0f19 !important;
   color: #ffffff !important;
-  border: 1.5px solid rgba(0, 0, 0, 0.25) !important;
-  box-shadow: 0 4px 14px rgba(91, 92, 226, 0.35) !important;
+}
+
+body {
+  background:
+    radial-gradient(900px 550px at 90% -10%, rgba(124, 58, 237, 0.16), transparent 60%),
+    radial-gradient(800px 500px at -10% 20%, rgba(6, 182, 212, 0.14), transparent 55%),
+    radial-gradient(1000px 600px at 50% 110%, rgba(99, 102, 241, 0.12), transparent 65%),
+    #0b0f19 !important;
+  background-attachment: fixed !important;
+  color: #ffffff !important;
+}
+
+/* Glass Panels & Cards */
+.card,
+.dash-widget,
+.stat-card,
+.project-entry-card,
+.modal-content,
+.projects-rail,
+.ops-register-panel,
+.ops-module,
+.shtat-workspace,
+.deadline-brief {
+  background: rgba(17, 24, 39, 0.78) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  border-radius: 16px !important;
+}
+
+.card:hover {
+  border-color: rgba(139, 92, 246, 0.45) !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65), 0 0 24px rgba(124, 58, 237, 0.25) !important;
+}
+
+/* Primary Action Buttons */
+.btn-primary,
+.fab-add,
+.project-create-btn,
+.project-first-form button,
+.project-composer-submit,
+.project-inline-save-btn {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #06b6d4 100%) !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.35) !important;
+  box-shadow: 0 0 24px rgba(124, 58, 237, 0.45), 0 4px 16px rgba(0, 0, 0, 0.4) !important;
   font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-.btn-primary:hover {
-  background: var(--brand-strong, #4546c8) !important;
-  border-color: rgba(0, 0, 0, 0.4) !important;
+.btn-primary:hover,
+.fab-add:hover,
+.project-create-btn:hover {
+  box-shadow: 0 0 36px rgba(124, 58, 237, 0.7), 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  filter: brightness(1.12);
+  transform: translateY(-2px);
 }
 
+/* Secondary & Glass Buttons */
 .btn-secondary,
 .auth-btn,
 .ops-soft-btn,
 .tab-add-btn,
-.project-create-btn,
-.project-first-form button,
-.project-composer-submit,
-.project-inline-save-btn,
-.project-inline-cancel-btn {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border: 1.5px solid rgba(17, 24, 39, 0.28) !important;
-  box-shadow: 0 2px 5px rgba(17, 24, 39, 0.08) !important;
+.project-inline-cancel-btn,
+.project-icon-btn,
+.project-entry-toggle {
+  background: rgba(30, 41, 59, 0.85) !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.24) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
   font-weight: 600 !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 .btn-secondary:hover,
 .auth-btn:hover,
-.ops-soft-btn:hover {
-  background: #f8fafc !important;
-  border-color: var(--brand, #5b5ce2) !important;
-  color: var(--brand, #5b5ce2) !important;
+.ops-soft-btn:hover,
+.project-icon-btn:hover,
+.project-entry-toggle:hover {
+  background: rgba(51, 65, 85, 0.95) !important;
+  border-color: #8b5cf6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4) !important;
 }
 
-/* 2. Floating Action Buttons (FAB) */
-.fab-settings,
-.fab-lock {
-  border: 2px solid #0f172a !important;
-  background: #ffffff !important;
-  color: #0f172a !important;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22) !important;
+/* Topbar & Tab Bar */
+.topbar {
+  background: rgba(11, 15, 25, 0.88) !important;
+  backdrop-filter: blur(18px) !important;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.15) !important;
+}
+.topbar-title { color: #ffffff !important; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.topbar-title::after { color: #94a3b8 !important; }
+
+.tab-bar {
+  background: rgba(11, 15, 25, 0.85) !important;
+  backdrop-filter: blur(16px) !important;
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.15) !important;
 }
 
-.fab-settings:hover,
-.fab-lock:hover {
-  border-color: var(--brand, #5b5ce2) !important;
-  color: var(--brand, #5b5ce2) !important;
-}
-
-.fab-add {
-  border: 2px solid rgba(0, 0, 0, 0.2) !important;
-  box-shadow: 0 8px 22px rgba(91, 92, 226, 0.45) !important;
-}
-
-/* 3. Tab Bar & Navigation Buttons */
 .tab-item {
-  border: 1.5px solid rgba(17, 24, 39, 0.22) !important;
-  background: #ffffff !important;
-  color: #0f172a !important;
+  background: rgba(30, 41, 59, 0.75) !important;
+  color: #cbd5e1 !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
   font-weight: 600 !important;
 }
 
-.tab-item.active {
-  background: #0f172a !important;
+.tab-item:hover {
+  background: rgba(51, 65, 85, 0.9) !important;
   color: #ffffff !important;
-  border-color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.tab-item.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  color: #ffffff !important;
+  border: 1.5px solid #8b5cf6 !important;
+  box-shadow: 0 0 22px rgba(124, 58, 237, 0.5) !important;
   font-weight: 700 !important;
 }
 
@@ -3805,95 +3890,115 @@ body.pmm-mode #pmm-workspace { display: block !important; }
   color: #ffffff !important;
 }
 
-.project-list-item {
-  border: 1.5px solid rgba(17, 24, 39, 0.16) !important;
-  background: #ffffff !important;
-  color: #334155 !important;
+/* Floating Action Buttons (FAB) */
+.fab-settings,
+.fab-lock {
+  background: rgba(30, 41, 59, 0.9) !important;
+  color: #ffffff !important;
+  border: 2px solid rgba(255, 255, 255, 0.32) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(14px) !important;
 }
 
-.project-list-item.active {
-  border-color: var(--brand, #5b5ce2) !important;
-  background: #eff6ff !important;
-  color: var(--brand, #5b5ce2) !important;
-  font-weight: 700 !important;
+.fab-settings:hover,
+.fab-lock:hover {
+  border-color: #8b5cf6 !important;
+  color: #8b5cf6 !important;
+  box-shadow: 0 0 24px rgba(139, 92, 246, 0.5) !important;
 }
 
-/* 4. Form Inputs & Textareas */
+/* Inputs, Textareas & Selects */
 input,
 select,
 textarea,
 .input-box textarea,
 .api-key-input,
 .project-inline-input {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  border: 1.5px solid rgba(17, 24, 39, 0.28) !important;
+  background: rgba(15, 23, 42, 0.9) !important;
+  color: #ffffff !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.22) !important;
   font-weight: 500 !important;
+  border-radius: 12px !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
 }
 
 input:focus,
 select:focus,
 textarea:focus,
 .project-inline-input:focus {
-  border-color: var(--brand, #5b5ce2) !important;
-  box-shadow: 0 0 0 3px rgba(91, 92, 226, 0.22) !important;
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.35) !important;
 }
 
-/* 5. Cards & Badges Contrast */
-.card,
-.project-entry-card,
-.dash-widget,
-.stat-card {
-  border: 1.5px solid rgba(17, 24, 39, 0.18) !important;
-  background: #ffffff !important;
-}
+/* Typography, Badges & Deadline Slides */
+.card-text { color: #ffffff !important; font-weight: 700 !important; }
+.card-meta { color: #cbd5e1 !important; }
 
 .card-num,
 .card-date,
 .section-count {
-  background: #f1f5f9 !important;
-  color: #1e293b !important;
-  border: 1px solid rgba(15, 23, 42, 0.2) !important;
+  background: rgba(30, 41, 59, 0.85) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   font-weight: 700 !important;
 }
 
 .assignee-badge {
-  background: #e0e7ff !important;
-  color: #3730a3 !important;
-  border: 1px solid rgba(79, 70, 229, 0.35) !important;
+  background: rgba(79, 70, 229, 0.3) !important;
+  color: #a5b4fc !important;
+  border: 1px solid rgba(129, 140, 248, 0.45) !important;
   font-weight: 700 !important;
 }
 
 .badge-nearest {
-  background: #ffe4e6 !important;
-  color: #9f1239 !important;
-  border: 1px solid rgba(225, 29, 72, 0.4) !important;
+  background: rgba(239, 68, 68, 0.3) !important;
+  color: #fca5a5 !important;
+  border: 1px solid rgba(248, 113, 113, 0.55) !important;
   font-weight: 800 !important;
 }
 
+.deadline-slide {
+  background: rgba(30, 41, 59, 0.7) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+  color: #cbd5e1 !important;
+}
+
+.deadline-slide strong { color: #ffffff !important; }
+
+.deadline-slide.active {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 20px rgba(124, 58, 237, 0.45) !important;
+}
+
 .modal-content {
-  background: #ffffff !important;
-  border: 2px solid rgba(17, 24, 39, 0.3) !important;
-  color: #0f172a !important;
-  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35) !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  border: 2px solid rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8) !important;
 }
 
 .modal-close {
-  border: 1.5px solid rgba(17, 24, 39, 0.25) !important;
-  background: #f1f5f9 !important;
-  color: #0f172a !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  background: rgba(30, 41, 59, 0.85) !important;
+  color: #ffffff !important;
 }
 
-.project-icon-btn,
-.project-entry-toggle {
-  border: 1.5px solid rgba(17, 24, 39, 0.22) !important;
-  background: #ffffff !important;
-  color: #334155 !important;
+.project-list-item {
+  border: 1.5px solid rgba(255, 255, 255, 0.16) !important;
+  background: rgba(30, 41, 59, 0.6) !important;
+  color: #cbd5e1 !important;
 }
 
-.project-icon-btn:hover,
-.project-entry-toggle:hover {
-  border-color: var(--brand, #5b5ce2) !important;
-  color: var(--brand, #5b5ce2) !important;
+.project-list-item.active {
+  border-color: #8b5cf6 !important;
+  background: rgba(99, 102, 241, 0.25) !important;
+  color: #a5b4fc !important;
+  font-weight: 700 !important;
 }
+
 

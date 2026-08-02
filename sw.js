@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v6.0-high-contrast-buttons';
+const CACHE_NAME = 'deadline-tracker-v7.0-executive-dark-glass';
 const ASSETS = [
   './',
   './index.html',
