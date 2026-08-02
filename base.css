@@ -309,6 +309,41 @@ input, select, textarea { font-family: inherit; }
 
 /* Кнопки розміру карток */
 .size-btn { flex: 1; min-width: 90px; }
+.size-btn.active {
+  border-color: var(--accent-1);
+  background: var(--nav-active);
+  color: var(--accent-1);
+  box-shadow: var(--input-focus-ring);
+}
+
+/* Розміри карток (body.size-medium / body.size-small), десктоп */
+@media (min-width: 761px) {
+  body.size-medium .items-grid { gap: 8px; }
+  body.size-medium .card-body { padding: 10px 56px 10px 12px; }
+  body.size-medium .card-text { font-size: 13px; }
+  body.size-medium .card-num,
+  body.size-medium .card-date,
+  body.size-medium .assignee-badge { font-size: 10px; padding: 2px 7px; }
+  body.size-medium .timer-section { width: 190px; flex-basis: 190px; margin-left: 8px; padding-right: 38px; }
+  body.size-medium .timer-orbit { width: 48px; height: 48px; flex-basis: 48px; }
+  body.size-medium .timer-orbit .timer-canvas { width: 48px !important; height: 48px !important; }
+  body.size-medium .timer-text { font-size: 14px; min-width: 62px; }
+  body.size-medium .section-title { font-size: 12px; }
+  body.size-medium .deadline-brief h1 { font-size: 24px; }
+
+  body.size-small .items-grid { gap: 6px; }
+  body.size-small .card-body { padding: 8px 56px 8px 10px; }
+  body.size-small .card-text { font-size: 12px; line-height: 1.35; }
+  body.size-small .card-num,
+  body.size-small .card-date,
+  body.size-small .assignee-badge { font-size: 9px; padding: 1px 6px; }
+  body.size-small .timer-section { width: 160px; flex-basis: 160px; margin-left: 6px; padding-right: 34px; }
+  body.size-small .timer-orbit { width: 40px; height: 40px; flex-basis: 40px; }
+  body.size-small .timer-orbit .timer-canvas { width: 40px !important; height: 40px !important; }
+  body.size-small .timer-text { font-size: 12px; min-width: 52px; }
+  body.size-small .section-title { font-size: 11px; }
+  body.size-small .deadline-brief h1 { font-size: 22px; }
+}
 
 /* ============================================================
    DASH LAYOUT
@@ -548,8 +583,10 @@ select {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
-.api-block input { flex: 1; }
+.api-block input { flex: 1 1 160px; min-width: 0; }
+.api-block .btn-secondary { flex-shrink: 0; white-space: nowrap; }
 .api-status {
   font-size: 11px;
   padding: 4px 8px;

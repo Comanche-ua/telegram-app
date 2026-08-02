@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v8.1-reset-lock';
+const CACHE_NAME = 'deadline-tracker-v8.3-api-block';
 const ASSETS = [
   './',
   './index.html',
