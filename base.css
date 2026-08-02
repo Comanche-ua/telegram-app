@@ -531,6 +531,33 @@ select {
 .mic-btn:hover { color: var(--accent-1); border-color: var(--accent-1); background: var(--nav-active); }
 .mic-btn.is-recording { color: #fff; background: var(--red); animation: micPulse 1.4s ease-in-out infinite; }
 .mic-btn.is-unsupported { display: none; }
+
+/* Статус голосового введення (тост) */
+#voice-status-tip {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(8px);
+  z-index: 2000;
+  max-width: 86vw;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#voice-status-tip.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#voice-status-tip.error { color: var(--red); border-color: rgba(220, 38, 38, .35); }
 @keyframes micPulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(246, 70, 93, .45); }
   50% { box-shadow: 0 0 0 8px rgba(246, 70, 93, 0); }

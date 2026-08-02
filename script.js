@@ -4675,79 +4675,290 @@ function initShtatMode() {
 // Підтримка: Chrome/Edge (десктоп + Android, у т.ч. Telegram Android WebView).
 // НЕ підтримується: Safari/iOS та Telegram iOS WebView — кнопки мікрофону
 // на таких пристроях автоматично приховуються, решта функціоналу не страждає.
-function initVoiceInput() {
-  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const micButtons = document.querySelectorAll('.mic-btn');
+// ---- Голосове введення: Web Speech API → фолбек на запис через Gemini ----
+let voiceStatusTimer = null;
+function showVoiceStatus(text, isError = false) {
+  let el = document.getElementById('voice-status-tip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'voice-status-tip';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.toggle('error', !!isError);
+  el.classList.add('show');
+  clearTimeout(voiceStatusTimer);
+  voiceStatusTimer = setTimeout(() => el.classList.remove('show'), isError ? 6000 : 4000);
+}
 
-  if (!SpeechRecognitionAPI) {
-    micButtons.forEach((btn) => btn.classList.add('is-unsupported'));
-    return;
+// webm/opus → 16-бітний WAV (моно, 16кГц), base64 для Gemini
+function audioBlobToWavBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Не вдалося прочитати аудіо'));
+    reader.onload = async () => {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AC();
+        const audioBuffer = await audioCtx.decodeAudioData(reader.result);
+        const wavBase64 = audioBufferToWavBase64(audioBuffer);
+        audioCtx.close();
+        resolve(wavBase64);
+      } catch (e) {
+        reject(new Error('Аудіоформат не підтримується'));
+      }
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function audioBufferToWavBase64(buffer) {
+  const numChannels = 1;
+  const sampleRate = Math.min(16000, buffer.sampleRate);
+  const length = Math.max(1, Math.floor(buffer.length * sampleRate / buffer.sampleRate));
+  const wav = new ArrayBuffer(44 + length * 2);
+  const view = new DataView(wav);
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + length * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * 2, true);
+  view.setUint16(32, numChannels * 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, length * 2, true);
+
+  const source = buffer.getChannelData(0);
+  const step = buffer.sampleRate / sampleRate;
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    let s = source[Math.min(source.length - 1, Math.floor(i * step))];
+    s = Math.max(-1, Math.min(1, s));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
   }
 
-  let recognition = null;
-  let activeBtn = null;
-  let activeField = null;
-  let baseValue = '';
+  let binary = '';
+  const bytes = new Uint8Array(wav);
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
 
-  function stopRecording() {
-    if (recognition) {
-      try { recognition.stop(); } catch (e) { /* ignore */ }
+// Кешуємо потік мікрофона — запит дозволу браузера з'являється максимум один раз за сесію
+let cachedMicStream = null;
+let cachedMicStreamPromise = null;
+function getMicStream() {
+  if (cachedMicStream) return Promise.resolve(cachedMicStream);
+  if (!cachedMicStreamPromise) {
+    cachedMicStreamPromise = navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => { cachedMicStream = stream; return stream; })
+      .catch((err) => { cachedMicStreamPromise = null; throw err; });
+  }
+  return cachedMicStreamPromise;
+}
+async function micPermissionState() {
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' });
+    return status.state; // 'granted' | 'prompt' | 'denied'
+  } catch (e) {
+    return 'prompt';
+  }
+}
+
+function initVoiceInput() {
+  const micButtons = document.querySelectorAll('.mic-btn');
+  let session = null; // { btn, field, stop() }
+
+  function endSession() {
+    if (session) {
+      try { session.stop(); } catch (e) { /* ignore */ }
+      session.btn.classList.remove('is-recording');
+      session = null;
     }
-    if (activeBtn) activeBtn.classList.remove('is-recording');
-    activeBtn = null;
-    activeField = null;
+  }
+
+  // Запис через MediaRecorder → транскрипція через Gemini (працює у WebView Telegram)
+  async function startRecordSession(btn, field) {
+    if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return null;
+    const key = (localStorage.getItem('gemini_api_key') || '').trim();
+    if (key.length < 10) {
+      showVoiceStatus('Для голосу потрібен Gemini API Key (Налаштування → AI та дані)', true);
+      return null;
+    }
+
+    const perm = await micPermissionState();
+    if (perm === 'denied') {
+      showVoiceStatus('Доступ до мікрофона заборонено — дозвольте його у налаштуваннях браузера', true);
+      return null;
+    }
+
+    let stream;
+    try {
+      stream = await getMicStream();
+    } catch (e) {
+      showVoiceStatus('Доступ до мікрофона заборонено', true);
+      return null;
+    }
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+    let recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    let chunks = [];
+
+    async function transcribe() {
+      if (!chunks.length) { showVoiceStatus('Запис порожній', true); return; }
+      showVoiceStatus('Розпізнаю через Gemini…');
+      try {
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        const wavBase64 = await audioBlobToWavBase64(blob);
+        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [
+              { text: 'Транскрибуй українське аудіо. Поверни ТІЛЬКИ розпізнаний текст без лапок, пояснень та зайвих слів.' },
+              { inlineData: { mimeType: 'audio/wav', data: wavBase64 } }
+            ] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+          })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+        const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+        if (!text) { showVoiceStatus('Не вдалося розпізнати мову', true); return; }
+        const base = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
+        field.value = (base + text).trim();
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        showVoiceStatus('Готово');
+      } catch (e) {
+        console.warn('[VoiceInput] Gemini помилка:', e);
+        showVoiceStatus('Помилка розпізнавання: ' + e.message, true);
+      }
+    }
+
+    const sessionObj = {
+      btn, field,
+      stop() {
+        if (recorder && recorder.state !== 'inactive') {
+          try { recorder.stop(); } catch (e) { /* ignore */ }
+        }
+      }
+    };
+
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => { transcribe(); };
+    recorder.start();
+    // Автостоп через 45 секунд, щоб запис не висів вічно
+    setTimeout(() => {
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.stop(); } catch (e) { /* ignore */ }
+      }
+    }, 45000);
+    showVoiceStatus('Запис… Торкніться мікрофона ще раз, щоб завершити');
+    return sessionObj;
+  }
+
+  // Стандартне розпізнавання Web Speech API (з дедуплікацією фінального тексту)
+  function startSpeechSession(btn, field) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return null;
+    let rec;
+    try { rec = new SR(); } catch (e) { return null; }
+
+    rec.lang = 'uk-UA';
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    let baseValue = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
+    const seenFinals = new Set();
+
+    const sessionObj = {
+      btn, field,
+      stop() { try { rec.stop(); } catch (e) { /* ignore */ } }
+    };
+
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) {
+          const t = res[0].transcript.trim();
+          if (t && !seenFinals.has(t)) {
+            seenFinals.add(t);
+            baseValue += t + ' ';
+          }
+        } else {
+          interim += res[0].transcript;
+        }
+      }
+      field.value = (baseValue + interim).trim();
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      // Шлях спрацював — наступного разу починаємо з нього
+      localStorage.setItem('voice_mode', 'speech');
+    };
+
+    rec.onerror = (event) => {
+      const fatal = ['network', 'not-allowed', 'service-not-allowed', 'language-not-supported'];
+      endSession();
+      if (fatal.includes(event.error)) {
+        // Стандартне розпізнавання недоступне — перемикаємось на запис через Gemini
+        localStorage.setItem('voice_mode', 'gemini');
+        startRecordSession(btn, field).then((s) => {
+          if (s) {
+            session = s;
+            btn.classList.add('is-recording');
+            showVoiceStatus('Стандартне розпізнавання недоступне — записую через Gemini…');
+          }
+        });
+      } else {
+        showVoiceStatus('Розпізнавання перервано (' + event.error + ')', true);
+      }
+    };
+
+    rec.onend = () => { if (session === sessionObj) endSession(); };
+
+    try { rec.start(); } catch (e) { return null; }
+    return sessionObj;
   }
 
   micButtons.forEach((btn) => {
-    const targetId = btn.dataset.target;
-    const field = document.getElementById(targetId);
+    const field = document.getElementById(btn.dataset.target);
     if (!field) { btn.classList.add('is-unsupported'); return; }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       // Повторний клік по активній кнопці — зупинити запис
-      if (activeBtn === btn) { stopRecording(); return; }
+      if (session && session.btn === btn) { endSession(); return; }
 
       // Перемикання на інше поле — зупинити попередній запис
-      stopRecording();
+      endSession();
 
-      recognition = new SpeechRecognitionAPI();
-      recognition.lang = 'uk-UA';
-      recognition.continuous = true;
-      recognition.interimResults = true;
+      // Якщо запис через Gemini уже спрацював раніше — одразу йдемо в нього,
+      // щоб не викликати зайвий запит дозволу від Web Speech API
+      const useGemini = localStorage.getItem('voice_mode') === 'gemini';
+      const canSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
-      activeBtn = btn;
-      activeField = field;
-      baseValue = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
-      btn.classList.add('is-recording');
-
-      recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalTranscript += transcript;
-          else interimTranscript += transcript;
-        }
-        if (finalTranscript) baseValue += finalTranscript.trim() + ' ';
-        field.value = (baseValue + interimTranscript).trim();
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-      };
-
-      recognition.onerror = (event) => {
-        console.warn('[VoiceInput] Помилка розпізнавання:', event.error);
-        stopRecording();
-      };
-
-      recognition.onend = () => {
-        if (activeBtn === btn) stopRecording();
-      };
-
-      try {
-        recognition.start();
-      } catch (e) {
-        console.warn('[VoiceInput] Не вдалося запустити:', e);
-        stopRecording();
+      if (!useGemini && canSpeech) {
+        session = startSpeechSession(btn, field);
+        if (session) { btn.classList.add('is-recording'); return; }
       }
+
+      session = await startRecordSession(btn, field);
+      if (session) btn.classList.add('is-recording');
+      else showVoiceStatus('Голосове введення недоступне на цьому пристрої', true);
     });
   });
 }

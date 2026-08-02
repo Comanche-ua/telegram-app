@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v8.10-projects-mobile';
+const CACHE_NAME = 'deadline-tracker-v8.12-mic-perm';
 const ASSETS = [
   './',
   './index.html',
