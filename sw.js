@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v7.2-instant-photo-delete-prompt';
+const CACHE_NAME = 'deadline-tracker-v7.4-expressive-fonts-update';
 const ASSETS = [
   './',
   './index.html',
