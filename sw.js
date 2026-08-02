@@ -1,8 +1,9 @@
-const CACHE_NAME = 'deadline-tracker-v7.4-expressive-fonts-update';
+const CACHE_NAME = 'deadline-tracker-v8.1-reset-lock';
 const ASSETS = [
   './',
   './index.html',
-  './app.css',
+  './themes.css',
+  './base.css',
   './script.js',
   './manifest.json',
   './logo-mark.svg',

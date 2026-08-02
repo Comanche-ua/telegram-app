@@ -1,20 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 512 512" fill="none">
   <defs>
-    <!-- Background Gradient -->
     <linearGradient id="bgGrad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0F172A"/>
-      <stop offset="50%" stop-color="#1E1B4B"/>
-      <stop offset="100%" stop-color="#0B0F19"/>
+      <stop offset="0%" stop-color="#181A1E"/>
+      <stop offset="50%" stop-color="#0E0F11"/>
+      <stop offset="100%" stop-color="#050505"/>
     </linearGradient>
 
-    <!-- Ring Gradient (Violet to Cyan) -->
     <linearGradient id="ringGrad" x1="60" y1="60" x2="452" y2="452" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#8B5CF6"/>
-      <stop offset="50%" stop-color="#6366F1"/>
-      <stop offset="100%" stop-color="#06B6D4"/>
+      <stop offset="0%" stop-color="#F0B90B"/>
+      <stop offset="50%" stop-color="#F8D33A"/>
+      <stop offset="100%" stop-color="#C99400"/>
     </linearGradient>
 
-    <!-- Glow Filter -->
     <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="16" result="blur"/>
       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
@@ -24,33 +21,69 @@
       <feGaussianBlur stdDeviation="8" result="blur"/>
       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
     </filter>
+
+    <style>
+      @keyframes ringPulse {
+        0%, 100% { stroke-dashoffset: 260; }
+        50% { stroke-dashoffset: 180; }
+      }
+      @keyframes softGlow {
+        0%, 100% { opacity: 0.9; }
+        50% { opacity: 1; }
+      }
+      @keyframes dotBlink {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.55; transform: scale(0.85); }
+      }
+      @keyframes dashRotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .progressRing {
+        transform-origin: 256px 256px;
+        animation: ringPulse 3s ease-in-out infinite, softGlow 3s ease-in-out infinite;
+      }
+      .crosshair {
+        transform-origin: 256px 256px;
+        animation: dashRotate 24s linear infinite;
+      }
+      .hourHand {
+        transform-origin: 256px 256px;
+        animation: dashRotate 12s linear infinite;
+      }
+      .minuteHand {
+        transform-origin: 256px 256px;
+        animation: dashRotate 4s linear infinite;
+      }
+      .urgentDot {
+        transform-origin: 376px 136px;
+        animation: dotBlink 1.4s ease-in-out infinite;
+      }
+      .activeDot {
+        transform-origin: 136px 376px;
+        animation: dotBlink 2s ease-in-out infinite;
+        animation-delay: 0.6s;
+      }
+    </style>
   </defs>
 
-  <!-- Base Squircle Card with Border Glow -->
   <rect x="16" y="16" width="480" height="480" rx="130" fill="url(#bgGrad)"/>
   <rect x="16" y="16" width="480" height="480" rx="130" stroke="rgba(255, 255, 255, 0.22)" stroke-width="8"/>
 
-  <!-- Outer Progress Ring (Deadline Circle) -->
   <circle cx="256" cy="256" r="170" stroke="rgba(255, 255, 255, 0.12)" stroke-width="28"/>
-  <circle cx="256" cy="256" r="170" stroke="url(#ringGrad)" stroke-width="28" stroke-dasharray="1068" stroke-dashoffset="260" stroke-linecap="round" filter="url(#neonGlow)"/>
+  <circle class="progressRing" cx="256" cy="256" r="170" stroke="url(#ringGrad)" stroke-width="28" stroke-dasharray="1068" stroke-dashoffset="260" stroke-linecap="round" filter="url(#neonGlow)"/>
 
-  <!-- Inner Target Crosshair Marks -->
-  <circle cx="256" cy="256" r="100" stroke="rgba(255, 255, 255, 0.18)" stroke-width="8" stroke-dasharray="12 16"/>
+  <circle class="crosshair" cx="256" cy="256" r="100" stroke="rgba(255, 255, 255, 0.18)" stroke-width="8" stroke-dasharray="12 16"/>
 
-  <!-- Precision Clock Hands (Deadline Target) -->
-  <circle cx="256" cy="256" r="18" fill="#FFFFFF"/>
-  <circle cx="256" cy="256" r="10" fill="#6366F1"/>
+  <circle cx="256" cy="256" r="18" fill="#F0B90B"/>
+  <circle cx="256" cy="256" r="10" fill="#181A1E"/>
 
-  <!-- Hour Hand -->
-  <path d="M256 256 L256 160" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
+  <path class="hourHand" d="M256 256 L256 160" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round"/>
 
-  <!-- Minute Hand -->
-  <path d="M256 256 L330 300" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/>
+  <path class="minuteHand" d="M256 256 L330 300" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/>
 
-  <!-- Glowing Urgent Deadline Dot (Crimson Neon) -->
-  <circle cx="376" cy="136" r="22" fill="#EF4444" filter="url(#dotGlow)"/>
+  <circle class="urgentDot" cx="376" cy="136" r="22" fill="#EF4444" filter="url(#dotGlow)"/>
   <circle cx="376" cy="136" r="12" fill="#FFFFFF"/>
 
-  <!-- Active Status Dot (Green Neon) -->
-  <circle cx="136" cy="376" r="16" fill="#10B981" filter="url(#dotGlow)"/>
+  <circle class="activeDot" cx="136" cy="376" r="16" fill="#10B981" filter="url(#dotGlow)"/>
 </svg>

@@ -52,13 +52,18 @@ function hideLockScreen() {
 
 async function initLockScreen() {
   const lockBtn = document.getElementById('lock-now-btn');
+  const forgotBtn = document.getElementById('lock-forgot');
   if (isLockEnabled()) {
     if (lockBtn) lockBtn.style.display = 'flex';
+    if (forgotBtn) forgotBtn.style.display = 'block';
     showLockScreen();
   } else {
     if (lockBtn) lockBtn.style.display = 'none';
+    if (forgotBtn) forgotBtn.style.display = 'none';
     hideLockScreen();
   }
+  const forgot = document.getElementById('lock-forgot');
+  if (forgot) forgot.addEventListener('click', resetLockScreenProtection);
 }
 
 async function attemptUnlock() {
@@ -87,6 +92,19 @@ function manualLockNow() {
   closeModal();
   closeEditModal();
   showLockScreen();
+}
+
+function resetLockScreenProtection() {
+  if (!isLockEnabled()) return;
+  if (!confirm('Скинути захист паролем? Список завдань більше не буде приховуватись.')) return;
+  localStorage.removeItem(LOCK_HASH_KEY);
+  localStorage.removeItem(AUTO_LOCK_ENABLED_KEY);
+  localStorage.removeItem(AUTO_LOCK_TIMEOUT_KEY);
+  hideLockScreen();
+  updateLockStatusUI();
+  const forgotBtn = document.getElementById('lock-forgot');
+  if (forgotBtn) forgotBtn.style.display = 'none';
+  alert('Захист паролем скинуто.');
 }
 
 function updateLockStatusUI() {
@@ -3363,11 +3381,12 @@ function initSettings() {
   if (setLockBtn && lockPassInput) {
     setLockBtn.addEventListener('click', async () => {
       const val = lockPassInput.value;
-      if (!val || val.length < 4) { alert('Пароль має містити щонайменше 4 символи.'); return; }
+      if (!val || val.length < 3) { alert('Пароль має містити щонайменше 3 символи.'); return; }
       const hash = await sha256Hex(val);
       localStorage.setItem(LOCK_HASH_KEY, hash);
       lockPassInput.value = '';
       updateLockStatusUI();
+      closeSettings();
       alert('Пароль встановлено. Захист екрана активовано.');
     });
     lockPassInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') setLockBtn.click(); });
@@ -3422,6 +3441,14 @@ function initSettings() {
       applyCardSize(size);
     });
   });
+
+  // Theme Settings (теми як схеми на DLE)
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyTheme(btn.dataset.themeOption);
+    });
+  });
+  applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME);
 
   // Export / Import
   const exportBtn = document.getElementById('export-btn');
@@ -3516,6 +3543,31 @@ function applyCardSize(size) {
   document.body.className = document.body.className.replace(/size-\w+/g, '').trim();
   if (size === 'medium') document.body.classList.add('size-medium');
   else if (size === 'small') document.body.classList.add('size-small');
+}
+
+// ---- Theme system (теми як схеми на DLE) ----
+const THEME_STORAGE_KEY = 'ext_theme';
+const DEFAULT_THEME = 'binance';
+const AVAILABLE_THEMES = ['binance', 'light'];
+
+function applyTheme(theme) {
+  const safe = AVAILABLE_THEMES.includes(theme) ? theme : DEFAULT_THEME;
+  document.body.dataset.theme = safe;
+  localStorage.setItem(THEME_STORAGE_KEY, safe);
+  // Оновити theme-color метатег під тему
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.content = safe === 'light' ? '#F7F8FA' : '#0B0E11';
+  }
+  // Підсвітити активну кнопку в налаштуваннях
+  document.querySelectorAll('.theme-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.themeOption === safe);
+  });
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_STORAGE_KEY);
+  applyTheme(saved || DEFAULT_THEME);
 }
 
 function applyWallpaper(wp) {
@@ -3925,6 +3977,19 @@ function addProject(title) {
   return project;
 }
 
+function refreshProjectsWorkspace() {
+  const restoreY = window.scrollY;
+  const draw = () => {
+    renderProjectsWorkspace();
+    requestAnimationFrame(() => window.scrollTo(0, restoreY));
+  };
+  if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(draw);
+  } else {
+    draw();
+  }
+}
+
 function renderProjectsWorkspace() {
   const list = document.getElementById('projects-list');
   const detail = document.getElementById('project-detail');
@@ -3952,7 +4017,7 @@ function renderProjectsWorkspace() {
     document.getElementById('project-first-form')?.addEventListener('submit', event => {
       event.preventDefault();
       const input = document.getElementById('project-first-title');
-      if (addProject(input.value)) renderProjectsWorkspace();
+      if (addProject(input.value)) refreshProjectsWorkspace();
     });
     return;
   }
@@ -3978,12 +4043,16 @@ function renderProjectsWorkspace() {
     <div class="project-chain" aria-label="Хронологія кроків">
       ${entries.length ? entries.map((entry, index) => `
         <article class="project-entry ${entry.done ? 'is-done' : ''}" data-entry-card-id="${escapeProjectText(entry.id)}">
-          <div class="project-entry-node">${entries.length - index}</div>
+          <div class="project-entry-rail">
+            <time class="project-entry-time" datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+            <div class="project-entry-node">${entries.length - index}</div>
+          </div>
           <div class="project-entry-card">
             <div class="project-entry-top">
-              <time datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+              <span class="project-entry-kind">${entry.imageData ? 'Фото / запис' : 'Запис'}</span>
               <div class="project-entry-actions">
                 <button class="project-icon-btn" type="button" data-edit-entry="${escapeProjectText(entry.id)}" title="Редагувати крок">${pencilIcon}</button>
+                ${entry.imageData ? `<button class="project-icon-btn danger" type="button" data-delete-image="${escapeProjectText(entry.id)}" title="Видалити фото">${trashIcon}</button>` : ''}
                 <button class="project-icon-btn danger" type="button" data-delete-entry="${escapeProjectText(entry.id)}" title="Видалити крок">${trashIcon}</button>
                 <button class="project-entry-toggle" type="button" data-entry-id="${escapeProjectText(entry.id)}" aria-pressed="${entry.done ? 'true' : 'false'}" title="${entry.done ? 'Скасувати' : 'Виконати'}">
                   ${checkIcon} ${entry.done ? 'Виконано' : 'Виконати'}
@@ -4016,7 +4085,7 @@ function renderProjectsWorkspace() {
     const next = loadProjectsData();
     next.activeProjectId = button.dataset.projectId;
     saveProjectsData(next);
-    renderProjectsWorkspace();
+    refreshProjectsWorkspace();
   }));
 
   // Toggle done status
@@ -4028,7 +4097,7 @@ function renderProjectsWorkspace() {
       entry.done = !entry.done;
       entry.completedAt = entry.done ? new Date().toISOString() : null;
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     }
   }));
 
@@ -4056,9 +4125,9 @@ function renderProjectsWorkspace() {
           const project = next.projects.find(item => item.id === active.id);
           if (project) { project.title = newTitle.slice(0, 120); saveProjectsData(next); }
         }
-        renderProjectsWorkspace();
+        refreshProjectsWorkspace();
       });
-      container.querySelector('#btn-cancel-edit-title')?.addEventListener('click', () => renderProjectsWorkspace());
+      container.querySelector('#btn-cancel-edit-title')?.addEventListener('click', () => refreshProjectsWorkspace());
     });
   }
 
@@ -4079,9 +4148,9 @@ function renderProjectsWorkspace() {
       next.projects = next.projects.filter(p => p.id !== active.id);
       next.activeProjectId = next.projects[0]?.id || null;
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
-    container.querySelector('#btn-cancel-delete-project')?.addEventListener('click', () => renderProjectsWorkspace());
+    container.querySelector('#btn-cancel-delete-project')?.addEventListener('click', () => refreshProjectsWorkspace());
   });
 
   // Inline edit entry message
@@ -4118,25 +4187,50 @@ function renderProjectsWorkspace() {
         ent.updatedAt = new Date().toISOString();
         saveProjectsData(dataStore);
       }
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
 
-    bodyEl.querySelector(`[data-cancel-edit-entry]`)?.addEventListener('click', () => renderProjectsWorkspace());
+    bodyEl.querySelector(`[data-cancel-edit-entry]`)?.addEventListener('click', () => refreshProjectsWorkspace());
+  }));
+
+  // Remove only the photo; confirmation lives in the top action row, never below the image.
+  detail.querySelectorAll('[data-delete-image]').forEach(button => button.addEventListener('click', () => {
+    const entryId = button.dataset.deleteImage;
+    const topEl = button.closest('.project-entry-card')?.querySelector('.project-entry-top');
+    if (!topEl) return;
+    topEl.innerHTML = `
+      <div class="project-inline-confirm project-photo-confirm">
+        <span>Видалити це фото?</span>
+        <button type="button" class="project-inline-save-btn danger" data-confirm-delete-image="${escapeProjectText(entryId)}">Видалити</button>
+        <button type="button" class="project-inline-cancel-btn" data-cancel-delete-image>Скасувати</button>
+      </div>`;
+    topEl.querySelector('[data-confirm-delete-image]')?.addEventListener('click', () => {
+      const dataStore = loadProjectsData();
+      const project = dataStore.projects.find(item => item.id === active.id);
+      const entry = project?.entries.find(item => item.id === entryId);
+      if (entry) {
+        entry.imageData = null;
+        entry.updatedAt = new Date().toISOString();
+        saveProjectsData(dataStore);
+        refreshProjectsWorkspace();
+      }
+    });
+    topEl.querySelector('[data-cancel-delete-image]')?.addEventListener('click', () => refreshProjectsWorkspace());
   }));
 
   // Delete entry
   detail.querySelectorAll('[data-delete-entry]').forEach(button => button.addEventListener('click', () => {
     const entryId = button.dataset.deleteEntry;
-    const bodyEl = detail.querySelector(`#entry-body-${entryId}`);
-    if (!bodyEl) return;
-    bodyEl.innerHTML = `
-      <div class="project-inline-confirm">
+    const topEl = button.closest('.project-entry-card')?.querySelector('.project-entry-top');
+    if (!topEl) return;
+    topEl.innerHTML = `
+      <div class="project-inline-confirm project-photo-confirm">
         <span>Видалити цей крок?</span>
         <button type="button" class="project-inline-save-btn danger" data-confirm-delete-entry="${escapeProjectText(entryId)}">Видалити</button>
         <button type="button" class="project-inline-cancel-btn" data-cancel-delete-entry="${escapeProjectText(entryId)}">Скасувати</button>
       </div>
     `;
-    bodyEl.querySelector('[data-confirm-delete-entry]')?.addEventListener('click', () => {
+    topEl.querySelector('[data-confirm-delete-entry]')?.addEventListener('click', () => {
       const dataStore = loadProjectsData();
       const prj = dataStore.projects.find(item => item.id === active.id);
       if (prj) {
@@ -4144,9 +4238,9 @@ function renderProjectsWorkspace() {
         prj.entries = prj.entries.filter(e => e.id !== entryId);
         saveProjectsData(dataStore);
       }
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
-    bodyEl.querySelector('[data-cancel-delete-entry]')?.addEventListener('click', () => renderProjectsWorkspace());
+    topEl.querySelector('[data-cancel-delete-entry]')?.addEventListener('click', () => refreshProjectsWorkspace());
   }));
 
   // Image status feedback
@@ -4184,7 +4278,7 @@ function renderProjectsWorkspace() {
         done: false
       });
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     } catch (error) {
       console.warn('Project image was not saved:', error);
       if (status) status.textContent = error.name === 'QuotaExceededError' ? 'Мало місця у сховищі для фото.' : error.message || 'Помилка додавання фото.';
@@ -4198,7 +4292,7 @@ function initProjectsWorkspace() {
     const data = loadProjectsData();
     const newPrj = addProject(`Новий проєкт ${data.projects.length + 1}`);
     if (newPrj) {
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
       setTimeout(() => {
         const editBtn = document.getElementById('btn-edit-project-title');
         if (editBtn) editBtn.click();
@@ -4675,6 +4769,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initSettings();
   initSettingsNav();
+  initTheme();
   initProjectsWorkspace();
   initOpsWorkspace();
   initVoiceInput();
@@ -4909,6 +5004,17 @@ document.addEventListener('DOMContentLoaded', () => {
   })();
 
   // ===== Screen lock (password protect) =====
+  // Аварійний скид блокування через URL: index.html?reset_lock=1
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reset_lock') === '1') {
+      localStorage.removeItem(LOCK_HASH_KEY);
+      localStorage.removeItem(AUTO_LOCK_ENABLED_KEY);
+      localStorage.removeItem(AUTO_LOCK_TIMEOUT_KEY);
+      history.replaceState(null, '', window.location.pathname);
+      console.log('[Lock] Protection reset via ?reset_lock=1');
+    }
+  } catch (e) { console.warn('Lock reset param failed:', e); }
   try { initLockScreen(); } catch (e) { console.warn('LockScreen unavailable:', e); }
   const lockUnlockBtn = document.getElementById('lock-unlock-btn');
   if (lockUnlockBtn) lockUnlockBtn.addEventListener('click', attemptUnlock);
