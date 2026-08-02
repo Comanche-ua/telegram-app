@@ -749,12 +749,12 @@ function handleRedirectAuth() {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
       localStorage.setItem('google_auth_token', token);
-      handleAuthSuccess(token, true);
+      handleAuthSuccess(token);
     }
   }
 }
 
-async function handleAuthSuccess(accessToken, isRedirect = false) {
+async function handleAuthSuccess(accessToken) {
   try {
     localStorage.setItem('google_auth_token', accessToken);
 
@@ -775,75 +775,10 @@ async function handleAuthSuccess(accessToken, isRedirect = false) {
     renderAuthUI();
 
     await loadFromDrive();
-
-    // Якщо авторизація відбулася через редирект у зовнішньому браузері
-    if (isRedirect && (!window.Telegram || !window.Telegram.WebApp || !window.Telegram.WebApp.initData)) {
-      showReturnToTelegramScreen(accessToken, currentUser.email);
-    }
   } catch(e) {
     console.error('[Auth] Userinfo error:', e);
     renderAuthUI();
   }
-}
-
-function showReturnToTelegramScreen(token, email) {
-  const existing = document.getElementById('oauth-success-modal');
-  if (existing) existing.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'oauth-success-modal';
-  modal.style.cssText = `
-    position: fixed; inset: 0; z-index: 99999;
-    background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(12px);
-    display: flex; align-items: center; justify-content: center; padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  `;
-
-  modal.innerHTML = `
-    <div style="background: #1e293b; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 24px; max-width: 400px; width: 100%; text-align: center; color: #fff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
-      <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
-      <h2 style="margin: 0 0 8px; font-size: 20px; font-weight: 700; color: #4f8ef7;">Google Drive авторизовано!</h2>
-      <p style="margin: 0 0 16px; font-size: 13px; color: #94a3b8;">Обліковий запис: <b>${escHtml(email)}</b></p>
-      
-      <div style="background: rgba(79, 142, 247, 0.1); border: 1px solid rgba(79, 142, 247, 0.2); border-radius: 12px; padding: 14px; margin-bottom: 20px; font-size: 13px; line-height: 1.5; color: #cbd5e1; text-align: left;">
-        📌 <b>Дані збережено.</b> Тепер ви можете повернутися у додаток Telegram.
-      </div>
-
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button id="oauth-return-tg-btn" style="background: #229ED9; color: #fff; border: none; border-radius: 12px; padding: 12px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
-          ✈️ Повернутися в Telegram
-        </button>
-        <button id="oauth-copy-token-btn" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 10px; font-size: 12px; cursor: pointer;">
-          📋 Скопіювати токен доступу
-        </button>
-        <button id="oauth-close-modal-btn" style="background: transparent; color: #64748b; border: none; padding: 8px; font-size: 12px; cursor: pointer;">
-          Продовжити у браузері
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  document.getElementById('oauth-return-tg-btn')?.addEventListener('click', () => {
-    // Спроба відкрити Telegram
-    window.location.href = 'tg://resolve';
-    setTimeout(() => {
-      window.close();
-    }, 1000);
-  });
-
-  document.getElementById('oauth-copy-token-btn')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(token).then(() => {
-      alert('✅ Токен скопійовано! Ви можете вставити його в Налаштуваннях додатка у Telegram.');
-    }).catch(() => {
-      prompt('Ваш токен авторизації:', token);
-    });
-  });
-
-  document.getElementById('oauth-close-modal-btn')?.addEventListener('click', () => {
-    modal.remove();
-  });
 }
 
 // ---- Google Drive Sync ----
