@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v7.3-modern-logo-update';
+const CACHE_NAME = 'deadline-tracker-v7.4-expressive-fonts-update';
 const ASSETS = [
   './',
   './index.html',
