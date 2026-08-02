@@ -3891,7 +3891,7 @@ function localDateTimeValue(value = new Date()) {
 }
 
 function projectImageToDataUrl(file) {
-  // Ліміт: 499 KB у байтах рядка base64
+  // Ліміт: 499 KB — МАКСИМУМ у байтах реального файлу (стискаємо рівно до бюджету, не менше)
   const MAX_BYTES = 499 * 1024;
 
   return new Promise((resolve, reject) => {
@@ -3899,59 +3899,74 @@ function projectImageToDataUrl(file) {
       reject(new Error('Оберіть зображення.'));
       return;
     }
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Не вдалося прочитати фото.'));
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = () => reject(new Error('Не вдалося обробити фото.'));
-      image.onload = () => {
-        // Ступені стиснення: [макс. сторона, якість JPEG]
-        const steps = [
-          [1440, 0.85],
-          [1440, 0.72],
-          [1440, 0.60],
-          [1280, 0.75],
-          [1280, 0.60],
-          [1024, 0.80],
-          [1024, 0.65],
-          [1024, 0.50],
-          [ 768, 0.75],
-          [ 768, 0.60],
-          [ 768, 0.45],
-          [ 512, 0.70],
-          [ 512, 0.50],
-          [ 512, 0.35],
-        ];
 
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        let result = null;
+    // Ступені стиснення: [макс. сторона, якість JPEG]
+    const steps = [
+      [1440, 0.85],
+      [1440, 0.72],
+      [1440, 0.60],
+      [1280, 0.75],
+      [1280, 0.60],
+      [1024, 0.80],
+      [1024, 0.65],
+      [1024, 0.50],
+      [ 768, 0.75],
+      [ 768, 0.60],
+      [ 768, 0.45],
+      [ 512, 0.70],
+      [ 512, 0.50],
+      [ 512, 0.35],
+    ];
 
-        for (const [maxSide, quality] of steps) {
-          const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
-          canvas.width  = Math.max(1, Math.round(image.naturalWidth  * scale));
-          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          result = canvas.toDataURL('image/jpeg', quality);
+    const encode = (source, width, height) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      let result = null;
 
-          // Перевіряємо розмір (base64 рядок ~ реальний розмір файлу * 4/3)
-          if (result.length <= MAX_BYTES) {
-            console.log(`[Photo] Стиснено до ${Math.round(result.length / 1024)}KB (${canvas.width}×${canvas.height}, q=${quality})`);
-            break;
-          }
+      for (const [maxSide, quality] of steps) {
+        const scale = Math.min(1, maxSide / Math.max(width, height));
+        canvas.width  = Math.max(1, Math.round(width  * scale));
+        canvas.height = Math.max(1, Math.round(height * scale));
+        // Білий фон — щоб PNG з прозорістю не ставав чорним при конвертації в JPEG
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const rawLength = atob(dataUrl.split(',')[1] || '').length;
+        result = dataUrl;
+        if (rawLength <= MAX_BYTES) {
+          console.log(`[Photo] Стиснено до ${Math.round(rawLength / 1024)}KB (${canvas.width}×${canvas.height}, q=${quality})`);
+          break;
         }
+      }
 
-        // Якщо навіть найменший крок перевищує — повертаємо все одно (краще мати фото ніж нічого)
-        if (result.length > MAX_BYTES) {
-          console.warn(`[Photo] Не вдалося стиснути до 499KB, розмір: ${Math.round(result.length / 1024)}KB`);
-        }
-
-        resolve(result);
-      };
-      image.src = reader.result;
+      const finalLength = atob((result || '').split(',')[1] || '').length;
+      if (finalLength > MAX_BYTES) {
+        console.warn(`[Photo] Не вдалося стиснути до 499KB, розмір: ${Math.round(finalLength / 1024)}KB`);
+      }
+      resolve(result);
     };
-    reader.readAsDataURL(file);
+
+    // Завантажуємо з урахуванням EXIF-орієнтації (вертикальні фото не будуть повернуті)
+    const loadViaImage = () => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Не вдалося прочитати фото.'));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error('Не вдалося обробити фото.'));
+        image.onload = () => encode(image, image.naturalWidth, image.naturalHeight);
+        image.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    if (typeof createImageBitmap === 'function') {
+      createImageBitmap(file, { imageOrientation: 'from-image' })
+        .then(bitmap => encode(bitmap, bitmap.width, bitmap.height))
+        .catch(loadViaImage);
+    } else {
+      loadViaImage();
+    }
   });
 }
 

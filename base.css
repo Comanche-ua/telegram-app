@@ -1567,12 +1567,34 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
 /* ============================================================
    PHOTO GALLERY
    ============================================================ */
+.photo-gallery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, .92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  touch-action: none;
+  overflow: hidden;
+  cursor: zoom-out;
+}
+.photo-gallery-overlay.active { display: flex; }
 .photo-gallery-img {
   max-width: 100%;
   max-height: 90vh;
+  object-fit: contain;
   border-radius: var(--radius);
   display: block;
   margin: auto;
+  cursor: zoom-in;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  will-change: transform;
 }
 .photo-gallery-close {
   position: fixed;
@@ -2153,7 +2175,7 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   border: 1px solid var(--border);
   background: var(--surface2);
 }
-.project-entry-image { display: block; width: 100%; max-height: 320px; object-fit: cover; cursor: pointer; }
+.project-entry-image { display: block; width: 100%; max-height: 320px; object-fit: contain; cursor: pointer; background: var(--surface2); }
 
 .project-inline-edit-form,
 .project-inline-confirm {
@@ -2216,9 +2238,15 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   border-radius: var(--radius-lg);
   padding: 14px;
 }
-.project-composer-fields { display: flex; gap: 8px; flex-wrap: wrap; }
-.project-composer-fields input,
+.project-composer-fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .project-composer-fields textarea { flex: 1; min-width: 160px; }
+.project-composer-fields input[type="datetime-local"] {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+  padding: 8px 10px;
+  font-size: 12px;
+}
 .project-composer-fields textarea {
   min-height: 40px;
   max-height: 140px;
