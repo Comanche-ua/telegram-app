@@ -3885,6 +3885,16 @@ function projectDateTime(value) {
   return new Intl.DateTimeFormat('uk-UA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+// Дата як лист календаря: великий день, місяць, знизу рік
+function projectCalendarDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '<span class="pdate-day">—</span>';
+  const day = new Intl.DateTimeFormat('uk-UA', { day: '2-digit' }).format(date);
+  const month = new Intl.DateTimeFormat('uk-UA', { month: 'short' }).format(date).replace(/\.$/, '');
+  const year = new Intl.DateTimeFormat('uk-UA', { year: 'numeric' }).format(date);
+  return `<span class="pdate-day">${day}</span><span class="pdate-month">${month}</span><span class="pdate-year">${year}</span>`;
+}
+
 function localDateTimeValue(value = new Date()) {
   const date = new Date(value);
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -4048,7 +4058,7 @@ function renderProjectsWorkspace() {
       ${entries.length ? entries.map((entry, index) => `
         <article class="project-entry ${entry.done ? 'is-done' : ''}" data-entry-card-id="${escapeProjectText(entry.id)}">
           <div class="project-entry-rail">
-            <time class="project-entry-time" datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+            <time class="project-entry-time" datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectCalendarDate(entry.scheduledAt || entry.createdAt)}</time>
             <div class="project-entry-node">${entries.length - index}</div>
           </div>
           <div class="project-entry-card">

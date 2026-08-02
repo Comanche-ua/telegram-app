@@ -1626,8 +1626,9 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   .app-mode-switch { display: none; }
   .tab-bar { padding: 6px 10px; }
   .tab-scroll-btn { display: none; }
-  .topbar-title { font-size: 15px; }
+  .topbar-title { display: none; }
   .topbar { padding: 0 12px; }
+  #top-sites .site-add-btn { display: none; }
   .fab-container { bottom: calc(78px + env(safe-area-inset-bottom)); }
   .calendar-command-card { margin-bottom: 12px; }
   .deadline-brief h1 { font-size: 22px; }
@@ -2095,12 +2096,30 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   padding-top: 10px;
 }
 .project-entry-time {
-  font-size: 10px;
-  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   color: var(--text3);
   font-family: var(--font-mono);
   text-align: right;
   padding-top: 6px;
+}
+.project-entry-time .pdate-day {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+.project-entry-time .pdate-month {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.project-entry-time .pdate-year {
+  font-size: 9px;
+  font-weight: 700;
 }
 .project-entry-node {
   width: 30px; height: 30px;

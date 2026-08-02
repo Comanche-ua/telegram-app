@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v8.8-composer-date';
+const CACHE_NAME = 'deadline-tracker-v8.9-mobile-topbar';
 const ASSETS = [
   './',
   './index.html',
