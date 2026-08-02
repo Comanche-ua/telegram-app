@@ -663,6 +663,8 @@ function silentTokenCheck() {
 }
 
 // ---- Google OAuth (Web) ----
+// drive.file — для синхронізації; cloud-platform — для голосового розпізнавання (Speech-to-Text)
+const GOOGLE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/cloud-platform';
 let gisTokenClient = null;
 
 function initGisClient() {
@@ -679,7 +681,7 @@ function initGisClient() {
   try {
     gisTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+      scope: GOOGLE_SCOPES,
       callback: async (tokenResponse) => {
         if (tokenResponse.error) {
           console.error('[Auth] Token error:', tokenResponse.error);
@@ -726,7 +728,7 @@ function signInWithGoogle() {
   }
 
   const redirectUri = window.location.origin + window.location.pathname;
-  const scope = encodeURIComponent('openid email profile https://www.googleapis.com/auth/drive.file');
+  const scope = encodeURIComponent(GOOGLE_SCOPES);
   const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
     'client_id=' + encodeURIComponent(clientId) +
     '&redirect_uri=' + encodeURIComponent(redirectUri) +
@@ -4775,6 +4777,52 @@ async function micPermissionState() {
   }
 }
 
+// Транскрипція через Google Cloud Speech-to-Text (використовує Google-авторизацію застосунку)
+async function transcribeViaGoogleSpeech(wavBase64) {
+  const token = localStorage.getItem('google_auth_token');
+  if (!token) return { needAuth: true };
+  const resp = await fetch('https://speech.googleapis.com/v1/speech:recognize', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      config: { encoding: 'LINEAR16', sampleRateHertz: 16000, languageCode: 'uk-UA' },
+      audio: { content: wavBase64 }
+    })
+  });
+  if (resp.status === 401 || resp.status === 403 || !resp.ok) {
+    // Токен старий (без speech-скоупу), недійсний або проєкт без billing —
+    // сигнал спробувати інший бекенд (Gemini)
+    return { needAuth: true };
+  }
+  const data = await resp.json();
+  const text = (data.results || [])
+    .map(r => r.alternatives?.[0]?.transcript || '')
+    .join(' ')
+    .trim();
+  return { text };
+}
+
+// Транскрипція через Gemini (фолбек, якщо немає Google-доступу)
+async function transcribeViaGemini(wavBase64, key) {
+  const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(key), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [
+        { text: 'Транскрибуй українське аудіо. Поверни ТІЛЬКИ розпізнаний текст без лапок, пояснень та зайвих слів.' },
+        { inlineData: { mimeType: 'audio/wav', data: wavBase64 } }
+      ] }],
+      generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'HTTP ' + resp.status);
+  }
+  const data = await resp.json();
+  return (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+}
+
 function initVoiceInput() {
   const micButtons = document.querySelectorAll('.mic-btn');
   let session = null; // { btn, field, stop() }
@@ -4787,12 +4835,13 @@ function initVoiceInput() {
     }
   }
 
-  // Запис через MediaRecorder → транскрипція через Gemini (працює у WebView Telegram)
+  // Запис через MediaRecorder → транскрипція (Google Speech або Gemini)
   async function startRecordSession(btn, field) {
     if (!window.MediaRecorder || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return null;
-    const key = (localStorage.getItem('gemini_api_key') || '').trim();
-    if (key.length < 10) {
-      showVoiceStatus('Для голосу потрібен Gemini API Key (Налаштування → AI та дані)', true);
+    const hasGoogle = !!localStorage.getItem('google_auth_token');
+    const hasGemini = (localStorage.getItem('gemini_api_key') || '').trim().length >= 10;
+    if (!hasGoogle && !hasGemini) {
+      showVoiceStatus('Для голосу потрібен вхід у Google (Налаштування → Безпека) або Gemini API Key', true);
       return null;
     }
 
@@ -4818,34 +4867,35 @@ function initVoiceInput() {
 
     async function transcribe() {
       if (!chunks.length) { showVoiceStatus('Запис порожній', true); return; }
-      showVoiceStatus('Розпізнаю через Gemini…');
+      showVoiceStatus('Розпізнаю…');
       try {
         const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
         const wavBase64 = await audioBlobToWavBase64(blob);
-        const resp = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + encodeURIComponent(key), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [
-              { text: 'Транскрибуй українське аудіо. Поверни ТІЛЬКИ розпізнаний текст без лапок, пояснень та зайвих слів.' },
-              { inlineData: { mimeType: 'audio/wav', data: wavBase64 } }
-            ] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 2048 }
-          })
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.error?.message || 'HTTP ' + resp.status);
+
+        // 1) Google Speech-to-Text (якщо користувач авторизований в Google)
+        let text = '';
+        const googleRes = await transcribeViaGoogleSpeech(wavBase64);
+        if (googleRes.text) {
+          text = googleRes.text;
+        } else if (googleRes.needAuth) {
+          // 2) Google недоступний (billing/скоуп) — пробуємо Gemini (безкоштовно)
+          const key = (localStorage.getItem('gemini_api_key') || '').trim();
+          if (key.length >= 10) {
+            showVoiceStatus('Розпізнаю через Gemini…');
+            text = await transcribeViaGemini(wavBase64, key);
+          } else {
+            showVoiceStatus('Google Speech вимагає billing — вставте безкоштовний Gemini API Key (Налаштування → AI та дані)', true);
+            return;
+          }
         }
-        const data = await resp.json();
-        const text = (data.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('').trim();
+
         if (!text) { showVoiceStatus('Не вдалося розпізнати мову', true); return; }
         const base = field.value ? (field.value.replace(/\s+$/, '') + ' ') : '';
         field.value = (base + text).trim();
         field.dispatchEvent(new Event('input', { bubbles: true }));
         showVoiceStatus('Готово');
       } catch (e) {
-        console.warn('[VoiceInput] Gemini помилка:', e);
+        console.warn('[VoiceInput] Помилка розпізнавання:', e);
         showVoiceStatus('Помилка розпізнавання: ' + e.message, true);
       }
     }
