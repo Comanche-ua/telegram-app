@@ -3801,7 +3801,6 @@ body {
 
 /* Primary Action Buttons */
 .btn-primary,
-.fab-add,
 .project-create-btn,
 .project-first-form button,
 .project-composer-submit,
@@ -3815,7 +3814,6 @@ body {
 }
 
 .btn-primary:hover,
-.fab-add:hover,
 .project-create-btn:hover {
   box-shadow: 0 0 36px rgba(124, 58, 237, 0.7), 0 8px 24px rgba(0, 0, 0, 0.5) !important;
   filter: brightness(1.12);
@@ -3890,21 +3888,83 @@ body {
   color: #ffffff !important;
 }
 
-/* Floating Action Buttons (FAB) */
-.fab-settings,
-.fab-lock {
+/* Floating Action Buttons (FAB) System */
+.fab-container {
+  position: fixed !important;
+  bottom: 28px !important;
+  right: 28px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  z-index: 9999 !important;
+}
+
+.fab-btn {
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  outline: none !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease !important;
+}
+
+.fab-add {
+  width: 60px !important;
+  height: 60px !important;
+  font-size: 24px !important;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 60%, #06b6d4 100%) !important;
+  color: #ffffff !important;
+  border: 2px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 0 28px rgba(124, 58, 237, 0.6), 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+.fab-add:hover {
+  transform: translateY(-3px) scale(1.08) !important;
+  box-shadow: 0 0 38px rgba(124, 58, 237, 0.8), 0 12px 30px rgba(0, 0, 0, 0.6) !important;
+}
+
+.fab-settings {
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 20px !important;
   background: rgba(30, 41, 59, 0.9) !important;
   color: #ffffff !important;
-  border: 2px solid rgba(255, 255, 255, 0.32) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(14px) !important;
 }
 
-.fab-settings:hover,
-.fab-lock:hover {
+.fab-settings:hover {
+  transform: translateY(-2px) scale(1.06) !important;
   border-color: #8b5cf6 !important;
   color: #8b5cf6 !important;
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5) !important;
+}
+
+.fab-lock {
+  width: 44px !important;
+  height: 44px !important;
+  font-size: 18px !important;
+  background: rgba(30, 41, 59, 0.9) !important;
+  color: #ffffff !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(14px) !important;
+}
+
+.fab-lock:hover {
+  transform: translateY(-2px) scale(1.06) !important;
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5) !important;
+}
+
+@media (max-width: 760px) {
+  .fab-container {
+    right: 18px !important;
+    bottom: calc(86px + env(safe-area-inset-bottom)) !important;
+  }
 }
 
 /* Inputs, Textareas & Selects */
