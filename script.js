@@ -3925,6 +3925,19 @@ function addProject(title) {
   return project;
 }
 
+function refreshProjectsWorkspace() {
+  const restoreY = window.scrollY;
+  const draw = () => {
+    renderProjectsWorkspace();
+    requestAnimationFrame(() => window.scrollTo(0, restoreY));
+  };
+  if (document.startViewTransition && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.startViewTransition(draw);
+  } else {
+    draw();
+  }
+}
+
 function renderProjectsWorkspace() {
   const list = document.getElementById('projects-list');
   const detail = document.getElementById('project-detail');
@@ -3952,7 +3965,7 @@ function renderProjectsWorkspace() {
     document.getElementById('project-first-form')?.addEventListener('submit', event => {
       event.preventDefault();
       const input = document.getElementById('project-first-title');
-      if (addProject(input.value)) renderProjectsWorkspace();
+      if (addProject(input.value)) refreshProjectsWorkspace();
     });
     return;
   }
@@ -3978,12 +3991,16 @@ function renderProjectsWorkspace() {
     <div class="project-chain" aria-label="Хронологія кроків">
       ${entries.length ? entries.map((entry, index) => `
         <article class="project-entry ${entry.done ? 'is-done' : ''}" data-entry-card-id="${escapeProjectText(entry.id)}">
-          <div class="project-entry-node">${entries.length - index}</div>
+          <div class="project-entry-rail">
+            <time class="project-entry-time" datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+            <div class="project-entry-node">${entries.length - index}</div>
+          </div>
           <div class="project-entry-card">
             <div class="project-entry-top">
-              <time datetime="${escapeProjectText(entry.scheduledAt || entry.createdAt)}">${projectDateTime(entry.scheduledAt || entry.createdAt)}</time>
+              <span class="project-entry-kind">${entry.imageData ? 'Фото / запис' : 'Запис'}</span>
               <div class="project-entry-actions">
                 <button class="project-icon-btn" type="button" data-edit-entry="${escapeProjectText(entry.id)}" title="Редагувати крок">${pencilIcon}</button>
+                ${entry.imageData ? `<button class="project-icon-btn danger" type="button" data-delete-image="${escapeProjectText(entry.id)}" title="Видалити фото">${trashIcon}</button>` : ''}
                 <button class="project-icon-btn danger" type="button" data-delete-entry="${escapeProjectText(entry.id)}" title="Видалити крок">${trashIcon}</button>
                 <button class="project-entry-toggle" type="button" data-entry-id="${escapeProjectText(entry.id)}" aria-pressed="${entry.done ? 'true' : 'false'}" title="${entry.done ? 'Скасувати' : 'Виконати'}">
                   ${checkIcon} ${entry.done ? 'Виконано' : 'Виконати'}
@@ -4016,7 +4033,7 @@ function renderProjectsWorkspace() {
     const next = loadProjectsData();
     next.activeProjectId = button.dataset.projectId;
     saveProjectsData(next);
-    renderProjectsWorkspace();
+    refreshProjectsWorkspace();
   }));
 
   // Toggle done status
@@ -4028,7 +4045,7 @@ function renderProjectsWorkspace() {
       entry.done = !entry.done;
       entry.completedAt = entry.done ? new Date().toISOString() : null;
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     }
   }));
 
@@ -4056,9 +4073,9 @@ function renderProjectsWorkspace() {
           const project = next.projects.find(item => item.id === active.id);
           if (project) { project.title = newTitle.slice(0, 120); saveProjectsData(next); }
         }
-        renderProjectsWorkspace();
+        refreshProjectsWorkspace();
       });
-      container.querySelector('#btn-cancel-edit-title')?.addEventListener('click', () => renderProjectsWorkspace());
+      container.querySelector('#btn-cancel-edit-title')?.addEventListener('click', () => refreshProjectsWorkspace());
     });
   }
 
@@ -4079,9 +4096,9 @@ function renderProjectsWorkspace() {
       next.projects = next.projects.filter(p => p.id !== active.id);
       next.activeProjectId = next.projects[0]?.id || null;
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
-    container.querySelector('#btn-cancel-delete-project')?.addEventListener('click', () => renderProjectsWorkspace());
+    container.querySelector('#btn-cancel-delete-project')?.addEventListener('click', () => refreshProjectsWorkspace());
   });
 
   // Inline edit entry message
@@ -4118,25 +4135,50 @@ function renderProjectsWorkspace() {
         ent.updatedAt = new Date().toISOString();
         saveProjectsData(dataStore);
       }
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
 
-    bodyEl.querySelector(`[data-cancel-edit-entry]`)?.addEventListener('click', () => renderProjectsWorkspace());
+    bodyEl.querySelector(`[data-cancel-edit-entry]`)?.addEventListener('click', () => refreshProjectsWorkspace());
+  }));
+
+  // Remove only the photo; confirmation lives in the top action row, never below the image.
+  detail.querySelectorAll('[data-delete-image]').forEach(button => button.addEventListener('click', () => {
+    const entryId = button.dataset.deleteImage;
+    const topEl = button.closest('.project-entry-card')?.querySelector('.project-entry-top');
+    if (!topEl) return;
+    topEl.innerHTML = `
+      <div class="project-inline-confirm project-photo-confirm">
+        <span>Видалити це фото?</span>
+        <button type="button" class="project-inline-save-btn danger" data-confirm-delete-image="${escapeProjectText(entryId)}">Видалити</button>
+        <button type="button" class="project-inline-cancel-btn" data-cancel-delete-image>Скасувати</button>
+      </div>`;
+    topEl.querySelector('[data-confirm-delete-image]')?.addEventListener('click', () => {
+      const dataStore = loadProjectsData();
+      const project = dataStore.projects.find(item => item.id === active.id);
+      const entry = project?.entries.find(item => item.id === entryId);
+      if (entry) {
+        entry.imageData = null;
+        entry.updatedAt = new Date().toISOString();
+        saveProjectsData(dataStore);
+        refreshProjectsWorkspace();
+      }
+    });
+    topEl.querySelector('[data-cancel-delete-image]')?.addEventListener('click', () => refreshProjectsWorkspace());
   }));
 
   // Delete entry
   detail.querySelectorAll('[data-delete-entry]').forEach(button => button.addEventListener('click', () => {
     const entryId = button.dataset.deleteEntry;
-    const bodyEl = detail.querySelector(`#entry-body-${entryId}`);
-    if (!bodyEl) return;
-    bodyEl.innerHTML = `
-      <div class="project-inline-confirm">
+    const topEl = button.closest('.project-entry-card')?.querySelector('.project-entry-top');
+    if (!topEl) return;
+    topEl.innerHTML = `
+      <div class="project-inline-confirm project-photo-confirm">
         <span>Видалити цей крок?</span>
         <button type="button" class="project-inline-save-btn danger" data-confirm-delete-entry="${escapeProjectText(entryId)}">Видалити</button>
         <button type="button" class="project-inline-cancel-btn" data-cancel-delete-entry="${escapeProjectText(entryId)}">Скасувати</button>
       </div>
     `;
-    bodyEl.querySelector('[data-confirm-delete-entry]')?.addEventListener('click', () => {
+    topEl.querySelector('[data-confirm-delete-entry]')?.addEventListener('click', () => {
       const dataStore = loadProjectsData();
       const prj = dataStore.projects.find(item => item.id === active.id);
       if (prj) {
@@ -4144,9 +4186,9 @@ function renderProjectsWorkspace() {
         prj.entries = prj.entries.filter(e => e.id !== entryId);
         saveProjectsData(dataStore);
       }
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     });
-    bodyEl.querySelector('[data-cancel-delete-entry]')?.addEventListener('click', () => renderProjectsWorkspace());
+    topEl.querySelector('[data-cancel-delete-entry]')?.addEventListener('click', () => refreshProjectsWorkspace());
   }));
 
   // Image status feedback
@@ -4184,7 +4226,7 @@ function renderProjectsWorkspace() {
         done: false
       });
       saveProjectsData(next);
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
     } catch (error) {
       console.warn('Project image was not saved:', error);
       if (status) status.textContent = error.name === 'QuotaExceededError' ? 'Мало місця у сховищі для фото.' : error.message || 'Помилка додавання фото.';
@@ -4198,7 +4240,7 @@ function initProjectsWorkspace() {
     const data = loadProjectsData();
     const newPrj = addProject(`Новий проєкт ${data.projects.length + 1}`);
     if (newPrj) {
-      renderProjectsWorkspace();
+      refreshProjectsWorkspace();
       setTimeout(() => {
         const editBtn = document.getElementById('btn-edit-project-title');
         if (editBtn) editBtn.click();
