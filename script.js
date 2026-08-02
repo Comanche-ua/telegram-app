@@ -4946,9 +4946,10 @@ function initVoiceInput() {
       // Перемикання на інше поле — зупинити попередній запис
       endSession();
 
-      // Якщо запис через Gemini уже спрацював раніше — одразу йдемо в нього,
-      // щоб не викликати зайвий запит дозволу від Web Speech API
-      const useGemini = localStorage.getItem('voice_mode') === 'gemini';
+      // У Telegram WebView Speech API запитує дозвіл мікрофона щоразу і погано працює —
+      // одразу йдемо в запис через Gemini (один запит дозволу за сесію, потік кешується)
+      const inTelegram = !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData);
+      const useGemini = inTelegram || localStorage.getItem('voice_mode') === 'gemini';
       const canSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 
       if (!useGemini && canSpeech) {

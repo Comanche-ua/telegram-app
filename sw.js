@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v8.12-mic-perm';
+const CACHE_NAME = 'deadline-tracker-v8.13-telegram-mic';
 const ASSETS = [
   './',
   './index.html',
