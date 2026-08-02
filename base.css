@@ -2591,10 +2591,11 @@ body.pmm-mode .pmm-workspace { display: block; }
   .ops-rail { position: static; }
   .ops-nav-card { flex-direction: row; overflow-x: auto; gap: 4px; }
   .ops-nav-item { flex: 0 0 auto; }
-  .projects-shell { grid-template-columns: 1fr; }
-  .projects-rail { position: static; }
-  .projects-list { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
-  .project-list-item { white-space: nowrap; }
+  .projects-shell { grid-template-columns: minmax(0, 1fr); }
+  .projects-rail { position: static; min-width: 0; }
+  .projects-list { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; min-width: 0; max-width: 100%; }
+  .project-list-item { white-space: nowrap; flex-shrink: 0; }
+  .project-list-item > span { overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
 }
 @media (max-width: 760px) {
   .ops-module-grid { grid-template-columns: 1fr; }
