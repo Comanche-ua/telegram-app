@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v8.5-user-dropdown';
+const CACHE_NAME = 'deadline-tracker-v8.6-tabs-projects';
 const ASSETS = [
   './',
   './index.html',

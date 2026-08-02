@@ -1502,6 +1502,60 @@ function renderTabBar() {
       }
     });
   });
+
+  updateTabScrollButtons();
+}
+
+// ---- Повільна прокрутка вкладок стрілками (ПК) ----
+let slowTabScrollTimer = null;
+
+function updateTabScrollButtons() {
+  const bar = document.getElementById('tab-bar');
+  const list = document.getElementById('tab-list');
+  const leftBtn = document.getElementById('tab-scroll-left');
+  const rightBtn = document.getElementById('tab-scroll-right');
+  if (!bar || !list) return;
+  const canScroll = list.scrollWidth > list.clientWidth + 1;
+  bar.classList.toggle('has-scroll', canScroll);
+  if (leftBtn) leftBtn.disabled = list.scrollLeft <= 0;
+  if (rightBtn) rightBtn.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+}
+
+function startSlowTabScroll(dir) {
+  const list = document.getElementById('tab-list');
+  if (!list) return;
+  stopSlowTabScroll();
+  slowTabScrollTimer = setInterval(() => {
+    const maxLeft = list.scrollWidth - list.clientWidth;
+    if (dir < 0 && list.scrollLeft <= 0) { stopSlowTabScroll(); return; }
+    if (dir > 0 && list.scrollLeft >= maxLeft) { stopSlowTabScroll(); return; }
+    list.scrollLeft += dir * 2;
+    updateTabScrollButtons();
+  }, 30);
+}
+
+function stopSlowTabScroll() {
+  if (slowTabScrollTimer) {
+    clearInterval(slowTabScrollTimer);
+    slowTabScrollTimer = null;
+  }
+}
+
+function initTabScrollArrows() {
+  const leftBtn = document.getElementById('tab-scroll-left');
+  const rightBtn = document.getElementById('tab-scroll-right');
+  if (!leftBtn || !rightBtn) return;
+  const hold = (btn, dir) => {
+    btn.addEventListener('mousedown', (e) => { e.preventDefault(); startSlowTabScroll(dir); });
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); startSlowTabScroll(dir); });
+    ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'contextmenu'].forEach(ev =>
+      btn.addEventListener(ev, stopSlowTabScroll)
+    );
+  };
+  hold(leftBtn, -1);
+  hold(rightBtn, 1);
+  window.addEventListener('resize', updateTabScrollButtons);
+  updateTabScrollButtons();
 }
 
 function startTabRename(wsId, tabEl) {
@@ -4004,7 +4058,7 @@ function renderProjectsWorkspace() {
     </div>
     <form class="project-composer" id="project-entry-form">
       <div class="project-composer-fields">
-        <input id="project-entry-text" name="text" maxlength="500" autocomplete="off" placeholder="Наступний крок чи запис...">
+        <textarea id="project-entry-text" name="text" maxlength="500" rows="2" autocomplete="off" placeholder="Наступний крок чи запис..."></textarea>
         <label class="project-photo-picker" for="project-entry-image" title="Додати фото">
           📷 Фото<input id="project-entry-image" name="image" type="file" accept="image/*" capture="environment">
         </label>
@@ -4707,6 +4761,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initProjectsWorkspace();
   initOpsWorkspace();
+  initTabScrollArrows();
   initVoiceInput();
   populateDatalist();
   loadFromLocal();
