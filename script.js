@@ -4419,12 +4419,22 @@ function getShtatSheetUrl() {
   return (v && v.trim()) ? v.trim() : '';
 }
 
-function getStaffCsvUrls(url) {
+function getStaffCsvUrls(url, opts = {}) {
   if (!url) return [];
   if (url.includes('script.google.com/macros')) return [url];
   const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   if (!idMatch) return [url];
   const docId = idMatch[1];
+
+  // За назвою аркуша (працює навіть без gid)
+  if (opts.sheet) {
+    const enc = encodeURIComponent(opts.sheet);
+    return [
+      `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&sheet=${enc}`,
+      `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&sheet=${enc}`
+    ];
+  }
+
   const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
 
   if (gidMatch) {
@@ -4447,7 +4457,7 @@ function getStaffCsvUrls(url) {
 
 
 // Fetch staff data using Google Sheets API (authenticated) or CSV fallback
-async function fetchStaffWithAuth(docId, gid) {
+async function fetchStaffWithAuth(docId, gid, sheetHint) {
   const token = localStorage.getItem('google_auth_token');
   if (!token) return null;
 
@@ -4474,8 +4484,12 @@ async function fetchStaffWithAuth(docId, gid) {
       const match = sheets.find(s => String(s.properties.sheetId) === String(gid));
       if (match) sheetName = match.properties.title;
     }
+    if (!sheetName && sheetHint) {
+      const exact = sheets.find(s => s.properties.title.toLowerCase() === String(sheetHint).toLowerCase());
+      if (exact) sheetName = exact.properties.title;
+    }
     if (!sheetName) {
-      const shtatSheet = sheets.find(s => /^штат$/i.test(s.properties.title));
+      const shtatSheet = sheets.find(s => /штат/i.test(s.properties.title));
       if (shtatSheet) sheetName = shtatSheet.properties.title;
     }
     if (!sheetName && sheets.length > 0) {
@@ -4571,7 +4585,7 @@ function parseGvizJson(gvizData) {
   return dataRows;
 }
 
-async function fetchStaffCsv(url) {
+async function fetchStaffCsv(url, opts = {}) {
   const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
   const docId = idMatch ? idMatch[1] : null;
@@ -4580,7 +4594,7 @@ async function fetchStaffCsv(url) {
   // ── Step 1: Google Sheets API with auth token (if user is logged in) ──
   if (docId) {
     try {
-      const rows = await fetchStaffWithAuth(docId, gid);
+      const rows = await fetchStaffWithAuth(docId, gid, opts.sheet);
       if (rows && rows.length > 0) {
         console.log('[Staff] Loaded via Sheets API');
         return { __rows: rows };
@@ -4595,8 +4609,8 @@ async function fetchStaffCsv(url) {
   // ── Step 2: JSONP (bypasses CORS — works in Telegram WebApp without auth) ──
   if (docId) {
     try {
-      const gidPart = gid ? `gid=${gid}` : '';
-      const jsonpBase = `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?${gidPart}`;
+      const q = opts.sheet ? `sheet=${encodeURIComponent(opts.sheet)}` : (gid ? `gid=${gid}` : '');
+      const jsonpBase = `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq${q ? '?' + q : ''}`;
       console.log('[Staff] Trying JSONP:', jsonpBase.slice(0, 80));
       const gvizData = await fetchViaJsonp(jsonpBase);
       const dataRows = parseGvizJson(gvizData);
@@ -4610,7 +4624,7 @@ async function fetchStaffCsv(url) {
   }
 
   // ── Step 3: Public CSV fallback ──
-  const urls = getStaffCsvUrls(url);
+  const urls = getStaffCsvUrls(url, opts);
   let lastErr = null;
   for (const csvUrl of urls) {
     try {
@@ -4955,15 +4969,27 @@ async function refreshStaffFromSheets(options = {}) {
       statusEl.style.color = 'var(--blue)';
     }
 
-    const csv = await fetchStaffCsv(url);
-    const data = parseStaffCSV(csv);
+    let csv = await fetchStaffCsv(url);
+    let data = parseStaffCSV(csv);
+
+    // Якщо розпізнано 0 підрозділів — спробувати ще раз, вказавши аркуш «Штат» за назвою
+    if (data.units.length === 0) {
+      const retryCsv = await fetchStaffCsv(url, { sheet: 'Штат' }).catch(() => null);
+      if (retryCsv) {
+        const retryData = parseStaffCSV(retryCsv);
+        if (retryData.units.length > 0) { csv = retryCsv; data = retryData; }
+      }
+    }
 
     if (data.units.length === 0) {
       const hasGid = /[?&#]gid=\d+/.test(url);
       const hint = hasGid
         ? '\nПеревірте що таблиця відкрита для перегляду (не приватна).'
         : '\n⚠️ Порада: включіть номер аркуша (gid) в посилання.\nВідкрийте аркуш «Штат» → скопіюйте URL з браузера\n(він містить #gid=XXXXX в кінці).';
-      throw new Error('Не знайдено підрозділів у таблиці' + hint);
+      const preview = typeof csv === 'string'
+        ? csv.replace(/\s+/g, ' ').slice(0, 200)
+        : JSON.stringify((csv && csv.__rows ? csv.__rows : []).slice(0, 3)).slice(0, 200);
+      throw new Error('Не знайдено підрозділів у таблиці' + hint + (preview ? '\n\n📄 Отримані дані (початок):\n' + preview : ''));
     }
     saveImportedStaff(data);
 

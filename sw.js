@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v9.4-sheets-api-detailed-error';
+const CACHE_NAME = 'deadline-tracker-v9.5-staff-fixed';
 const ASSETS = [
   './',
   './index.html',
