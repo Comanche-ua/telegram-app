@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v9.5-staff-fixed';
+const CACHE_NAME = 'deadline-tracker-v9.6';
 const ASSETS = [
   './',
   './index.html',
@@ -37,7 +37,10 @@ self.addEventListener('fetch', (event) => {
   const isThirdPartyApi =
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('generativelanguage.googleapis.com') ||
-    url.hostname.includes('accounts.google.com');
+    url.hostname.includes('accounts.google.com') ||
+    url.hostname.includes('docs.google.com') ||
+    url.hostname.includes('sheets.googleusercontent.com') ||
+    url.hostname.includes('script.google.com');
 
   if (isThirdPartyApi) return; // мережа, без кешування
 

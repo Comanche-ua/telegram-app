@@ -5077,6 +5077,103 @@ function importStaffFromSheets() {
   refreshStaffFromSheets({ urlOverride: url });
 }
 
+// Діагностика завантаження: показує, який шлях до Google спрацював, а який ні
+async function runShtatDiagnostics() {
+  const statusEl = document.getElementById('sheets-status');
+  const previewEl = document.getElementById('sheets-preview');
+  const urlInput = document.getElementById('sheets-url');
+  const url = (getShtatSheetUrl() || (urlInput ? urlInput.value.trim() : '')).trim();
+  const lines = [];
+  const add = (s) => lines.push(s);
+
+  add('🩺 Діагностика завантаження Штату');
+  add('--------------------------------');
+  if (!url) {
+    add('❌ Посилання на таблицю не збережене.');
+  } else {
+    add('URL: ' + url);
+    const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
+    add('docId: ' + (idMatch ? idMatch[1] : '— (не знайдено /d/)'));
+    add('gid: ' + (gidMatch ? gidMatch[1] : '— (не вказано → перший аркуш)'));
+    add('Токен Google: ' + (localStorage.getItem('google_auth_token') ? '✅ є' : '❌ немає'));
+    add('');
+
+    if (idMatch) {
+      const docId = idMatch[1];
+      const gid = gidMatch ? gidMatch[1] : '';
+
+      // 1) JSONP (gviz)
+      try {
+        const jsonpBase = `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq${gid ? '?gid=' + gid : ''}`;
+        add('1) JSONP: ' + jsonpBase.slice(0, 100));
+        const t0 = Date.now();
+        const gvizData = await fetchViaJsonp(jsonpBase);
+        const rowsCount = (gvizData && gvizData.table && gvizData.table.rows) ? gvizData.table.rows.length : 0;
+        add(`   ✅ відповідь за ${Date.now() - t0} мс, рядків: ${rowsCount}`);
+        const dataRows = parseGvizJson(gvizData);
+        const parsed = parseStaffCSV({ __rows: dataRows });
+        add(`   → парсинг: ${parsed.units.length} підрозділів, ${parsed.totalPositions} посад`);
+      } catch (e) {
+        add('   ❌ JSONP: ' + e.message);
+      }
+      add('');
+
+      // 2) Публічний CSV (export)
+      try {
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv${gid ? '&gid=' + gid : ''}`;
+        add('2) CSV: ' + csvUrl.slice(0, 100));
+        const t0 = Date.now();
+        const text = await tryFetchCsv(csvUrl);
+        if (text) {
+          add(`   ✅ відповідь за ${Date.now() - t0} мс, символів: ${text.length}`);
+          add('   початок: ' + text.replace(/\s+/g, ' ').slice(0, 130));
+          const parsed = parseStaffCSV(text);
+          add(`   → парсинг: ${parsed.units.length} підрозділів, ${parsed.totalPositions} посад`);
+        } else {
+          add('   ❌ CSV: порожня відповідь або не CSV (можливо, таблиця приватна)');
+        }
+      } catch (e) {
+        add('   ❌ CSV: ' + e.message);
+      }
+      add('');
+
+      // 3) Google Sheets API (авторизовано)
+      if (localStorage.getItem('google_auth_token')) {
+        try {
+          add('3) Sheets API (з токеном):');
+          const rows = await fetchStaffWithAuth(docId, gid, null);
+          if (rows && rows.length) {
+            add(`   ✅ отримано ${rows.length} рядків`);
+            const parsed = parseStaffCSV({ __rows: rows });
+            add(`   → парсинг: ${parsed.units.length} підрозділів, ${parsed.totalPositions} посад`);
+          } else {
+            add('   ❌ API повернув порожньо');
+          }
+        } catch (e) {
+          add('   ❌ Sheets API: ' + e.message);
+        }
+      } else {
+        add('3) Sheets API: пропущено (немає токена)');
+      }
+    }
+  }
+
+  const out = lines.join('\n');
+  console.log('[Staff] Diagnostics:\n' + out);
+  if (statusEl) {
+    statusEl.style.whiteSpace = 'pre-wrap';
+    statusEl.textContent = out;
+    statusEl.style.color = 'var(--text2)';
+    statusEl.style.background = 'var(--surface2)';
+  }
+  if (previewEl) {
+    previewEl.style.display = 'block';
+    previewEl.style.whiteSpace = 'pre-wrap';
+    previewEl.textContent = out;
+  }
+}
+
 function shtatPctColor(pct) {
   if (pct >= 90) return 'var(--green)';
   if (pct >= 70) return 'var(--amber)';
@@ -6081,6 +6178,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const sheetsGoogleLoginBtn = document.getElementById('sheets-google-login-btn');
   if (sheetsGoogleLoginBtn) {
     sheetsGoogleLoginBtn.addEventListener('click', signInWithGoogle);
+  }
+  const sheetsDiagnosticsBtn = document.getElementById('sheets-diagnostics-btn');
+  if (sheetsDiagnosticsBtn) {
+    sheetsDiagnosticsBtn.addEventListener('click', runShtatDiagnostics);
   }
   updateShtatAuthStatus();
 
