@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v9.2-shtat-gid-fix';
+const CACHE_NAME = 'deadline-tracker-v9.3-sheets-api-auth';
 const ASSETS = [
   './',
   './index.html',

@@ -663,8 +663,9 @@ function silentTokenCheck() {
 }
 
 // ---- Google OAuth (Web) ----
-// drive.file — для синхронізації; cloud-platform — для голосового розпізнавання (Speech-to-Text)
-const GOOGLE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/cloud-platform';
+// drive.file — для синхронізації; cloud-platform — для голосового розпізнавання (Speech-to-Text); spreadsheets.readonly — для доступу до штатних таблиць
+const GOOGLE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/spreadsheets.readonly';
+
 let gisTokenClient = null;
 
 function initGisClient() {
@@ -4445,7 +4446,84 @@ function getStaffCsvUrls(url) {
 }
 
 
+// Fetch staff data using Google Sheets API (authenticated) or CSV fallback
+async function fetchStaffWithAuth(docId, gid) {
+  const token = localStorage.getItem('google_auth_token');
+  if (!token) return null;
+
+  try {
+    let sheetName = null;
+
+    // Step 1: Get spreadsheet metadata to find the sheet name by gid
+    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${docId}?fields=sheets.properties`;
+    const metaResp = await fetch(metaUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (metaResp.ok) {
+      const meta = await metaResp.json();
+      const sheets = meta.sheets || [];
+      if (gid) {
+        // Find sheet by gid
+        const match = sheets.find(s => String(s.properties.sheetId) === String(gid));
+        if (match) sheetName = match.properties.title;
+      }
+      // If no gid or not found, look for sheet named "Штат"
+      if (!sheetName) {
+        const shtatSheet = sheets.find(s => /^штат$/i.test(s.properties.title));
+        if (shtatSheet) sheetName = shtatSheet.properties.title;
+      }
+      // Fallback to first sheet
+      if (!sheetName && sheets.length > 0) {
+        sheetName = sheets[0].properties.title;
+      }
+    } else if (metaResp.status === 401 || metaResp.status === 403) {
+      console.warn('[Sheets API] Token rejected (metadata)');
+      return null;
+    }
+
+    // Step 2: Fetch values from the identified sheet
+    const range = sheetName ? `${encodeURIComponent(sheetName)}!A:F` : 'A:F';
+    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${docId}/values/${range}?majorDimension=ROWS`;
+    const resp = await fetch(apiUrl, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (resp.ok) {
+      const json = await resp.json();
+      if (json.values && json.values.length > 0) {
+        console.log(`[Sheets API] ✅ Loaded ${json.values.length} rows from "${sheetName || 'default'}"`);
+        return json.values.map(row => row.map(c => (c || '').toString().trim()));
+      }
+    } else if (resp.status === 401 || resp.status === 403) {
+      console.warn('[Sheets API] Token rejected (values)');
+    } else {
+      console.warn('[Sheets API] Error', resp.status, await resp.text());
+    }
+  } catch(e) {
+    console.warn('[Sheets API] Auth fetch failed:', e.message);
+  }
+  return null; // Signal to fall back to CSV
+}
+
+
 async function fetchStaffCsv(url) {
+  // Extract doc ID and gid from URL
+  const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
+  const docId = idMatch ? idMatch[1] : null;
+  const gid = gidMatch ? gidMatch[1] : null;
+
+  // Try authenticated Sheets API first (works for private sheets)
+  if (docId) {
+    const rows = await fetchStaffWithAuth(docId, gid);
+    if (rows && rows.length > 0) {
+      // Return as special object so parseStaffCSV can handle it
+      return { __rows: rows };
+    }
+  }
+
+  // Fallback to public CSV
   const urls = getStaffCsvUrls(url);
   let lastErr = null;
   for (const csvUrl of urls) {
@@ -4456,6 +4534,8 @@ async function fetchStaffCsv(url) {
   }
   throw lastErr || new Error('Не вдалося завантажити таблицю');
 }
+
+
 
 function parseCsvRows(csvText) {
   const rows = csvText.split(/\r?\n/);
@@ -4733,8 +4813,16 @@ function parseLegacyStaffCSV(dataRows) {
   return finalizeStaffUnits(units);
 }
 
-function parseStaffCSV(csvText) {
-  const dataRows = parseCsvRows(csvText);
+function parseStaffCSV(csvOrRows) {
+  // Accept either a CSV string or pre-parsed rows array (from Sheets API)
+  let dataRows;
+  if (csvOrRows && typeof csvOrRows === 'object' && csvOrRows.__rows) {
+    // Rows already parsed by Google Sheets API (array of arrays)
+    dataRows = csvOrRows.__rows;
+  } else {
+    // Standard CSV text
+    dataRows = parseCsvRows(csvOrRows);
+  }
   if (detectStandardStaffFormat(dataRows)) return parseStandardStaffCSV(dataRows);
   return parseLegacyStaffCSV(dataRows);
 }
