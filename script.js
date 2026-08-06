@@ -4460,26 +4460,26 @@ async function fetchStaffWithAuth(docId, gid) {
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    if (metaResp.ok) {
-      const meta = await metaResp.json();
-      const sheets = meta.sheets || [];
-      if (gid) {
-        // Find sheet by gid
-        const match = sheets.find(s => String(s.properties.sheetId) === String(gid));
-        if (match) sheetName = match.properties.title;
+    if (!metaResp.ok) {
+      if (metaResp.status === 401 || metaResp.status === 403) {
+        throw new Error('AUTH_REQUIRED');
       }
-      // If no gid or not found, look for sheet named "Штат"
-      if (!sheetName) {
-        const shtatSheet = sheets.find(s => /^штат$/i.test(s.properties.title));
-        if (shtatSheet) sheetName = shtatSheet.properties.title;
-      }
-      // Fallback to first sheet
-      if (!sheetName && sheets.length > 0) {
-        sheetName = sheets[0].properties.title;
-      }
-    } else if (metaResp.status === 401 || metaResp.status === 403) {
-      console.warn('[Sheets API] Token rejected (metadata)');
+      console.warn('[Sheets API] Metadata status:', metaResp.status);
       return null;
+    }
+
+    const meta = await metaResp.json();
+    const sheets = meta.sheets || [];
+    if (gid) {
+      const match = sheets.find(s => String(s.properties.sheetId) === String(gid));
+      if (match) sheetName = match.properties.title;
+    }
+    if (!sheetName) {
+      const shtatSheet = sheets.find(s => /^штат$/i.test(s.properties.title));
+      if (shtatSheet) sheetName = shtatSheet.properties.title;
+    }
+    if (!sheetName && sheets.length > 0) {
+      sheetName = sheets[0].properties.title;
     }
 
     // Step 2: Fetch values from the identified sheet
@@ -4495,30 +4495,31 @@ async function fetchStaffWithAuth(docId, gid) {
         console.log(`[Sheets API] ✅ Loaded ${json.values.length} rows from "${sheetName || 'default'}"`);
         return json.values.map(row => row.map(c => (c || '').toString().trim()));
       }
-    } else if (resp.status === 401 || resp.status === 403) {
-      console.warn('[Sheets API] Token rejected (values)');
     } else {
-      console.warn('[Sheets API] Error', resp.status, await resp.text());
+      if (resp.status === 401 || resp.status === 403) {
+        throw new Error('AUTH_REQUIRED');
+      }
+      console.warn('[Sheets API] Values status:', resp.status, await resp.text());
     }
   } catch(e) {
+    if (e.message === 'AUTH_REQUIRED') {
+      throw new Error('Потрібно оновити авторизацію Google.\n\nБудь ласка, в розділі «Синхронізація Google» внизу налаштувань натисніть «Вийти», а потім «Увійти в Google» знову, щоб надати додатку права на читання таблиць.');
+    }
     console.warn('[Sheets API] Auth fetch failed:', e.message);
   }
-  return null; // Signal to fall back to CSV
+  return null;
 }
 
-
 async function fetchStaffCsv(url) {
-  // Extract doc ID and gid from URL
   const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
   const docId = idMatch ? idMatch[1] : null;
   const gid = gidMatch ? gidMatch[1] : null;
 
-  // Try authenticated Sheets API first (works for private sheets)
   if (docId) {
+    // This can throw 'Потрібно оновити авторизацію Google...'
     const rows = await fetchStaffWithAuth(docId, gid);
     if (rows && rows.length > 0) {
-      // Return as special object so parseStaffCSV can handle it
       return { __rows: rows };
     }
   }
@@ -4532,8 +4533,15 @@ async function fetchStaffCsv(url) {
       if (text && text.trim()) return text;
     } catch (err) { lastErr = err; }
   }
-  throw lastErr || new Error('Не вдалося завантажити таблицю');
+
+  const token = localStorage.getItem('google_auth_token');
+  if (!token) {
+    throw new Error('Не вдалося завантажити таблицю публічно (CORS / Failed to fetch).\n\n💡 Оскільки таблиця може бути приватною або завантаження блокується клієнтом Telegram, рекомендується підключити Google авторизацію внизу налаштувань («Увійти через Google») і спробувати знову.');
+  }
+
+  throw lastErr || new Error('Не вдалося завантажити таблицю. Перевірте доступ до посилання.');
 }
+
 
 
 
@@ -4848,14 +4856,24 @@ async function refreshStaffFromSheets(options = {}) {
   if (refreshBtn) refreshBtn.disabled = true;
 
   try {
+    const token = localStorage.getItem('google_auth_token');
+    const hasToken = !!token;
+
+    if (!silent && statusEl) {
+      statusEl.textContent = hasToken
+        ? '⏳ Завантаження через Google API...'
+        : '⏳ Завантаження (публічний CSV)...';
+      statusEl.style.color = 'var(--blue)';
+    }
+
     const csv = await fetchStaffCsv(url);
     const data = parseStaffCSV(csv);
+
     if (data.units.length === 0) {
-      // Check if the URL has a gid parameter
       const hasGid = /[?&#]gid=\d+/.test(url);
       const hint = hasGid
         ? '\nПеревірте що таблиця відкрита для перегляду (не приватна).'
-        : '\n\u26a0️ Порада: включіть номер аркуша (gid) в посилання.\nНаприклад: відкрийте аркуш "Штат" в Google Sheets,\nскопійте повне посилання з адресного рядка браузера\n(воно міститиме #gid=XXXXX в кінці).';
+        : '\n⚠️ Порада: включіть номер аркуша (gid) в посилання.\nВідкрийте аркуш «Штат» → скопіюйте URL з браузера\n(він містить #gid=XXXXX в кінці).';
       throw new Error('Не знайдено підрозділів у таблиці' + hint);
     }
     saveImportedStaff(data);
@@ -4879,8 +4897,25 @@ async function refreshStaffFromSheets(options = {}) {
     renderShtatDashboard();
     return data;
   } catch (err) {
-    if (!silent && statusEl) { statusEl.textContent = '❌ ' + err.message; statusEl.style.color = 'var(--red)'; }
+    let msg = err.message || String(err);
+
+    // Provide actionable hints based on error type
+    if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
+      const token = localStorage.getItem('google_auth_token');
+      if (token) {
+        msg = '❌ Помилка доступу до Google Sheets API.\n\nМожливі причини:\n• Потрібно вийти та увійти в Google знову (для нового дозволу)\n• Google Sheets API не ввімкнено у вашому Google Cloud проєкті\n• Таблиця приватна й потрібна повторна авторизація';
+      } else {
+        msg = '❌ Не вдалось завантажити таблицю.\n\nПеревірте:\n• Таблиця відкрита для перегляду за посиланням\n• Ви авторизовані в Google (у налаштуваннях)\n• Посилання правильне і містить #gid= аркуша';
+      }
+    }
+
+    if (!silent && statusEl) {
+      statusEl.style.whiteSpace = 'pre-wrap';
+      statusEl.textContent = msg;
+      statusEl.style.color = 'var(--red)';
+    }
     if (previewEl) previewEl.style.display = 'none';
+    console.error('[Staff] Error:', err);
     throw err;
   } finally {
     if (btn) btn.disabled = false;
