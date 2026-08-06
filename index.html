@@ -485,13 +485,14 @@
           <div class="settings-section">
             <h3>📊 Імпорт штатного розпису з Google Таблиць</h3>
             <div style="font-size: 12px; color: var(--text3); margin-bottom: 14px; line-height: 1.5;">
-              Вставте посилання на Google Таблицю зі штатним розписом. Додаток автоматично визначить підрозділи, посади та заповнить дані «штат / факт» (комплект / некомплект) у розділі Штат.
+              Вставте посилання на Google Таблицю зі штатним розписом. Додаток автоматично визначить підрозділи, посади та заповнить дані «штат / факт» у розділі Штат.
               <br><br>
-              <strong>Формат таблиці:</strong> підрозділи як заголовки, колонки: №, Посада, ПІБ (або «Вакант»).<br>
+              <strong>⚠️ Важливо:</strong> Вставляйте <strong>повне посилання</strong> з адресного рядка браузера після відкриття потрібного аркуша (<em>«Штат»</em>).<br>
+              Посилання повинно містити <code>#gid=XXXXX</code> у кінці — це номер аркуша.<br>
               <strong>Доступ:</strong> таблиця має бути відкрита для перегляду за посиланням.
             </div>
             <div class="api-block" style="margin-bottom: 12px;">
-              <input type="text" id="sheets-url" placeholder="https://docs.google.com/spreadsheets/d/..." style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+              <input type="text" id="sheets-url" placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=123456" style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
             </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
               <button class="btn-primary" id="sheets-save-btn" style="flex: 1; min-width: 160px; background: var(--blue);">💾 Зберегти посилання</button>

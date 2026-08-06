@@ -4425,13 +4425,25 @@ function getStaffCsvUrls(url) {
   if (!idMatch) return [url];
   const docId = idMatch[1];
   const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
-  const gid = gidMatch ? gidMatch[1] : '0';
-  return [
-    `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
-    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
-    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`
-  ];
+
+  if (gidMatch) {
+    // GID found in URL — use it directly
+    const gid = gidMatch[1];
+    return [
+      `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+      `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`
+    ];
+  } else {
+    // No GID — try without gid (default/first sheet) then common gids
+    // gviz without gid returns the first sheet
+    return [
+      `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv`,
+      `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`,
+      `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=0`
+    ];
+  }
 }
+
 
 async function fetchStaffCsv(url) {
   const urls = getStaffCsvUrls(url);
@@ -4750,7 +4762,14 @@ async function refreshStaffFromSheets(options = {}) {
   try {
     const csv = await fetchStaffCsv(url);
     const data = parseStaffCSV(csv);
-    if (data.units.length === 0) throw new Error('Не знайдено підрозділів у таблиці');
+    if (data.units.length === 0) {
+      // Check if the URL has a gid parameter
+      const hasGid = /[?&#]gid=\d+/.test(url);
+      const hint = hasGid
+        ? '\nПеревірте що таблиця відкрита для перегляду (не приватна).'
+        : '\n\u26a0️ Порада: включіть номер аркуша (gid) в посилання.\nНаприклад: відкрийте аркуш "Штат" в Google Sheets,\nскопійте повне посилання з адресного рядка браузера\n(воно міститиме #gid=XXXXX в кінці).';
+      throw new Error('Не знайдено підрозділів у таблиці' + hint);
+    }
     saveImportedStaff(data);
 
     if (previewEl) {
@@ -5744,9 +5763,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       } else {
         localStorage.setItem(SHTAT_SHEET_URL_KEY, raw);
-        if (sheetsStatusSpan) { sheetsStatusSpan.textContent = '💾 Збережено!'; sheetsStatusSpan.style.color = 'var(--green)'; }
+        const hasGid = /[?&#]gid=\d+/.test(raw);
+        if (!hasGid) {
+          if (sheetsStatusSpan) {
+            sheetsStatusSpan.textContent = '⚠️ Збережено, але gid не вказано. Відкрийте аркуш «Штат» і скопіюйте URL з браузера.';
+            sheetsStatusSpan.style.color = 'var(--amber)';
+          }
+        } else {
+          if (sheetsStatusSpan) { sheetsStatusSpan.textContent = '💾 Збережено!'; sheetsStatusSpan.style.color = 'var(--green)'; }
+        }
       }
-      setTimeout(() => { if (sheetsStatusSpan) { sheetsStatusSpan.textContent = ''; sheetsStatusSpan.style.background = ''; } }, 3000);
+      setTimeout(() => { if (sheetsStatusSpan) { sheetsStatusSpan.textContent = ''; sheetsStatusSpan.style.background = ''; } }, 5000);
     });
   }
 
