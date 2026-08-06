@@ -4510,36 +4510,123 @@ async function fetchStaffWithAuth(docId, gid) {
   return null;
 }
 
+
+// ── JSONP fetch (bypasses CORS completely, works in any Telegram WebApp) ──────
+function fetchViaJsonp(baseUrl) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'gvizCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    let done = false;
+
+    const cleanup = () => {
+      done = true;
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.src = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'tqx=responseHandler:' + cbName;
+    script.onerror = () => { cleanup(); reject(new Error('JSONP script error')); };
+    document.head.appendChild(script);
+
+    setTimeout(() => {
+      if (!done) { cleanup(); reject(new Error('JSONP timeout')); }
+    }, 12000);
+  });
+}
+
+// Parse Google Visualization JSON into standard dataRows (2D string array)
+function parseGvizJson(gvizData) {
+  const cols = (gvizData.table && gvizData.table.cols) || [];
+  const rows = (gvizData.table && gvizData.table.rows) || [];
+
+  // Extract main unit name from col[1] label (merged header)
+  const unitLabel = cols[1] ? (cols[1].label || '') : '';
+
+  // Build synthetic header row so existing parser can handle it
+  // Col[0]='№ п/п', Col[1]=unit name, Col[2]='ПІБ', Col[3]='ДСНС / Вільний найм', Col[4]='Звання'
+  const headerRow = ['\u2116 \u043f/\u043f', unitLabel, '\u041f\u0406\u0411', '\u0414\u0421\u041d\u0421\n / \u0412\u0456\u043b\u044c\u043d\u0438\u0439 \u043d\u0430\u0439\u043c', '\u0417\u0432\u0430\u043d\u043d\u044f'];
+
+  const dataRows = [headerRow];
+
+  for (const row of rows) {
+    const cells = row.c || [];
+    const mapped = cells.map(cell => {
+      if (!cell) return '';
+      const v = cell.v;
+      if (v === null || v === undefined) return String(cell.f || '');
+      // Numbers come as floats: 1.0 → '1'
+      if (typeof v === 'number') return String(Math.round(v));
+      return String(v);
+    });
+    // Pad to at least 5 columns
+    while (mapped.length < 5) mapped.push('');
+    dataRows.push(mapped.slice(0, 6));
+  }
+
+  return dataRows;
+}
+
 async function fetchStaffCsv(url) {
   const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
   const gidMatch = url.match(/[?&#]gid=([0-9]+)/);
   const docId = idMatch ? idMatch[1] : null;
   const gid = gidMatch ? gidMatch[1] : null;
 
+  // ── Step 1: Google Sheets API with auth token (if user is logged in) ──
   if (docId) {
-    // This can throw 'Потрібно оновити авторизацію Google...'
-    const rows = await fetchStaffWithAuth(docId, gid);
-    if (rows && rows.length > 0) {
-      return { __rows: rows };
+    try {
+      const rows = await fetchStaffWithAuth(docId, gid);
+      if (rows && rows.length > 0) {
+        console.log('[Staff] Loaded via Sheets API');
+        return { __rows: rows };
+      }
+    } catch(e) {
+      // Re-throw auth errors (need re-login), swallow others
+      if (e.message && e.message.includes('\u043f\u043e\u0442\u0440\u0456\u0431\u043d\u043e \u043e\u043d\u043e\u0432\u0438\u0442\u0438')) throw e;
+      console.warn('[Staff] Auth API failed, trying JSONP:', e.message);
     }
   }
 
-  // Fallback to public CSV
+  // ── Step 2: JSONP (bypasses CORS — works in Telegram WebApp without auth) ──
+  if (docId) {
+    try {
+      const gidPart = gid ? `gid=${gid}` : '';
+      const jsonpBase = `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?${gidPart}`;
+      console.log('[Staff] Trying JSONP:', jsonpBase.slice(0, 80));
+      const gvizData = await fetchViaJsonp(jsonpBase);
+      const dataRows = parseGvizJson(gvizData);
+      if (dataRows.length > 2) {
+        console.log('[Staff] Loaded via JSONP, rows:', dataRows.length);
+        return { __rows: dataRows };
+      }
+    } catch(e) {
+      console.warn('[Staff] JSONP failed:', e.message);
+    }
+  }
+
+  // ── Step 3: Public CSV fallback ──
   const urls = getStaffCsvUrls(url);
   let lastErr = null;
   for (const csvUrl of urls) {
     try {
       const text = await tryFetchCsv(csvUrl);
-      if (text && text.trim()) return text;
-    } catch (err) { lastErr = err; }
+      if (text && text.trim()) {
+        console.log('[Staff] Loaded via public CSV');
+        return text;
+      }
+    } catch(err) { lastErr = err; }
   }
 
   const token = localStorage.getItem('google_auth_token');
   if (!token) {
-    throw new Error('Не вдалося завантажити таблицю публічно (CORS / Failed to fetch).\n\n💡 Оскільки таблиця може бути приватною або завантаження блокується клієнтом Telegram, рекомендується підключити Google авторизацію внизу налаштувань («Увійти через Google») і спробувати знову.');
+    throw new Error('\u041d\u0435 \u0432\u0434\u0430\u043b\u043e\u0441\u044f \u0437\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0438\u0442\u0438 \u0442\u0430\u0431\u043b\u0438\u0446\u044e.\n\n\u0423\u0432\u0456\u0439\u0434\u0456\u0442\u044c \u0447\u0435\u0440\u0435\u0437 Google \u0432 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f\u0445 (\u0440\u043e\u0437\u0434\u0456\u043b \u00ab\u0421\u0438\u043d\u0445\u0440\u043e\u043d\u0456\u0437\u0430\u0446\u0456\u044f Google\u00bb) \u0456 \u0441\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u043d\u043e\u0432\u0443.');
   }
-
-  throw lastErr || new Error('Не вдалося завантажити таблицю. Перевірте доступ до посилання.');
+  throw lastErr || new Error('\u041d\u0435 \u0432\u0434\u0430\u043b\u043e\u0441\u044f \u0437\u0430\u0432\u0430\u043d\u0442\u0430\u0436\u0438\u0442\u0438 \u0442\u0430\u0431\u043b\u0438\u0446\u044e. \u041f\u0435\u0440\u0435\u0432\u0456\u0440\u0442\u0435 \u0434\u043e\u0441\u0442\u0443\u043f \u0434\u043e \u043f\u043e\u0441\u0438\u043b\u0430\u043d\u043d\u044f.');
 }
 
 
@@ -4554,7 +4641,7 @@ function parseCsvRows(csvText) {
   });
 }
 
-function staffClean(s) { return (s || '').replace(/^["']|["']$/g, '').replace(/^[-–•\s]+|[-–•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
+function staffClean(s) { return (s || '').replace(/^["']|["']$/g, '').replace(/^[•\s]+|[•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
 function staffIsVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
 function staffIsSummaryRow(s) { return /^(всього|вакантно|зайнято|у т\.ч\.|authorized)/i.test(s); }
 function staffIsHeaderRow(num, pos, person) {
@@ -4675,16 +4762,18 @@ function parseStandardStaffCSV(dataRows) {
     if (/^\u2116/.test(num)) continue;
 
     // Skip second-line header continuation row ("/Вільний найм", "Звання")
-    if (!num && /вільний\s+найм/i.test(pos) && !person) continue;
+    if (!num && !person && /вільний\s+найм/i.test(pos + ' ' + num)) continue;
 
     // Subunit header row: col[0] empty, col[1] = name, col[2] empty
     if (!num && pos && !person) {
-      if (staffIsTopLevelOrg(pos) && pos !== mainUnitNameFromHeader) {
-        // New top-level organization (unlikely, but handle gracefully)
-        currentMainUnit = { name: pos, subs: {} };
+      if (staffIsTopLevelOrg(pos)) {
+        // Top-level organization header (загін) — positions under it are root-level
+        if (!currentMainUnit || currentMainUnit.name !== pos) {
+          currentMainUnit = { name: pos, subs: {} };
+          rawUnits.push(currentMainUnit);
+        }
         currentSubName = '__ROOT__';
-        currentMainUnit.subs[currentSubName] = [];
-        rawUnits.push(currentMainUnit);
+        if (!currentMainUnit.subs[currentSubName]) currentMainUnit.subs[currentSubName] = [];
       } else {
         // All other section headers are subunits (ДПРЧ, ДПРП, відділення, група, etc.)
         if (!currentMainUnit) {
@@ -5012,12 +5101,13 @@ function renderShtatDashboard() {
     const rv = (r || '').toLowerCase();
     if (OFFICER_RANKS.some(rr => rv.includes(rr))) return 'officer';
     if (SERGEANT_RANKS.some(rr => rv.includes(rr))) return 'sergeant';
-    return 'vilnyi';
+    return 'norank';
   }
   const allVis = visibleUnits.flatMap(u => u.positions);
-  const rankStats = { officer: {total:0,filled:0}, sergeant: {total:0,filled:0}, vilnyi: {total:0,filled:0} };
+  const rankStats = { officer: {total:0,filled:0}, sergeant: {total:0,filled:0}, vilnyi: {total:0,filled:0}, norank: {total:0,filled:0} };
   allVis.forEach(p => {
     const g = p.category === 'vilnyi' ? 'vilnyi' : rankGroup(p.rank);
+    if (!rankStats[g]) rankStats[g] = { total: 0, filled: 0 };
     rankStats[g].total++;
     if (p.filled) rankStats[g].filled++;
   });
@@ -5057,6 +5147,18 @@ function renderShtatDashboard() {
       <div class="shtat-analysis-sub">вакантно: <strong>${rankStats.sergeant.total - rankStats.sergeant.filled}</strong> · ${rankStats.sergeant.total > 0 ? Math.round(rankStats.sergeant.filled / rankStats.sergeant.total * 100) : 0}%</div>
       <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill cat-sergeant" style="width:${rankStats.sergeant.total ? Math.round(rankStats.sergeant.filled / rankStats.sergeant.total * 100) : 0}%"></div></div>
     </div>
+    ${rankStats.norank.total > 0 ? `<div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">🎖 Без рангу</div>
+      <div class="shtat-analysis-main">${rankStats.norank.filled}<span class="shtat-analysis-of"> / ${rankStats.norank.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${rankStats.norank.total - rankStats.norank.filled}</strong></div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill" style="width:${rankStats.norank.total ? Math.round(rankStats.norank.filled / rankStats.norank.total * 100) : 0}%;background:var(--text3)"></div></div>
+    </div>` : ''}
+    ${showStats.unknown.total > 0 ? `<div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">⚪ Не визначено</div>
+      <div class="shtat-analysis-main">${showStats.unknown.filled}<span class="shtat-analysis-of"> / ${showStats.unknown.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${showStats.unknown.vacant}</strong></div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill" style="width:${showStats.unknown.total ? Math.round(showStats.unknown.filled / showStats.unknown.total * 100) : 0}%;background:var(--text3)"></div></div>
+    </div>` : ''}
     <div class="shtat-analysis-card shtat-analysis-wide">
       <div class="shtat-analysis-title">📊 Укомплектованість по підрозділах (топ вакантних)</div>
       <div class="shtat-unit-ranking">`;
@@ -5154,6 +5256,11 @@ function initShtatToolbar() {
 function initShtatMode() {
   initShtatToolbar();
   renderShtatDashboard();
+  // Якщо посилання збережене, але дані ще не завантажені — завантажити автоматично
+  if (getShtatSheetUrl() && !loadImportedStaff().units.length && !window.__shtatAutoLoaded) {
+    window.__shtatAutoLoaded = true;
+    refreshStaffFromSheets({ silent: true }).catch(() => {});
+  }
 }
 
 // ---- Init ----
