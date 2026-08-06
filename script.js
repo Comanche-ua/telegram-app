@@ -4404,113 +4404,229 @@ function initOpsWorkspace() {
 
 // ===== Штат Dashboard =====
 const SHTAT_IMPORTED_KEY = 'shtat_imported_data';
+const SHTAT_SHEET_URL_KEY = 'shtat_sheet_url';
+const SHTAT_FILTER_KEY = 'shtat_unit_filter';
 
 function loadImportedStaff() {
-  try { return JSON.parse(localStorage.getItem(SHTAT_IMPORTED_KEY)) || { units: [], totalPositions: 0 }; }
-  catch(e) { return { units: [], totalPositions: 0 }; }
+  try { return JSON.parse(localStorage.getItem(SHTAT_IMPORTED_KEY)) || { units: [], totalPositions: 0, stats: null }; }
+  catch(e) { return { units: [], totalPositions: 0, stats: null }; }
 }
 function saveImportedStaff(data) { localStorage.setItem(SHTAT_IMPORTED_KEY, JSON.stringify(data)); }
 
-// ---- Імпорт з Google Таблиці (викликається ТІЛЬКИ з налаштувань) ----
-function importStaffFromSheets() {
-  const urlInput = document.getElementById('sheets-url');
-  const statusEl = document.getElementById('sheets-status');
-  const previewEl = document.getElementById('sheets-preview');
-  const btn = document.getElementById('sheets-import-btn');
-  if (!urlInput || !statusEl) return;
-
-  const url = urlInput.value.trim();
-  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (!match) { statusEl.textContent = '❌ Невірне посилання'; statusEl.style.color = 'var(--red)'; return; }
-
-  const gidMatch = url.match(/gid=(\d+)/);
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv&gid=${gidMatch ? gidMatch[1] : '0'}`;
-
-  statusEl.textContent = '⏳ Завантаження...'; statusEl.style.color = 'var(--blue)'; btn.disabled = true;
-
-  fetch(csvUrl).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
-  .then(csv => {
-    const data = parseStaffCSV(csv);
-    if (data.units.length === 0) throw new Error('Не знайдено підрозділів');
-    saveImportedStaff(data);
-
-    let html = `<strong>✅ Знайдено ${data.units.length} підрозділів, ${data.totalPositions} посад</strong><br><br>`;
-    data.units.forEach(u => {
-      const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
-      html += `• <strong>${escHtml(u.name)}</strong> — ${u.filled}/${u.total} (${pct}%)<br>`;
-    });
-    if (previewEl) { previewEl.innerHTML = html; previewEl.style.display = 'block'; }
-
-    statusEl.textContent = `✅ Імпортовано ${data.units.length} підрозділів!`;
-    statusEl.style.color = 'var(--green)'; statusEl.style.background = 'var(--green-bg)';
-    btn.disabled = false;
-    renderShtatDashboard();
-  })
-  .catch(err => {
-    statusEl.textContent = '❌ ' + err.message; statusEl.style.color = 'var(--red)'; btn.disabled = false;
-    if (previewEl) previewEl.style.display = 'none';
-  });
+function getShtatSheetUrl() {
+  const v = localStorage.getItem(SHTAT_SHEET_URL_KEY);
+  return (v && v.trim()) ? v.trim() : '';
 }
 
-// ---- Парсер CSV з Google Таблиці ----
-function parseStaffCSV(csvText) {
+function getStaffCsvUrls(url) {
+  if (!url) return [];
+  if (url.includes('script.google.com/macros')) return [url];
+  const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  if (!idMatch) return [url];
+  const docId = idMatch[1];
+  const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
+  const gid = gidMatch ? gidMatch[1] : '0';
+  return [
+    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`
+  ];
+}
+
+async function fetchStaffCsv(url) {
+  const urls = getStaffCsvUrls(url);
+  let lastErr = null;
+  for (const csvUrl of urls) {
+    try {
+      const text = await tryFetchCsv(csvUrl);
+      if (text && text.trim()) return text;
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr || new Error('Не вдалося завантажити таблицю');
+}
+
+function parseCsvRows(csvText) {
   const rows = csvText.split(/\r?\n/);
-  const dataRows = rows.map(row => {
+  return rows.map(row => {
     const cols = []; let cur = '', q = false;
     for (const ch of row) { if (ch === '"') q = !q; else if (ch === ',' && !q) { cols.push(cur.trim()); cur = ''; } else cur += ch; }
     cols.push(cur.trim()); return cols;
   });
+}
 
+function staffClean(s) { return (s || '').replace(/^["']|["']$/g, '').replace(/^[-–•\s]+|[-–•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
+function staffIsVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
+function staffIsSummaryRow(s) { return /^(всього|вакантно|зайнято|у т\.ч\.|authorized)/i.test(s); }
+function staffIsHeaderRow(num, pos, person) {
+  const joined = `${num} ${pos} ${person}`.toLowerCase();
+  return joined.includes('№') && (joined.includes('посада') || joined.includes('підрозділ')) && joined.includes('піб');
+}
+function staffIsMainUnitName(s) {
+  return /дпрч|дпрп|загін|державний|пожежно-рятувальн/i.test(s) || /^\d+\s+(дпрч|дпрп)/i.test(s);
+}
+function staffNormCategory(raw) {
+  const s = staffClean(raw).toLowerCase();
+  if (s.includes('вільн')) return 'vilnyi';
+  if (s.includes('дснс')) return 'dsns';
+  return '';
+}
+function staffCategoryLabel(code) {
+  if (code === 'dsns') return 'ДСНС';
+  if (code === 'vilnyi') return 'Вільний найм';
+  return '—';
+}
+
+function computeStaffStats(units) {
+  const stats = {
+    dsns: { total: 0, filled: 0, vacant: 0 },
+    vilnyi: { total: 0, filled: 0, vacant: 0 },
+    unknown: { total: 0, filled: 0, vacant: 0 }
+  };
+  units.forEach(u => {
+    u.positions.forEach(p => {
+      const bucket = stats[p.category] || stats.unknown;
+      bucket.total++;
+      if (p.filled) bucket.filled++; else bucket.vacant++;
+    });
+  });
+  const grandTotal = units.reduce((s, u) => s + u.total, 0);
+  const grandFilled = units.reduce((s, u) => s + u.filled, 0);
+  stats.overall = {
+    total: grandTotal,
+    filled: grandFilled,
+    vacant: grandTotal - grandFilled,
+    pct: grandTotal > 0 ? Math.round(grandFilled / grandTotal * 100) : 0
+  };
+  return stats;
+}
+
+function finalizeStaffUnits(units) {
+  let totalPositions = 0;
+  units.forEach(u => {
+    u.total = u.positions.length;
+    u.filled = u.positions.filter(p => p.filled).length;
+    totalPositions += u.total;
+  });
+  const stats = computeStaffStats(units);
+  return { units, totalPositions, stats };
+}
+
+function parseStandardStaffCSV(dataRows) {
+  // Parse into main unit + subunits, then FLATTEN subunits as individual units
+  // so the dropdown shows all 33 відділення/групи, not just 1 main unit.
+  const rawUnits = [];
+  let currentMainUnit = null;
+  let currentSubName = null;
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const num = staffClean(dataRows[i][0]);
+    const posOrUnit = staffClean(dataRows[i][1]);
+    const person = staffClean(dataRows[i][2]);
+    const categoryRaw = staffClean(dataRows[i][3]);
+    const rank = staffClean(dataRows[i][4]);
+
+    if (!posOrUnit && !person) continue;
+    if (staffIsHeaderRow(num, posOrUnit, person)) continue;
+    if (staffIsSummaryRow(posOrUnit)) continue;
+
+    if (!num && posOrUnit && !person) {
+      if (staffIsMainUnitName(posOrUnit)) {
+        // New main organization
+        currentMainUnit = { name: posOrUnit, subs: {} };
+        currentSubName = '__ROOT__';
+        currentMainUnit.subs[currentSubName] = [];
+        rawUnits.push(currentMainUnit);
+      } else if (currentMainUnit) {
+        // New subunit within the main unit
+        currentSubName = posOrUnit;
+        if (!currentMainUnit.subs[currentSubName]) {
+          currentMainUnit.subs[currentSubName] = [];
+        }
+      }
+      continue;
+    }
+
+    if (num && /^\d/.test(num) && posOrUnit) {
+      if (!currentMainUnit) {
+        // No header found, create default
+        currentMainUnit = { name: 'Штатний розпис', subs: {} };
+        currentSubName = '__ROOT__';
+        currentMainUnit.subs[currentSubName] = [];
+        rawUnits.push(currentMainUnit);
+      }
+      const filled = !staffIsVacant(person);
+      const category = staffNormCategory(categoryRaw);
+      const entry = { position: posOrUnit, name: person, filled, category, rank, categoryRaw };
+      const key = currentSubName || '__ROOT__';
+      if (!currentMainUnit.subs[key]) currentMainUnit.subs[key] = [];
+      currentMainUnit.subs[key].push(entry);
+    }
+  }
+
+  // Flatten: each subunit becomes a separate "unit" in the units array
   const units = [];
+  rawUnits.forEach(mainUnit => {
+    const subKeys = Object.keys(mainUnit.subs);
+    subKeys.forEach(subKey => {
+      const positions = mainUnit.subs[subKey];
+      if (!positions || positions.length === 0) return;
+      // Use the subunit name as the display name; for ROOT positions, use main unit name
+      const displayName = subKey === '__ROOT__' ? mainUnit.name : subKey;
+      units.push({ name: displayName, parentName: mainUnit.name, positions, subunits: {} });
+    });
+  });
 
-  function clean(s) { return (s||'').replace(/^["']|["']$/g,'').replace(/^[-–•\s]+|[-–•\s]+$/g,'').trim().replace(/\s+/g,' '); }
-  function isVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
-  function isSummaryRow(s) { return /по штату|authorized|всього/i.test(s); }
+  return finalizeStaffUnits(units);
+}
+
+function detectStandardStaffFormat(dataRows) {
+  for (let i = 0; i < Math.min(8, dataRows.length); i++) {
+    const row = dataRows[i].map(staffClean);
+    const joined = row.join(' ').toLowerCase();
+    if (joined.includes('піб') && (joined.includes('дснс') || joined.includes('вільн'))) return true;
+    if (row.some(c => /дснс\s*\/?\s*вільн/i.test(c))) return true;
+  }
+  return false;
+}
+
+function parseLegacyStaffCSV(dataRows) {
+  const units = [];
   function looksLikeStationName(s) { return /дпрч|дпрп|державний|пожежно|загін|дснс/i.test(s); }
 
-  // ── Фаза 1: Headquarters (рядки де col C = назва загону, немає даних у col D/E) ──
   let hqUnit = null, hqSub = null;
   let i = 0;
 
-  // Шукаємо заголовок апарату управління (рядок з "№ п/п" і назвою загону в col C)
   for (; i < dataRows.length; i++) {
-    const c0 = clean(dataRows[i][0]), c1 = clean(dataRows[i][1]), c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
+    const c0 = staffClean(dataRows[i][0]), c1 = staffClean(dataRows[i][1]), c2 = staffClean(dataRows[i][2]), c3 = staffClean(dataRows[i][3]);
     if (c0.includes('№') && c1.toLowerCase().includes('посада') && looksLikeStationName(c2) && !c3) {
       hqUnit = { name: c2, positions: [], subunits: {} };
       i++; break;
     }
   }
 
-  // Парсимо апарат управління
   for (; i < dataRows.length; i++) {
-    const num = clean(dataRows[i][0]), posRaw = clean(dataRows[i][1]), person = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]);
-    if (!num && !posRaw && !person) {
-      if (c3) break; // новий блок (станції)
-      continue;
-    }
-    if (isSummaryRow(posRaw + ' ' + person)) { i++; break; } // кінець апарату
+    const num = staffClean(dataRows[i][0]), posRaw = staffClean(dataRows[i][1]), person = staffClean(dataRows[i][2]), c3 = staffClean(dataRows[i][3]);
+    if (!num && !posRaw && !person) { if (c3) break; continue; }
+    if (staffIsSummaryRow(posRaw + ' ' + person)) { i++; break; }
     if (!hqUnit) continue;
-
-    if (!num && posRaw && !person && posRaw.length < 60 && !isSummaryRow(posRaw)) {
+    if (!num && posRaw && !person && posRaw.length < 60 && !staffIsSummaryRow(posRaw)) {
       hqSub = posRaw;
       if (!hqUnit.subunits[hqSub]) hqUnit.subunits[hqSub] = [];
       continue;
     }
     if (num && /^\d/.test(num) && posRaw) {
-      const filled = !isVacant(person);
-      const entry = { position: posRaw, name: person, filled };
+      const filled = !staffIsVacant(person);
+      const entry = { position: posRaw, name: person, filled, category: '', rank: '' };
       hqUnit.positions.push(entry);
       if (hqSub && hqUnit.subunits[hqSub]) hqUnit.subunits[hqSub].push(entry);
     }
   }
   if (hqUnit && hqUnit.positions.length > 0) units.push(hqUnit);
 
-  // ── Фаза 2: Станції (ДПРЧ/ДПРП) в блоках по 3 колонки ──
   while (i < dataRows.length) {
-    // Шукаємо заголовок блоку станцій (рядок з назвами станцій у cols C/D/E)
     let stations = [];
     for (; i < dataRows.length; i++) {
-      const c0 = clean(dataRows[i][0]), c1 = clean(dataRows[i][1]), c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
+      const c2 = staffClean(dataRows[i][2]), c3 = staffClean(dataRows[i][3]), c4 = staffClean(dataRows[i][4]);
       if (!c2 && !c3 && !c4) continue;
       if (looksLikeStationName(c2) || looksLikeStationName(c3) || looksLikeStationName(c4)) {
         [c2, c3, c4].forEach(name => {
@@ -4522,136 +4638,282 @@ function parseStaffCSV(csvText) {
     }
     if (!stations.length) break;
 
-    // Парсимо позиції для цих станцій
     let lastPosition = '';
     for (; i < dataRows.length; i++) {
-      const num = clean(dataRows[i][0]), posRaw = clean(dataRows[i][1]);
-      const c2 = clean(dataRows[i][2]), c3 = clean(dataRows[i][3]), c4 = clean(dataRows[i][4]);
-
-      if (isSummaryRow(c2 + ' ' + c3 + ' ' + c4)) { i++; break; }
+      const num = staffClean(dataRows[i][0]), posRaw = staffClean(dataRows[i][1]);
+      const c2 = staffClean(dataRows[i][2]), c3 = staffClean(dataRows[i][3]), c4 = staffClean(dataRows[i][4]);
+      if (staffIsSummaryRow(c2 + ' ' + c3 + ' ' + c4)) { i++; break; }
       if (!num && !posRaw && !c2 && !c3 && !c4) continue;
-
       const position = posRaw || lastPosition;
-      if (position) lastPosition = position;
-      else continue;
-
+      if (position) lastPosition = position; else continue;
       [c2, c3, c4].forEach((person, si) => {
         if (si >= stations.length) return;
         if (person === '-' || person === '- В -' || person === '') person = '';
-        const filled = !isVacant(person);
-        const entry = { position, name: person, filled };
-        stations[si].positions.push(entry);
+        const filled = !staffIsVacant(person);
+        stations[si].positions.push({ position, name: person, filled, category: '', rank: '' });
       });
     }
-
     stations.forEach(s => { if (s.positions.length > 0) units.push(s); });
   }
 
-  // Порахувати totals
-  let totalPositions = 0;
-  units.forEach(u => {
-    u.total = u.positions.length;
-    u.filled = u.positions.filter(p => p.filled).length;
-    totalPositions += u.total;
-  });
-
-  return { units, totalPositions };
+  return finalizeStaffUnits(units);
 }
 
-// ---- Рендер дашборду Штату ----
+function parseStaffCSV(csvText) {
+  const dataRows = parseCsvRows(csvText);
+  if (detectStandardStaffFormat(dataRows)) return parseStandardStaffCSV(dataRows);
+  return parseLegacyStaffCSV(dataRows);
+}
+
+async function refreshStaffFromSheets(options = {}) {
+  const { silent = false, urlOverride = null } = options;
+  const url = (urlOverride || getShtatSheetUrl()).trim();
+  const statusEl = document.getElementById('sheets-status');
+  const previewEl = document.getElementById('sheets-preview');
+  const btn = document.getElementById('sheets-import-btn');
+  const refreshBtn = document.getElementById('shtat-refresh-btn');
+
+  if (!url) {
+    if (!silent) {
+      const msg = '❌ Спочатку збережіть посилання на таблицю в налаштуваннях';
+      if (statusEl) { statusEl.textContent = msg; statusEl.style.color = 'var(--red)'; }
+    }
+    return null;
+  }
+
+  if (!silent && statusEl) { statusEl.textContent = '⏳ Завантаження...'; statusEl.style.color = 'var(--blue)'; }
+  if (btn) btn.disabled = true;
+  if (refreshBtn) refreshBtn.disabled = true;
+
+  try {
+    const csv = await fetchStaffCsv(url);
+    const data = parseStaffCSV(csv);
+    if (data.units.length === 0) throw new Error('Не знайдено підрозділів у таблиці');
+    saveImportedStaff(data);
+
+    if (previewEl) {
+      let html = `<strong>✅ Знайдено ${data.units.length} підрозділів, ${data.totalPositions} посад</strong><br><br>`;
+      data.units.forEach(u => {
+        const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
+        html += `• <strong>${escHtml(u.name)}</strong> — ${u.filled}/${u.total} (${pct}%)<br>`;
+      });
+      previewEl.innerHTML = html;
+      previewEl.style.display = 'block';
+    }
+
+    if (!silent && statusEl) {
+      statusEl.textContent = `✅ Завантажено ${data.units.length} підрозділів`;
+      statusEl.style.color = 'var(--green)';
+      statusEl.style.background = 'var(--green-bg)';
+    }
+
+    renderShtatDashboard();
+    return data;
+  } catch (err) {
+    if (!silent && statusEl) { statusEl.textContent = '❌ ' + err.message; statusEl.style.color = 'var(--red)'; }
+    if (previewEl) previewEl.style.display = 'none';
+    throw err;
+  } finally {
+    if (btn) btn.disabled = false;
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
+function importStaffFromSheets() {
+  const urlInput = document.getElementById('sheets-url');
+  const url = urlInput ? urlInput.value.trim() : '';
+  if (!url) {
+    const statusEl = document.getElementById('sheets-status');
+    if (statusEl) { statusEl.textContent = '❌ Вставте посилання на таблицю'; statusEl.style.color = 'var(--red)'; }
+    return;
+  }
+  localStorage.setItem(SHTAT_SHEET_URL_KEY, url);
+  refreshStaffFromSheets({ urlOverride: url });
+}
+
+function shtatPctColor(pct) {
+  if (pct >= 90) return 'var(--green)';
+  if (pct >= 70) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function getShtatFilterValue() {
+  return localStorage.getItem(SHTAT_FILTER_KEY) || 'all';
+}
+
+function setShtatFilterValue(value) {
+  localStorage.setItem(SHTAT_FILTER_KEY, value || 'all');
+}
+
+function renderShtatPositionRow(p) {
+  const catLabel = staffCategoryLabel(p.category);
+  const catClass = p.category === 'dsns' ? 'cat-dsns' : (p.category === 'vilnyi' ? 'cat-vilnyi' : '');
+  return `<div class="shtat-position-row ${p.filled ? '' : 'vacant'}">
+    <span class="shtat-position-name">${escHtml(p.position)}</span>
+    <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
+    <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
+    <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
+    ${p.rank ? `<span class="shtat-position-rank">${escHtml(p.rank)}</span>` : ''}
+  </div>`;
+}
+
 function renderShtatDashboard() {
   const container = document.getElementById('shtat-dashboard');
+  const toolbar = document.getElementById('shtat-toolbar');
+  const filterSelect = document.getElementById('shtat-unit-filter');
   if (!container) return;
 
   const data = loadImportedStaff();
 
   if (!data.units.length) {
+    if (toolbar) toolbar.style.display = 'none';
     container.innerHTML = `
       <div class="shtat-empty">
         <div class="shtat-empty-icon">📊</div>
         <div class="shtat-empty-title">Немає даних штатного розпису</div>
         <div class="shtat-empty-sub">
-          Імпортуйте дані через <code>Налаштування → 📊 Google Таблиці</code><br>
-          Вставте посилання на Google Таблицю зі штатним розписом
+          Вкажіть посилання на Google Таблицю в <code>Налаштування → 📊 Google Таблиці</code><br>
+          і натисніть «Зберегти посилання» або «Завантажити Штат»
         </div>
       </div>`;
     return;
   }
 
-  const grandTotal = data.totalPositions;
-  const grandFilled = data.units.reduce((s, u) => s + u.filled, 0);
-  const grandVacant = grandTotal - grandFilled;
-  const overallPct = grandTotal > 0 ? Math.round(grandFilled / grandTotal * 100) : 0;
+  if (toolbar) toolbar.style.display = '';
 
-  // Колір за % заповнення
-  function pctColor(pct) {
-    if (pct >= 90) return 'var(--green)';
-    if (pct >= 70) return 'var(--amber)';
-    return 'var(--red)';
+  const stats = data.stats || computeStaffStats(data.units);
+  const filterValue = getShtatFilterValue();
+  const visibleUnits = filterValue === 'all'
+    ? data.units
+    : data.units.filter((_, i) => String(i) === filterValue);
+
+  if (filterSelect) {
+    const prev = filterSelect.value;
+    filterSelect.innerHTML = `<option value="all">Всі підрозділи (${data.units.length})</option>` +
+      data.units.map((u, i) => {
+        const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
+        const label = u.name.length > 55 ? u.name.slice(0, 52) + '…' : u.name;
+        return `<option value="${i}">${escHtml(label)} — ${u.filled}/${u.total} (${pct}%)</option>`;
+      }).join('');
+    filterSelect.value = [...filterSelect.options].some(o => o.value === prev) ? prev : filterValue;
   }
 
-  let html = '';
+  const showStats = filterValue === 'all' ? stats : computeStaffStats(visibleUnits);
+  const barColor = shtatPctColor(showStats.overall.pct);
 
-  // ── Summary Cards ──
+  // --- Rank category analysis ---
+  const OFFICER_RANKS = ['полковник','підполковник','майор','капітан','старший лейтенант','лейтенант','молодший лейтенант'];
+  const SERGEANT_RANKS = ['головний майстер-сержант','майстер-сержант','сержант','рядовий'];
+  function rankGroup(r) {
+    const rv = (r || '').toLowerCase();
+    if (OFFICER_RANKS.some(rr => rv.includes(rr))) return 'officer';
+    if (SERGEANT_RANKS.some(rr => rv.includes(rr))) return 'sergeant';
+    return 'vilnyi';
+  }
+  const allVis = visibleUnits.flatMap(u => u.positions);
+  const rankStats = { officer: {total:0,filled:0}, sergeant: {total:0,filled:0}, vilnyi: {total:0,filled:0} };
+  allVis.forEach(p => {
+    const g = p.category === 'vilnyi' ? 'vilnyi' : rankGroup(p.rank);
+    rankStats[g].total++;
+    if (p.filled) rankStats[g].filled++;
+  });
+
+  let html = '';
   html += `<div class="shtat-summary-cards">
-    <div class="shtat-stat total"><div class="shtat-stat-label">Всього посад</div><div class="shtat-stat-value">${grandTotal}</div><div class="shtat-stat-sub">за штатним розписом</div></div>
-    <div class="shtat-stat filled"><div class="shtat-stat-label">Укомплектовано</div><div class="shtat-stat-value">${grandFilled}</div><div class="shtat-stat-sub">особового складу</div></div>
-    <div class="shtat-stat vacant"><div class="shtat-stat-label">Некомплект</div><div class="shtat-stat-value">${grandVacant}</div><div class="shtat-stat-sub">вакантних посад</div></div>
-    <div class="shtat-stat pct"><div class="shtat-stat-label">Укомплектованість</div><div class="shtat-stat-value">${overallPct}%</div><div class="shtat-stat-sub">від штатної чисельності</div></div>
+    <div class="shtat-stat total"><div class="shtat-stat-label">Всього посад</div><div class="shtat-stat-value">${showStats.overall.total}</div><div class="shtat-stat-sub">за штатним розписом</div></div>
+    <div class="shtat-stat filled"><div class="shtat-stat-label">Укомплектовано</div><div class="shtat-stat-value">${showStats.overall.filled}</div><div class="shtat-stat-sub">особового складу</div></div>
+    <div class="shtat-stat vacant"><div class="shtat-stat-label">Вакантно</div><div class="shtat-stat-value">${showStats.overall.vacant}</div><div class="shtat-stat-sub">вільних посад</div></div>
+    <div class="shtat-stat pct" style="--pct-color:${barColor}"><div class="shtat-stat-label">Укомплектованість</div><div class="shtat-stat-value" style="color:${barColor}">${showStats.overall.pct}%</div><div class="shtat-stat-sub">від штатної чисельності</div></div>
   </div>`;
 
-  // ── Overall Progress Bar ──
-  const barColor = pctColor(overallPct);
+
+
+  html += `<div class="shtat-analysis-grid">
+    <div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">🔵 ДСНС</div>
+      <div class="shtat-analysis-main">${showStats.dsns.filled}<span class="shtat-analysis-of"> / ${showStats.dsns.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${showStats.dsns.vacant}</strong> · ${showStats.dsns.total > 0 ? Math.round(showStats.dsns.filled / showStats.dsns.total * 100) : 0}%</div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill cat-dsns" style="width:${showStats.dsns.total ? Math.round(showStats.dsns.filled / showStats.dsns.total * 100) : 0}%"></div></div>
+    </div>
+    <div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">🟡 Вільний найм</div>
+      <div class="shtat-analysis-main">${showStats.vilnyi.filled}<span class="shtat-analysis-of"> / ${showStats.vilnyi.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${showStats.vilnyi.vacant}</strong> · ${showStats.vilnyi.total > 0 ? Math.round(showStats.vilnyi.filled / showStats.vilnyi.total * 100) : 0}%</div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill cat-vilnyi" style="width:${showStats.vilnyi.total ? Math.round(showStats.vilnyi.filled / showStats.vilnyi.total * 100) : 0}%"></div></div>
+    </div>
+    <div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">🎖 Офіцерський склад</div>
+      <div class="shtat-analysis-main">${rankStats.officer.filled}<span class="shtat-analysis-of"> / ${rankStats.officer.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${rankStats.officer.total - rankStats.officer.filled}</strong> · ${rankStats.officer.total > 0 ? Math.round(rankStats.officer.filled / rankStats.officer.total * 100) : 0}%</div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill cat-officer" style="width:${rankStats.officer.total ? Math.round(rankStats.officer.filled / rankStats.officer.total * 100) : 0}%"></div></div>
+    </div>
+    <div class="shtat-analysis-card">
+      <div class="shtat-analysis-title">🪖 Сержанти / рядові</div>
+      <div class="shtat-analysis-main">${rankStats.sergeant.filled}<span class="shtat-analysis-of"> / ${rankStats.sergeant.total}</span></div>
+      <div class="shtat-analysis-sub">вакантно: <strong>${rankStats.sergeant.total - rankStats.sergeant.filled}</strong> · ${rankStats.sergeant.total > 0 ? Math.round(rankStats.sergeant.filled / rankStats.sergeant.total * 100) : 0}%</div>
+      <div class="shtat-mini-bar"><div class="shtat-mini-bar-fill cat-sergeant" style="width:${rankStats.sergeant.total ? Math.round(rankStats.sergeant.filled / rankStats.sergeant.total * 100) : 0}%"></div></div>
+    </div>
+    <div class="shtat-analysis-card shtat-analysis-wide">
+      <div class="shtat-analysis-title">📊 Укомплектованість по підрозділах (топ вакантних)</div>
+      <div class="shtat-unit-ranking">`;
+
+
+
+  const ranked = [...(filterValue === 'all' ? data.units : visibleUnits)]
+    .map(u => ({ name: u.name, pct: u.total > 0 ? Math.round(u.filled / u.total * 100) : 0, filled: u.filled, total: u.total, vacant: u.total - u.filled }))
+    .sort((a, b) => a.pct - b.pct);
+
+  ranked.slice(0, 8).forEach(u => {
+    const color = shtatPctColor(u.pct);
+    const shortName = u.name.length > 42 ? u.name.slice(0, 39) + '…' : u.name;
+    const vacantBadge = u.vacant > 0 ? ` <span class="shtat-rank-vac">${u.vacant} вак.</span>` : '';
+    html += `<div class="shtat-rank-row">
+      <span class="shtat-rank-name" title="${escHtml(u.name)}">${escHtml(shortName)}${vacantBadge}</span>
+      <div class="shtat-rank-bar-wrap"><div class="shtat-rank-bar-fill" style="width:${u.pct}%;background:${color}"></div></div>
+      <span class="shtat-rank-pct" style="color:${color}">${u.filled}/${u.total}</span>
+    </div>`;
+  });
+
+  html += `</div></div></div>`;
+
   html += `<div class="shtat-overall-bar-wrap">
     <div class="shtat-overall-label">
       <span class="shtat-overall-title">Загальна укомплектованість</span>
-      <span class="shtat-overall-pct" style="color:${barColor}">${grandFilled} з ${grandTotal}</span>
+      <span class="shtat-overall-pct" style="color:${barColor}">${showStats.overall.filled} з ${showStats.overall.total}</span>
     </div>
-    <div class="shtat-overall-track"><div class="shtat-overall-fill" style="width:${overallPct}%;background:${barColor};"></div></div>
+    <div class="shtat-overall-track"><div class="shtat-overall-fill" style="width:${showStats.overall.pct}%;background:${barColor};"></div></div>
   </div>`;
 
-  // ── Units List ──
   html += `<div class="shtat-units-list">`;
-  data.units.forEach((u, i) => {
+  visibleUnits.forEach((u, vi) => {
+    const unitIndex = filterValue === 'all' ? data.units.indexOf(u) : Number(filterValue);
     const pct = u.total > 0 ? Math.round(u.filled / u.total * 100) : 0;
-    const color = pctColor(pct);
-    const shortage = u.total - u.filled;
+    const color = shtatPctColor(pct);
+    const openClass = filterValue !== 'all' ? ' open' : '';
 
-    html += `<div class="shtat-unit-card" id="shtat-unit-${i}">
-      <div class="shtat-unit-header" onclick="toggleShtatUnit(${i})">
-        <div class="shtat-unit-name">
-          <span class="shtat-unit-chevron">▶</span> ${escHtml(u.name)}
+    html += `<div class="shtat-unit-card${openClass}" id="shtat-unit-${unitIndex}">
+      <div class="shtat-unit-header" onclick="toggleShtatUnit(${unitIndex})">
+        <div class="shtat-unit-name"><span class="shtat-unit-chevron">▶</span> ${escHtml(u.name)}</div>
+        <div class="shtat-unit-meta">
+          <span class="shtat-unit-cats">ДСНС ${u.positions.filter(p => p.category === 'dsns' && p.filled).length}/${u.positions.filter(p => p.category === 'dsns').length}</span>
+          <span class="shtat-unit-cats">ВН ${u.positions.filter(p => p.category === 'vilnyi' && p.filled).length}/${u.positions.filter(p => p.category === 'vilnyi').length}</span>
         </div>
         <div class="shtat-unit-bar-wrap"><div class="shtat-unit-bar-fill" style="width:${pct}%;background:${color};"></div></div>
         <div class="shtat-unit-count" style="color:${color}">${u.filled}/${u.total}</div>
       </div>
       <div class="shtat-unit-detail">`;
 
-    // Позиції згруповані за підсекціями
     if (u.subunits && Object.keys(u.subunits).length > 0) {
       Object.entries(u.subunits).forEach(([subName, positions]) => {
         if (!positions || !positions.length) return;
         html += `<div class="shtat-unit-subsection">
           <div class="shtat-subsection-title">${escHtml(subName)}</div>`;
-        positions.forEach(p => {
-          html += `<div class="shtat-position-row">
-            <span class="shtat-position-name">${escHtml(p.position)}</span>
-            <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
-            <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
-          </div>`;
-        });
+        positions.forEach(p => { html += renderShtatPositionRow(p); });
         html += `</div>`;
       });
     } else {
-      // Без підсекцій — просто список позицій
       html += `<div class="shtat-unit-subsection">`;
-      u.positions.forEach(p => {
-        html += `<div class="shtat-position-row">
-          <span class="shtat-position-name">${escHtml(p.position)}</span>
-          <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
-          <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
-        </div>`;
-      });
+      u.positions.forEach(p => { html += renderShtatPositionRow(p); });
       html += `</div>`;
     }
 
@@ -4667,8 +4929,26 @@ function toggleShtatUnit(idx) {
   if (card) card.classList.toggle('open');
 }
 
-// ---- Ініціалізація при переході в режим Штату ----
+function initShtatToolbar() {
+  const filterSelect = document.getElementById('shtat-unit-filter');
+  const refreshBtn = document.getElementById('shtat-refresh-btn');
+  if (filterSelect && !filterSelect.dataset.bound) {
+    filterSelect.dataset.bound = '1';
+    filterSelect.addEventListener('change', () => {
+      setShtatFilterValue(filterSelect.value);
+      renderShtatDashboard();
+    });
+  }
+  if (refreshBtn && !refreshBtn.dataset.bound) {
+    refreshBtn.dataset.bound = '1';
+    refreshBtn.addEventListener('click', () => {
+      refreshStaffFromSheets().catch(() => {});
+    });
+  }
+}
+
 function initShtatMode() {
+  initShtatToolbar();
   renderShtatDashboard();
 }
 
@@ -5380,7 +5660,48 @@ document.addEventListener('DOMContentLoaded', () => {
   applyEditMode();
 
   // ---- Google Sheets Import (тільки в налаштуваннях) ----
+  const sheetsUrlInput = document.getElementById('sheets-url');
   const sheetsImportBtn = document.getElementById('sheets-import-btn');
+  const sheetsSaveBtn = document.getElementById('sheets-save-btn');
+  const sheetsResetBtn = document.getElementById('sheets-reset-btn');
+  const sheetsStatusSpan = document.getElementById('sheets-status');
+
+  if (sheetsUrlInput) {
+    const savedShtatUrl = getShtatSheetUrl();
+    if (savedShtatUrl) sheetsUrlInput.value = savedShtatUrl;
+  }
+
+  if (sheetsSaveBtn) {
+    sheetsSaveBtn.addEventListener('click', () => {
+      const raw = sheetsUrlInput ? sheetsUrlInput.value.trim() : '';
+      if (!raw) {
+        localStorage.removeItem(SHTAT_SHEET_URL_KEY);
+        if (sheetsStatusSpan) sheetsStatusSpan.textContent = 'Посилання видалено';
+      } else if (!/\/d\/[a-zA-Z0-9-_]+/.test(raw)) {
+        if (sheetsStatusSpan) { sheetsStatusSpan.textContent = '❌ Невірне посилання'; sheetsStatusSpan.style.color = 'var(--red)'; }
+        return;
+      } else {
+        localStorage.setItem(SHTAT_SHEET_URL_KEY, raw);
+        if (sheetsStatusSpan) { sheetsStatusSpan.textContent = '💾 Збережено!'; sheetsStatusSpan.style.color = 'var(--green)'; }
+      }
+      setTimeout(() => { if (sheetsStatusSpan) { sheetsStatusSpan.textContent = ''; sheetsStatusSpan.style.background = ''; } }, 3000);
+    });
+  }
+
+  if (sheetsResetBtn) {
+    sheetsResetBtn.addEventListener('click', () => {
+      localStorage.removeItem(SHTAT_SHEET_URL_KEY);
+      localStorage.removeItem(SHTAT_IMPORTED_KEY);
+      localStorage.removeItem(SHTAT_FILTER_KEY);
+      if (sheetsUrlInput) sheetsUrlInput.value = '';
+      if (sheetsStatusSpan) sheetsStatusSpan.textContent = 'Скинуто';
+      const previewEl = document.getElementById('sheets-preview');
+      if (previewEl) previewEl.style.display = 'none';
+      renderShtatDashboard();
+      setTimeout(() => { if (sheetsStatusSpan) sheetsStatusSpan.textContent = ''; }, 3000);
+    });
+  }
+
   if (sheetsImportBtn) {
     sheetsImportBtn.addEventListener('click', importStaffFromSheets);
   }

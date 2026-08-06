@@ -1885,6 +1885,52 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
    SHTAT WORKSPACE (Штат)
    ============================================================ */
 .shtat-dashboard { display: flex; flex-direction: column; gap: 16px; }
+.shtat-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.shtat-toolbar-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+.shtat-filter-label { font-size: 12px; font-weight: 700; color: var(--text2); white-space: nowrap; }
+.shtat-unit-filter {
+  flex: 1; min-width: 180px; max-width: 520px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 12px;
+}
+.shtat-refresh-btn { white-space: nowrap; }
+.shtat-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+@media (min-width: 700px) {
+  .shtat-analysis-grid { grid-template-columns: repeat(4, 1fr); }
+}
+.shtat-analysis-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px;
+}
+.shtat-analysis-wide { grid-column: 1 / -1; }
+.shtat-analysis-title { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
+.shtat-analysis-main { font-size: 24px; font-weight: 800; color: var(--text); letter-spacing: -0.03em; }
+.shtat-analysis-of { font-size: 14px; color: var(--text3); font-weight: 600; }
+.shtat-analysis-sub { font-size: 11px; color: var(--text3); margin: 4px 0 8px; }
+.shtat-mini-bar { height: 6px; border-radius: 99px; background: var(--surface3); overflow: hidden; }
+.shtat-mini-bar-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+.shtat-mini-bar-fill.cat-dsns { background: var(--blue); }
+.shtat-mini-bar-fill.cat-vilnyi { background: var(--amber); }
+.shtat-mini-bar-fill.cat-officer { background: #7c3aed; }
+.shtat-mini-bar-fill.cat-sergeant { background: #059669; }
+.shtat-rank-vac { font-size: 10px; color: var(--red); font-weight: 700; margin-left: 4px; background: rgba(239,68,68,.12); border-radius: 4px; padding: 1px 4px; }
+.shtat-unit-ranking { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.shtat-rank-row { display: grid; grid-template-columns: minmax(120px, 1fr) 1.2fr auto; gap: 10px; align-items: center; }
+.shtat-rank-name { font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shtat-rank-bar-wrap { height: 6px; border-radius: 99px; background: var(--surface3); overflow: hidden; }
+.shtat-rank-bar-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+.shtat-rank-pct { font-size: 11px; font-weight: 700; white-space: nowrap; }
+.shtat-unit-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.shtat-unit-cats { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+.shtat-position-cat { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: var(--surface2); color: var(--text3); white-space: nowrap; }
+.shtat-position-cat.cat-dsns { color: var(--blue); background: rgba(59, 130, 246, .12); }
+.shtat-position-cat.cat-vilnyi { color: var(--amber); background: rgba(245, 158, 11, .12); }
+.shtat-position-rank { font-size: 11px; color: var(--text3); white-space: nowrap; }
 .shtat-summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
