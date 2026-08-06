@@ -744,8 +744,21 @@ function signInWithGoogle() {
 function handleRedirectAuth() {
   // Обробка redirect з implicit grant
   const hash = window.location.hash;
-  if (hash && hash.includes('access_token')) {
-    const params = new URLSearchParams(hash.substring(1));
+  if (!hash) return;
+  const params = new URLSearchParams(hash.substring(1));
+  const err = params.get('error');
+  if (err) {
+    const desc = params.get('error_description') || '';
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    if (err !== 'access_denied') {
+      alert('Помилка входу Google: ' + err + (desc ? '\n' + desc : '') +
+        '\n\nПеревірте:\n• Client ID у Налаштуваннях → Безпека\n• Ваш URL додано до «Authorized JavaScript origins» і «Authorized redirect URIs» у Google Cloud Console\n• Чи створено OAuth Client ID саме типу «Web application»');
+    }
+    return;
+  }
+  if (hash.includes('access_token')) {
     const token = params.get('access_token');
     if (token) {
       if (window.history && window.history.replaceState) {
@@ -1302,6 +1315,19 @@ async function exportToGoogleDoc() {
 }
 
 // ---- Auth UI ----
+function updateShtatAuthStatus() {
+  const el = document.getElementById('sheets-google-status');
+  if (!el) return;
+  const token = localStorage.getItem('google_auth_token');
+  if (token) {
+    el.textContent = '✅ авторизовано';
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = 'не авторизовано';
+    el.style.color = 'var(--text3)';
+  }
+}
+
 function renderAuthUI() {
   console.log('[Auth] renderAuthUI called, currentUser:', currentUser);
   const section = document.getElementById('auth-section');
@@ -1406,6 +1432,7 @@ function renderAuthUI() {
       });
     }
   }
+  updateShtatAuthStatus();
 }
 
 function renderAuthLoading() {
@@ -6050,6 +6077,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sheetsImportBtn) {
     sheetsImportBtn.addEventListener('click', importStaffFromSheets);
   }
+
+  const sheetsGoogleLoginBtn = document.getElementById('sheets-google-login-btn');
+  if (sheetsGoogleLoginBtn) {
+    sheetsGoogleLoginBtn.addEventListener('click', signInWithGoogle);
+  }
+  updateShtatAuthStatus();
 
   // ---- Clear Cache & Force Reload ----
   const clearCacheBtn = document.getElementById('clear-cache-btn');

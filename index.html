@@ -430,7 +430,7 @@
               <span class="api-status" id="client-id-status">за замовчуванням</span>
             </div>
             <div style="font-size: 11px; color: var(--text3); line-height: 1.5; margin-bottom: 10px;">
-              Потрібен для автоматичного збереження та синхронізації даних у <b>Google Drive</b> (<code style="font-size:10px">deadline_tracker_backup.json</code>).
+              Потрібен для автоматичного збереження та синхронізації даних у <b>Google Drive</b> (<code style="font-size:10px">deadline_tracker_backup.json</code>) і для доступу до <b>приватних</b> Google Таблиць (Штат, ПММ).
             </div>
             <div id="settings-auth-box"></div>
           </div>
@@ -501,6 +501,13 @@
               <span class="api-status" id="sheets-status"></span>
             </div>
             <div id="sheets-preview" style="margin-top: 14px; font-size: 12px; color: var(--text2); line-height: 1.6; max-height: 200px; overflow-y: auto; background: var(--surface2); border-radius: 8px; padding: 10px 14px; display: none;"></div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px;">
+              <button class="btn-secondary" id="sheets-google-login-btn" style="flex: 1; min-width: 200px;">🔐 Увійти через Google</button>
+              <span class="api-status" id="sheets-google-status"></span>
+            </div>
+            <div style="font-size: 11px; color: var(--text3); margin-top: 8px; line-height: 1.5;">
+              <b>Вхід потрібен лише якщо таблиця приватна.</b> Якщо таблиця відкрита «для всіх за посиланням» — авторизація не потрібна, додаток завантажить дані напряму.
+            </div>
           </div>
         </div>
 
