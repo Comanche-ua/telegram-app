@@ -4427,8 +4427,8 @@ function getStaffCsvUrls(url) {
   const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
   const gid = gidMatch ? gidMatch[1] : '0';
   return [
-    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
     `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
     `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`
   ];
 }
@@ -4461,9 +4461,18 @@ function staffIsHeaderRow(num, pos, person) {
   const joined = `${num} ${pos} ${person}`.toLowerCase();
   return joined.includes('№') && (joined.includes('посада') || joined.includes('підрозділ')) && joined.includes('піб');
 }
-function staffIsMainUnitName(s) {
-  return /дпрч|дпрп|загін|державний|пожежно-рятувальн/i.test(s) || /^\d+\s+(дпрч|дпрп)/i.test(s);
+// staffIsTopLevelOrg: only the main organization header (загін level)
+function staffIsTopLevelOrg(s) {
+  // Matches "1 державний пожежно-рятувальний загін..." but NOT "1 ДПРЧ", "1 ДПРП"
+  return /загін.*управл|загін.*дснс|державний пожежно-рятувальний загін/i.test(s);
 }
+// staffIsSubUnit: ДПРЧ, ДПРП, відділення, група etc — all subunits
+function staffIsSubUnit(s) {
+  return /^(\d+\s+)?(дпрч|дпрп|відділення|група|юридична|управління|служба|сектор|відділ)/i.test(s) || /дпрч|дпрп/i.test(s);
+}
+// Legacy compat alias
+function staffIsMainUnitName(s) { return staffIsTopLevelOrg(s) || /дпрч|дпрп|загін|державний|пожежно-рятувальн/i.test(s); }
+
 function staffNormCategory(raw) {
   const s = staffClean(raw).toLowerCase();
   if (s.includes('вільн')) return 'vilnyi';
@@ -4512,33 +4521,79 @@ function finalizeStaffUnits(units) {
 }
 
 function parseStandardStaffCSV(dataRows) {
-  // Parse into main unit + subunits, then FLATTEN subunits as individual units
-  // so the dropdown shows all 33 відділення/групи, not just 1 main unit.
+  // Format: Google Sheets CSV where:
+  // - Row 0 col[0]='№ п/п', col[1]='Підрозділ/Посада + MAIN_UNIT_NAME' (merged cells)
+  // - Rows with empty col[0] and non-empty col[1] are subunit headers
+  // - Position rows: col[0]=number, col[1]=position title, col[2]=name, col[3]=category, col[4]=rank
+  // - Summary rows ('Всього', 'Вакантно', ...) appear between sections - skip them
+  // - Numbering restarts at 1 for each ДПРЧ/ДПРП section
+
   const rawUnits = [];
   let currentMainUnit = null;
   let currentSubName = null;
 
+  // Pre-scan: extract main unit name from header row
+  let mainUnitNameFromHeader = null;
+  for (let i = 0; i < Math.min(3, dataRows.length); i++) {
+    const col0 = staffClean(dataRows[i][0]);
+    const col1 = staffClean(dataRows[i][1]);
+    if (/^\u2116/.test(col0) && staffIsTopLevelOrg(col1)) {
+      // Extract just the unit name portion from the merged header
+      mainUnitNameFromHeader = col1.replace(/^[\s,]+|[\s,]+$/g, '');
+      break;
+    }
+    if (!col0 && staffIsTopLevelOrg(col1)) {
+      mainUnitNameFromHeader = col1;
+      break;
+    }
+  }
+
+  // If we found the main unit in header, initialize it
+  if (mainUnitNameFromHeader) {
+    currentMainUnit = { name: mainUnitNameFromHeader, subs: {} };
+    currentSubName = '__ROOT__';
+    currentMainUnit.subs[currentSubName] = [];
+    rawUnits.push(currentMainUnit);
+  }
+
+  // Main parse loop
   for (let i = 0; i < dataRows.length; i++) {
-    const num = staffClean(dataRows[i][0]);
-    const posOrUnit = staffClean(dataRows[i][1]);
-    const person = staffClean(dataRows[i][2]);
-    const categoryRaw = staffClean(dataRows[i][3]);
-    const rank = staffClean(dataRows[i][4]);
+    const row = dataRows[i];
+    const num   = staffClean(row[0]);
+    const pos   = staffClean(row[1]);
+    const person = staffClean(row[2]);
+    const categoryRaw = staffClean(row[3]);
+    const rank  = staffClean(row[4]);
 
-    if (!posOrUnit && !person) continue;
-    if (staffIsHeaderRow(num, posOrUnit, person)) continue;
-    if (staffIsSummaryRow(posOrUnit)) continue;
+    // Skip fully empty rows
+    if (!pos && !person && !num) continue;
 
-    if (!num && posOrUnit && !person) {
-      if (staffIsMainUnitName(posOrUnit)) {
-        // New main organization
-        currentMainUnit = { name: posOrUnit, subs: {} };
+    // Skip summary rows (Всього, Вакантно, Зайнято, у т.ч. ...)
+    if (staffIsSummaryRow(pos)) continue;
+
+    // Skip CSV header rows (col[0] starts with '№' or contains '№ п/п')
+    if (/^\u2116/.test(num)) continue;
+
+    // Skip second-line header continuation row ("/Вільний найм", "Звання")
+    if (!num && /вільний\s+найм/i.test(pos) && !person) continue;
+
+    // Subunit header row: col[0] empty, col[1] = name, col[2] empty
+    if (!num && pos && !person) {
+      if (staffIsTopLevelOrg(pos) && pos !== mainUnitNameFromHeader) {
+        // New top-level organization (unlikely, but handle gracefully)
+        currentMainUnit = { name: pos, subs: {} };
         currentSubName = '__ROOT__';
         currentMainUnit.subs[currentSubName] = [];
         rawUnits.push(currentMainUnit);
-      } else if (currentMainUnit) {
-        // New subunit within the main unit
-        currentSubName = posOrUnit;
+      } else {
+        // All other section headers are subunits (ДПРЧ, ДПРП, відділення, група, etc.)
+        if (!currentMainUnit) {
+          currentMainUnit = { name: 'Штатний розпис', subs: {} };
+          currentSubName = '__ROOT__';
+          currentMainUnit.subs[currentSubName] = [];
+          rawUnits.push(currentMainUnit);
+        }
+        currentSubName = pos;
         if (!currentMainUnit.subs[currentSubName]) {
           currentMainUnit.subs[currentSubName] = [];
         }
@@ -4546,9 +4601,9 @@ function parseStandardStaffCSV(dataRows) {
       continue;
     }
 
-    if (num && /^\d/.test(num) && posOrUnit) {
+    // Position row: col[0] is a digit number
+    if (num && /^\d+$/.test(num) && pos) {
       if (!currentMainUnit) {
-        // No header found, create default
         currentMainUnit = { name: 'Штатний розпис', subs: {} };
         currentSubName = '__ROOT__';
         currentMainUnit.subs[currentSubName] = [];
@@ -4556,22 +4611,21 @@ function parseStandardStaffCSV(dataRows) {
       }
       const filled = !staffIsVacant(person);
       const category = staffNormCategory(categoryRaw);
-      const entry = { position: posOrUnit, name: person, filled, category, rank, categoryRaw };
+      const entry = { position: pos, name: person, filled, category, rank, categoryRaw };
       const key = currentSubName || '__ROOT__';
       if (!currentMainUnit.subs[key]) currentMainUnit.subs[key] = [];
       currentMainUnit.subs[key].push(entry);
     }
   }
 
-  // Flatten: each subunit becomes a separate "unit" in the units array
+  // Flatten: each subunit becomes a separate unit in the filter dropdown
   const units = [];
   rawUnits.forEach(mainUnit => {
     const subKeys = Object.keys(mainUnit.subs);
     subKeys.forEach(subKey => {
       const positions = mainUnit.subs[subKey];
       if (!positions || positions.length === 0) return;
-      // Use the subunit name as the display name; for ROOT positions, use main unit name
-      const displayName = subKey === '__ROOT__' ? mainUnit.name : subKey;
+      const displayName = subKey === '__ROOT__' ? 'Загальне керівництво загону' : subKey;
       units.push({ name: displayName, parentName: mainUnit.name, positions, subunits: {} });
     });
   });
@@ -4580,11 +4634,19 @@ function parseStandardStaffCSV(dataRows) {
 }
 
 function detectStandardStaffFormat(dataRows) {
-  for (let i = 0; i < Math.min(8, dataRows.length); i++) {
+  // Check first 10 rows for any signature of the standard format:
+  // 1) Header contains піб + дснс/вільн (merged cells format)
+  // 2) Row with col[0]='№ п/п' and col[1] contains main unit name (Google Sheets export format)
+  // 3) Data rows with col[3] = 'ДСНС' or 'Вільний найм'
+  for (let i = 0; i < Math.min(10, dataRows.length); i++) {
     const row = dataRows[i].map(staffClean);
     const joined = row.join(' ').toLowerCase();
     if (joined.includes('піб') && (joined.includes('дснс') || joined.includes('вільн'))) return true;
     if (row.some(c => /дснс\s*\/?\s*вільн/i.test(c))) return true;
+    // Google Sheets export: Row 0 col[0] starts with '№', col[1] has unit name
+    if (i === 0 && /^№/.test(row[0]) && staffIsMainUnitName(row[1])) return true;
+    // Any row has ДСНС or Вільний найм in col[3]
+    if ((row[3] === 'ДСНС' || /вільний найм/i.test(row[3])) && /^\d+$/.test(row[0])) return true;
   }
   return false;
 }

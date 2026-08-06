@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v9.0-shtat-analytics';
+const CACHE_NAME = 'deadline-tracker-v9.1-shtat-parser-fix';
 const ASSETS = [
   './',
   './index.html',
