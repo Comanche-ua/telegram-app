@@ -5918,6 +5918,36 @@ document.addEventListener('DOMContentLoaded', () => {
     sheetsImportBtn.addEventListener('click', importStaffFromSheets);
   }
 
+  // ---- Clear Cache & Force Reload ----
+  const clearCacheBtn = document.getElementById('clear-cache-btn');
+  if (clearCacheBtn) {
+    clearCacheBtn.addEventListener('click', async () => {
+      clearCacheBtn.disabled = true;
+      clearCacheBtn.textContent = '⏳ Очищення кешу...';
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (const registration of registrations) {
+            await registration.unregister();
+          }
+        }
+        if (window.caches) {
+          const keys = await caches.keys();
+          for (const key of keys) {
+            await caches.delete(key);
+          }
+        }
+        localStorage.removeItem('shtat_imported_data');
+        alert('Кеш успішно очищено! Додаток буде перезавантажено.');
+        window.location.reload(true);
+      } catch (err) {
+        console.error(err);
+        alert('Помилка при очищенні кешу. Перезавантажуємо сторінку...');
+        window.location.reload();
+      }
+    });
+  }
+
   // ---- PMM Custom Google Sheet URL Settings ----
   const pmmUrlInput = document.getElementById('pmm-sheets-url');
   const pmmSaveBtn = document.getElementById('pmm-sheets-save-btn');
