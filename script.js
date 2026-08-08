@@ -3660,14 +3660,16 @@ function setAppMode(mode) {
   if (mode === 'ops') activeAppMode = 'ops';
   else if (mode === 'shtat') activeAppMode = 'shtat';
   else if (mode === 'projects') activeAppMode = 'projects';
+  else if (mode === 'procurement') activeAppMode = 'procurement';
   else if (mode === 'pmm') activeAppMode = 'pmm';
   else activeAppMode = 'deadlines';
   localStorage.setItem(APP_MODE_KEY, activeAppMode);
 
-  document.body.classList.remove('ops-mode', 'shtat-mode', 'projects-mode', 'pmm-mode');
+  document.body.classList.remove('ops-mode', 'shtat-mode', 'projects-mode', 'pmm-mode', 'procurement-mode');
   if (activeAppMode === 'ops') document.body.classList.add('ops-mode');
   if (activeAppMode === 'shtat') document.body.classList.add('shtat-mode');
   if (activeAppMode === 'projects') document.body.classList.add('projects-mode');
+  if (activeAppMode === 'procurement') document.body.classList.add('procurement-mode');
   if (activeAppMode === 'pmm') document.body.classList.add('pmm-mode');
 
   document.querySelectorAll('.app-mode-btn').forEach(btn => {
@@ -3693,6 +3695,7 @@ function setAppMode(mode) {
   const shtatWorkspace = document.getElementById('shtat-workspace');
   const projectsWorkspace = document.getElementById('projects-workspace');
   const pmmWorkspace = document.getElementById('pmm-workspace');
+  const procurementWorkspace = document.getElementById('procurement-workspace');
   const tabBar = document.getElementById('tab-bar');
   const fabContainer = document.querySelector('.fab-container');
 
@@ -3700,6 +3703,7 @@ function setAppMode(mode) {
   if (opsWorkspace) opsWorkspace.style.display = (activeAppMode === 'deadlines' || activeAppMode === 'ops') ? '' : 'none';
   if (shtatWorkspace) shtatWorkspace.style.display = activeAppMode === 'shtat' ? '' : 'none';
   if (projectsWorkspace) projectsWorkspace.style.display = activeAppMode === 'projects' ? '' : 'none';
+  if (procurementWorkspace) procurementWorkspace.style.display = activeAppMode === 'procurement' ? '' : 'none';
   if (pmmWorkspace) pmmWorkspace.style.display = activeAppMode === 'pmm' ? '' : 'none';
   if (tabBar) tabBar.style.display = activeAppMode === 'deadlines' ? '' : 'none';
 
@@ -3713,6 +3717,7 @@ function setAppMode(mode) {
   if (activeAppMode === 'ops') renderOpsWorkspace();
   else if (activeAppMode === 'shtat') initShtatMode();
   else if (activeAppMode === 'projects') renderProjectsWorkspace();
+  else if (activeAppMode === 'procurement') renderProcurementWorkspace();
   else if (activeAppMode === 'pmm') renderPmmWorkspace();
   else updateAddButton();
 }
@@ -6952,6 +6957,507 @@ async function renderPmmWorkspace() {
         }
       });
     }
+  }
+}
+
+// ============================================================
+// PROCUREMENT WORKSPACE (План закупівель)
+// ============================================================
+const PROC_DATA_KEY = 'procurement_plan_data_v1';
+const PROC_SHEET_URL_KEY = 'procurement_plan_sheet_url';
+const DEFAULT_PROC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/19LXzN-l0uAnJen8-NtcXDdL6iBDfAY3UYKUAV7e1P-I/edit?usp=sharing';
+
+let procState = null; // { items: [{id, kekv, text, amount, procType, done}] }
+let procEventsBound = false;
+
+function loadProcState() {
+  try {
+    const raw = localStorage.getItem(PROC_DATA_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d && Array.isArray(d.items)) return d;
+    }
+  } catch (e) { /* ignore */ }
+  return { items: [] };
+}
+
+function saveProcState() {
+  localStorage.setItem(PROC_DATA_KEY, JSON.stringify(procState));
+}
+
+function getProcSheetUrl() {
+  const v = (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
+  return v || DEFAULT_PROC_SHEET_URL;
+}
+
+function procUid() {
+  return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function normalizeProcType(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (s.includes('prozzoo') || s.includes('prozorro') || s.includes('market')) return 'prozorro';
+  if (s.includes('прям')) return 'direct';
+  if (s.includes('тендер') || s.includes('торг')) return 'tender';
+  return '';
+}
+
+function parseProcurementCsv(csvText) {
+  const rows = parseCsvLines(csvText);
+  const items = [];
+  let periodLabel = '';
+  let headerFound = false;
+  const monthRe = /(Січ|Лют|Бер|Кві|Тра|Чер|Лип|Сер|Вер|Жов|Лис|Гру)/i;
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || !r.length) continue;
+
+    const first = String(r[0] || '').trim();
+
+    // Мітка періоду, напр. «Серпень 2026»
+    if (!headerFound && r.length <= 3 && monthRe.test(first) && !/предмет/i.test(first)) {
+      periodLabel = r.join(' ');
+      continue;
+    }
+
+    // Рядок заголовків
+    if (!headerFound && (/№/.test(first) || /предмет/i.test(String(r[2] || '')) || /КЕКВ/i.test(String(r[1] || '')))) {
+      headerFound = true;
+      continue;
+    }
+
+    if (!headerFound) continue;
+
+    const num = first.replace(/\D/g, '');
+    const kekv = String(r[1] || '').trim();
+    const text = String(r[2] || '').trim();
+    const amount = String(r[3] || '').trim();
+    const typeRaw = String(r[4] || '').trim();
+
+    if (!num && !text && !kekv && !amount) continue;
+    if (/^всього|^разом|^итого|^итог/i.test(text)) continue;
+
+    items.push({
+      id: procUid(),
+      kekv: kekv,
+      text: text,
+      amount: amount,
+      procType: normalizeProcType(typeRaw),
+      done: false
+    });
+  }
+  return { items, period: periodLabel };
+}
+
+async function fetchProcurementCsv() {
+  const url = getProcSheetUrl();
+  if (!url) return null;
+
+  let candidates;
+  if (url.includes('script.google.com/macros')) {
+    candidates = [url];
+  } else {
+    const idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!idMatch) {
+      candidates = [url];
+    } else {
+      const docId = idMatch[1];
+      const gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
+      const gid = gidMatch ? gidMatch[1] : '0';
+      candidates = [
+        `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${docId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+        `https://docs.google.com/spreadsheets/d/${docId}/export?format=csv`
+      ];
+    }
+  }
+
+  for (const c of candidates) {
+    const txt = await tryFetchCsv(c);
+    if (txt) return txt;
+  }
+  return null;
+}
+
+function procFmtMoney(n) {
+  return n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function procParseAmount(raw) {
+  if (raw === null || raw === undefined) return 0;
+  const s = String(raw).trim().replace(/[\s ]/g, '');
+  if (!s) return 0;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  let normalized = s;
+  if (lastComma > -1 && lastDot > -1) {
+    normalized = lastComma > lastDot ? s.split('.').join('').replace(',', '.') : s.split(',').join('');
+  } else if (lastComma > -1) {
+    normalized = s.replace(',', '.');
+  }
+  const n = parseFloat(normalized);
+  return isNaN(n) ? 0 : n;
+}
+
+function procEscapeAttr(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function procTypeSelectHtml(item) {
+  const sel = item.procType ? ' ' + item.procType : '';
+  return '<select class="proc-type' + sel + '" title="Тип угоди">' +
+    '<option value="">Тип угоди —</option>' +
+    '<option value="prozorro"' + (item.procType === 'prozorro' ? ' selected' : '') + '>Prozorro Market</option>' +
+    '<option value="direct"' + (item.procType === 'direct' ? ' selected' : '') + '>Пряма угода</option>' +
+    '<option value="tender"' + (item.procType === 'tender' ? ' selected' : '') + '>Відкриті торги (тендер)</option>' +
+    '</select>';
+}
+
+/* ---- Гейдж виконання плану закупівель (SVG) ---- */
+const GAUGE_CX = 105, GAUGE_CY = 118;
+
+function gaugePoint(r, pct) {
+  const thetaDeg = 180 * (1 - pct / 100);
+  const thetaRad = thetaDeg * Math.PI / 180;
+  return {
+    x: GAUGE_CX + r * Math.cos(thetaRad),
+    y: GAUGE_CY - r * Math.sin(thetaRad)
+  };
+}
+
+function buildGaugeStatic(prefix) {
+  prefix = prefix || '';
+  const ticksGroup = document.getElementById(prefix + 'ticksGroup');
+  const labelsGroup = document.getElementById(prefix + 'labelsGroup');
+  if (!ticksGroup || !labelsGroup || ticksGroup.childNodes.length) return; // build once
+  const glowId = 'url(#' + (prefix ? prefix + 'Glow' : 'glow') + ')';
+
+  let ticksHtml = '';
+  for (let v = 0; v <= 100; v += 10) {
+    const major = (v % 25 === 0);
+    const p1 = gaugePoint(major ? 60 : 68, v);
+    const p2 = gaugePoint(76, v);
+    ticksHtml += '<line class="' + (major ? 'gauge-tick-major' : 'gauge-tick') + '" x1="' + p1.x.toFixed(1) + '" y1="' + p1.y.toFixed(1) + '" x2="' + p2.x.toFixed(1) + '" y2="' + p2.y.toFixed(1) + '"/>';
+  }
+  ticksGroup.innerHTML = ticksHtml;
+
+  const labelColors = { 0: '#ff1b3d', 25: '#ff7200', 50: '#ffd800', 75: '#82ff00', 100: '#00df63' };
+  let labelsHtml = '';
+  [0, 25, 50, 75, 100].forEach(v => {
+    const p = gaugePoint(100, v);
+    p.y += 10;
+    labelsHtml += '<text class="gauge-label-glow" x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" fill="' + labelColors[v] + '" filter="' + glowId + '">' + v + '%</text>';
+    labelsHtml += '<text class="gauge-label" x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" fill="' + labelColors[v] + '">' + v + '%</text>';
+  });
+  labelsGroup.innerHTML = labelsHtml;
+}
+
+function updateGauge(pct, prefix) {
+  prefix = prefix || '';
+  const needleGroup = document.getElementById(prefix + 'needleGroup');
+  if (needleGroup) needleGroup.style.transform = 'rotate(' + (1.8 * pct).toFixed(1) + 'deg)';
+
+  const complete = pct >= 100;
+  const pivot = document.getElementById(prefix + 'gaugePivot');
+  if (pivot) pivot.classList.toggle('complete', complete);
+
+  const pctEl = document.getElementById(prefix + 'gaugePct');
+  if (pctEl) {
+    pctEl.textContent = pct + '%';
+    pctEl.classList.toggle('complete', complete);
+  }
+}
+
+function updateProcGauge() {
+  const items = procState ? procState.items : [];
+  const done = items.filter(it => it.done).length;
+  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  updateGauge(pct, 'proc');
+  const label = document.getElementById('procGaugeLabel');
+  if (label) {
+    const word = items.length === 1 ? 'позицію' : (items.length >= 2 && items.length <= 4 ? 'позиції' : 'позицій');
+    label.textContent = 'Виконано ' + done + ' з ' + items.length + ' ' + word;
+  }
+}
+
+function updateProcTotals() {
+  const items = procState ? procState.items : [];
+  let total = 0, doneTotal = 0, doneCount = 0;
+  const byType = { prozorro: 0, direct: 0, tender: 0 };
+  items.forEach(it => {
+    const v = procParseAmount(it.amount);
+    total += v;
+    if (it.done) { doneTotal += v; doneCount++; }
+    if (byType[it.procType] !== undefined) byType[it.procType] += v;
+  });
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+  set('procurement-total-sum', procFmtMoney(total) + ' грн');
+  set('procurement-total-done', procFmtMoney(doneTotal) + ' грн (' + doneCount + ' поз.)');
+  set('procurement-total-prozorro', procFmtMoney(byType.prozorro) + ' грн');
+  set('procurement-total-direct', procFmtMoney(byType.direct) + ' грн');
+  set('procurement-total-tender', procFmtMoney(byType.tender) + ' грн');
+}
+
+function updateProcKekvSummary() {
+  const el = document.getElementById('procurement-kekv-summary');
+  if (!el) return;
+  const items = procState ? procState.items : [];
+  const map = {};
+  items.forEach(it => {
+    if (it.kekv) map[it.kekv] = (map[it.kekv] || 0) + procParseAmount(it.amount);
+  });
+  const keys = Object.keys(map);
+  if (!keys.length) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = '<span>Підсумок за КЕКВ:</span> ' + keys.map(k =>
+    '<span><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(map[k]) + ' грн</span>'
+  ).join('');
+}
+
+function renderProcurementTable() {
+  const body = document.getElementById('procurement-table-body');
+  const empty = document.getElementById('procurement-empty');
+  if (!body) return;
+
+  const items = procState ? procState.items : [];
+  body.innerHTML = '';
+  if (empty) empty.style.display = items.length ? 'none' : 'block';
+
+  items.forEach((item, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="proc-num">' + (idx + 1) + '</td>' +
+      '<td><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
+      '<td><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
+      '<td><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
+      '<td>' + procTypeSelectHtml(item) + '</td>' +
+      '<td><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
+      '<td><button class="proc-del" title="Видалити">×</button></td>';
+
+    const textInput = tr.querySelector('.proc-text');
+    textInput.addEventListener('input', e => { item.text = e.target.value; });
+    textInput.addEventListener('blur', saveProcState);
+    textInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); textInput.blur(); }
+    });
+
+    const kekvInput = tr.querySelector('.proc-kekv');
+    kekvInput.addEventListener('input', e => { item.kekv = e.target.value; });
+    kekvInput.addEventListener('blur', () => { saveProcState(); updateProcKekvSummary(); });
+
+    const amountInput = tr.querySelector('.proc-amount');
+    amountInput.addEventListener('input', e => { item.amount = e.target.value; updateProcTotals(); });
+    amountInput.addEventListener('blur', () => { saveProcState(); updateProcTotals(); });
+
+    const typeSel = tr.querySelector('.proc-type');
+    typeSel.addEventListener('change', e => {
+      item.procType = e.target.value;
+      typeSel.className = 'proc-type' + (item.procType ? ' ' + item.procType : '');
+      saveProcState();
+      updateProcTotals();
+    });
+
+    tr.querySelector('.proc-check').addEventListener('change', e => {
+      item.done = e.target.checked;
+      saveProcState();
+      updateProcTotals();
+      updateProcGauge();
+    });
+
+    tr.querySelector('.proc-del').addEventListener('click', () => {
+      if (item.text && !confirm('Видалити позицію "' + item.text + '"?')) return;
+      procState.items = procState.items.filter(it => it.id !== item.id);
+      saveProcState();
+      renderProcurementTable();
+      updateProcTotals();
+      updateProcKekvSummary();
+    });
+
+    body.appendChild(tr);
+  });
+
+  updateProcTotals();
+  updateProcKekvSummary();
+  updateProcGauge();
+}
+
+function setProcStatus(msg, color) {
+  const el = document.getElementById('procurement-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color || '';
+}
+
+function showProcCsvBox() {
+  const box = document.getElementById('procurement-csv-box');
+  if (box) box.style.display = 'block';
+  setProcStatus('⚠️ Пряме завантаження таблиці заблоковане браузером. Відкрийте таблицю → Файл → Завантажити → CSV і вставте дані нижче.', 'var(--amber)');
+}
+
+async function syncProcurementFromSheet() {
+  const btn = document.getElementById('procurement-sync-btn');
+  if (!procState) procState = loadProcState();
+  if (btn) { btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
+  try {
+    const csv = await fetchProcurementCsv();
+    if (csv) {
+      const parsed = parseProcurementCsv(csv);
+      if (parsed.items.length) {
+        // Зберігаємо статус виконання за текстом позиції
+        const doneMap = {};
+        (procState.items || []).forEach(it => {
+          if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+        });
+        parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+        procState.items = parsed.items;
+        saveProcState();
+        renderProcurementTable();
+        setProcStatus('✅ Синхронізовано з Google Таблицею: ' + parsed.items.length + ' позицій' + (parsed.period ? ' · ' + parsed.period : ''), 'var(--green)');
+      } else {
+        setProcStatus('⚠️ У таблиці поки немає заповнених позицій.', 'var(--amber)');
+        showProcCsvBox();
+      }
+    } else {
+      showProcCsvBox();
+    }
+  } catch (err) {
+    console.error('Procurement sync error:', err);
+    showProcCsvBox();
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.textContent = '🔄 Оновити з Google Таблиці'; }
+  }
+}
+
+function bindProcurementEvents() {
+  if (procEventsBound) return;
+  procEventsBound = true;
+
+  document.getElementById('procurement-sync-btn')?.addEventListener('click', syncProcurementFromSheet);
+
+  document.getElementById('procurement-add-btn')?.addEventListener('click', () => {
+    if (!procState) procState = loadProcState();
+    procState.items.push({ id: procUid(), kekv: '', text: '', amount: '', procType: '', done: false });
+    saveProcState();
+    renderProcurementTable();
+    const inputs = document.querySelectorAll('#procurement-table-body .proc-text');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  });
+
+  document.getElementById('procurement-export-btn')?.addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(procState, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'procurement_plan.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('procurement-import-btn')?.addEventListener('click', () => {
+    document.getElementById('procurement-import-file').click();
+  });
+  document.getElementById('procurement-import-file')?.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!Array.isArray(data.items)) throw new Error('bad format');
+        procState = data;
+        saveProcState();
+        renderProcurementTable();
+        setProcStatus('✅ Імпортовано ' + data.items.length + ' позицій', 'var(--green)');
+      } catch (err) {
+        alert('Не вдалося прочитати файл. Перевірте, що це коректний файл експорту плану закупівель.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  document.getElementById('procurement-clear-btn')?.addEventListener('click', () => {
+    if (!procState || !procState.items.length) return;
+    if (confirm('Видалити всі позиції плану закупівель? Цю дію не можна скасувати.')) {
+      procState.items = [];
+      saveProcState();
+      renderProcurementTable();
+    }
+  });
+
+  document.getElementById('procurement-url-save-btn')?.addEventListener('click', () => {
+    const url = document.getElementById('procurement-sheet-url').value.trim();
+    if (url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
+    else localStorage.removeItem(PROC_SHEET_URL_KEY);
+    alert('URL Google Таблиці плану закупівель збережено.');
+  });
+
+  document.getElementById('procurement-csv-import-btn')?.addEventListener('click', () => {
+    const csv = document.getElementById('procurement-csv-textarea').value;
+    if (!csv.trim()) {
+      alert('Спочатку вставте текст CSV у поле вище.');
+      return;
+    }
+    const parsed = parseProcurementCsv(csv);
+    if (!parsed.items.length) {
+      alert('Не вдалося розпізнати позиції. Перевірте формат: №,КЕКВ,Предмет,Вартість,Тип угоди');
+      return;
+    }
+    if (!procState) procState = loadProcState();
+    const doneMap = {};
+    (procState.items || []).forEach(it => {
+      if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+    });
+    parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+    procState.items = parsed.items;
+    saveProcState();
+    document.getElementById('procurement-csv-box').style.display = 'none';
+    document.getElementById('procurement-csv-textarea').value = '';
+    renderProcurementTable();
+    setProcStatus('✅ CSV імпортовано: ' + parsed.items.length + ' позицій' + (parsed.period ? ' · ' + parsed.period : ''), 'var(--green)');
+  });
+
+  document.getElementById('procurement-csv-cancel-btn')?.addEventListener('click', () => {
+    document.getElementById('procurement-csv-box').style.display = 'none';
+    document.getElementById('procurement-csv-textarea').value = '';
+    setProcStatus('');
+  });
+}
+
+function renderProcurementWorkspace() {
+  const container = document.getElementById('procurement-workspace');
+  if (!container) return;
+
+  if (!procState) procState = loadProcState();
+  bindProcurementEvents();
+  buildGaugeStatic('proc');
+
+  // URL-поле
+  const urlInput = document.getElementById('procurement-sheet-url');
+  if (urlInput) urlInput.value = getProcSheetUrl();
+
+  renderProcurementTable();
+
+  // Заголовок з поточним місяцем
+  const title = document.getElementById('procurement-title');
+  if (title) {
+    const now = new Date();
+    const months = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+      'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+    title.textContent = 'План закупівель — ' + months[now.getMonth()] + ' ' + now.getFullYear();
   }
 }
 

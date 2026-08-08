@@ -1,7 +1,8 @@
-const CACHE_NAME = 'deadline-tracker-v9.6';
+const CACHE_NAME = 'deadline-tracker-v9.8';
 const ASSETS = [
   './',
   './index.html',
+  './planner.html',
   './themes.css',
   './base.css',
   './script.js',

@@ -1,0 +1,2362 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Планер на місяць</title>
+<style>
+  :root{
+    --bg: #eef1f5;
+    --card: #ffffff;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --border: #dfe3e9;
+    --navy: #26456e;
+    --navy-dark: #1a3252;
+    --amber: #e0982e;
+    --amber-bg: #fdf3e2;
+    --green: #33795a;
+    --green-bg: #e9f5ee;
+    --danger: #b3413a;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size:15px;
+  }
+  .wrap{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+  }
+
+  /* ---------- Setup screen ---------- */
+  #setupScreen{
+    max-width: 420px;
+    margin: 12vh auto 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    box-shadow: 0 1px 3px rgba(20,30,50,0.06);
+  }
+  #setupScreen h1{
+    margin:0 0 4px;
+    font-size: 20px;
+    color: var(--navy-dark);
+  }
+  #setupScreen p{
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  .field-row{
+    display:flex;
+    gap:10px;
+    margin-bottom: 18px;
+  }
+  .field{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .field label{
+    font-size:12px;
+    font-weight:600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing:.03em;
+  }
+  select, input[type=number], input[type=text]{
+    font-family:inherit;
+    font-size:14px;
+    padding:9px 10px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  select:focus, input:focus{
+    outline:2px solid var(--navy);
+    outline-offset:1px;
+  }
+  .btn{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    padding:10px 16px;
+    border-radius:7px;
+    border:1px solid transparent;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  .btn-primary{ background:var(--navy); color:#fff; }
+  .btn-primary:hover{ background:var(--navy-dark); }
+  .btn-ghost{ background:#fff; border-color:var(--border); color:var(--ink); }
+  .btn-ghost:hover{ background:#f4f6f8; }
+  .btn-danger-ghost{ background:#fff; border-color:var(--border); color:var(--danger); }
+  .btn-danger-ghost:hover{ background:#fdf1f0; }
+  .btn-full{ width:100%; justify-content:center; }
+
+  /* ---------- Main screen ---------- */
+  #mainScreen{ display:none; }
+
+  header.top{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom: 4px;
+  }
+  .title-block .eyebrow{
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color: var(--amber);
+  }
+  .title-block h1{
+    margin:2px 0 0;
+    font-size: 26px;
+    color: var(--navy-dark);
+    letter-spacing:-.01em;
+  }
+  .change-month-btn{
+    font-size:12.5px;
+    background:none;
+    border:none;
+    color:var(--navy);
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+    white-space:nowrap;
+  }
+
+  /* progress */
+  .progress-wrap{
+    margin: 16px 0 22px;
+    display:flex;
+    align-items:center;
+    gap: 18px;
+  }
+  .gauge-box{
+    position:relative;
+    width: 210px;
+    height: 148px;
+    flex-shrink:0;
+    background: transparent;
+    border-radius: 16px;
+  }
+  .gauge-box svg{ width:100%; height:100%; overflow:visible; }
+  .gauge-pct{
+    position:absolute;
+    left:50%; bottom:8px;
+    transform:translateX(-50%);
+    font-size:20px;
+    font-weight:800;
+    color:#eaf6ff;
+    text-shadow: 0 0 10px rgba(56,189,248,.85), 0 0 2px #fff;
+    transition: color .2s ease, text-shadow .2s ease;
+    letter-spacing:.02em;
+  }
+  .gauge-pct.complete{ color:#d9ffe9; text-shadow: 0 0 10px rgba(52,211,153,.9), 0 0 2px #fff; }
+  .progress-stats{ flex:1; min-width:0; }
+  .progress-stats .stat-line{
+    font-size:13.5px;
+    color: var(--ink);
+    font-weight:600;
+    margin-bottom:3px;
+  }
+  .progress-stats .stat-sub{
+    font-size:12px;
+    color: var(--muted);
+  }
+  .gauge-ring-track{ fill:none; stroke:#06101a; stroke-width:11; stroke-linecap:round; }
+  .gauge-ring{ fill:none; stroke-width:7; stroke-linecap:round; }
+  .gauge-ring-halo{ fill:none; stroke-width:4; opacity:.6; }
+  .gauge-ring-shine{ fill:none; stroke:#ffffff; stroke-width:1; stroke-linecap:round; }
+  .gauge-tick{ stroke:#a8d9e5; stroke-width:1.2; stroke-linecap:round; opacity:.8; }
+  .gauge-tick-major{ stroke:#f5ffff; stroke-width:2; stroke-linecap:round; }
+  .gauge-label{
+    font-size:11px;
+    font-weight:800;
+    text-anchor:middle;
+    dominant-baseline:middle;
+  }
+  .gauge-label-glow{
+    font-size:11px;
+    font-weight:800;
+    text-anchor:middle;
+    dominant-baseline:middle;
+    opacity:.45;
+  }
+  .gauge-needle-tail{
+    stroke: url(#needleEdgeGrad);
+    stroke-width:3;
+    stroke-linecap:round;
+    opacity:.6;
+  }
+  .gauge-needle-body{
+    fill: url(#needleFillGrad);
+    stroke: url(#needleEdgeGrad);
+    stroke-width:1.5;
+    stroke-linejoin:round;
+  }
+  .gauge-needle-tip{ fill:#ffffff; }
+  #needleGroup, #procNeedleGroup{
+    transform-origin: 105px 118px;
+    transition: transform .6s cubic-bezier(.34,1.4,.4,1);
+  }
+  .gauge-pivot-outer{ fill:#030b13; stroke:#00dfff; stroke-width:2; }
+  .gauge-pivot-shine{ fill:#00eaff; }
+  .gauge-pivot-outer.complete{ stroke:#34d399; }
+
+  .kekv-table{
+    width:100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size:12.5px;
+  }
+  .kekv-table th{
+    text-align:left;
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color: var(--muted);
+    padding: 0 8px 6px;
+  }
+  .kekv-table td{
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    vertical-align:middle;
+    color: var(--ink);
+  }
+  .kekv-table tr:first-child td{ border-top:none; }
+  .kekv-code{
+    font-weight:700;
+    color: var(--navy-dark);
+    white-space:nowrap;
+    width: 52px;
+  }
+  .kekv-bar-cell{ width: 46%; }
+  .hbar{
+    height:9px;
+    background:#e2e6ec;
+    border-radius:99px;
+    overflow:hidden;
+  }
+  .hbar-fill{
+    height:100%;
+    background: linear-gradient(90deg, var(--navy), var(--green));
+    border-radius:99px;
+    transition: width .25s ease;
+  }
+  .hbar-fill.complete{ background: var(--green); }
+  .kekv-pct{
+    width: 42px;
+    text-align:right;
+    font-weight:700;
+    color: var(--navy-dark);
+    white-space:nowrap;
+  }
+  .kekv-count{
+    width: 56px;
+    color: var(--muted);
+    white-space:nowrap;
+  }
+  .kekv-sum{
+    text-align:right;
+    font-weight:600;
+    white-space:nowrap;
+  }
+  .kekv-sum-done{ color: var(--green); }
+
+  .totals-bar{
+    display:flex;
+    flex-wrap:wrap;
+    gap: 4px 16px;
+    font-size:13px;
+    color:var(--navy-dark);
+    font-weight:600;
+    background:#f4f6f9;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:9px 14px;
+    margin-bottom: 18px;
+  }
+  .totals-bar .sub{
+    font-weight:500;
+    color:var(--muted);
+  }
+
+  /* toolbar */
+  .toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom: 20px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .toolbar .spacer{ flex:1; }
+  input[type=file]{ display:none; }
+
+  /* items */
+  #itemsList{
+    list-style:none;
+    margin:0; padding:0;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .item{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .item-main{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .item-meta{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding-left: 34px;
+    flex-wrap: wrap;
+  }
+  .meta-left{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-shrink:0;
+  }
+  .meta-center{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    flex-wrap:wrap;
+    min-width: 220px;
+  }
+  .meta-right{
+    flex-shrink:0;
+  }
+  .proc-check{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    font-size:12px;
+    color:var(--muted);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .proc-check input{
+    width:15px; height:15px;
+    cursor:pointer;
+    accent-color: var(--navy);
+  }
+  .proc-check.checked{
+    color: var(--navy);
+    font-weight:600;
+  }
+  .dept-select{
+    flex-shrink:0;
+    font-family:inherit;
+    font-size:12px;
+    padding:5px 22px 5px 9px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--ink);
+    -webkit-appearance:none;
+    appearance:none;
+    background-repeat:no-repeat;
+    background-position: right 7px center;
+    background-size: 9px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0 L5 6 L10 0 Z' fill='%23666'/></svg>");
+    max-width: 130px;
+  }
+  .dept-select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .kekv-select{
+    flex-shrink:0;
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:700;
+    padding:4px 20px 4px 8px;
+    border-radius:99px;
+    border:1.5px solid #c9cfd8;
+    background-color:#eef0f3;
+    color:#3f4b5c;
+    cursor:pointer;
+    -webkit-appearance:none;
+    appearance:none;
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 9px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0 L5 6 L10 0 Z' fill='%23666'/></svg>");
+  }
+  .kekv-select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .kekv-select.invalid{
+    border-color: var(--danger);
+    background-color:#fdf1f0;
+    color: var(--danger);
+  }
+  .item-note-row{
+    padding-left: 34px;
+    border-top: 1px dashed var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+  }
+  .note-input{
+    width:100%;
+    border:none;
+    background:transparent;
+    font-family:inherit;
+    font-size:13px;
+    font-style:italic;
+    color:var(--muted);
+    padding:2px 4px;
+  }
+  .note-input:focus{
+    outline:1px solid var(--navy);
+    border-radius:4px;
+    background:#fff;
+    font-style:normal;
+    color:var(--ink);
+  }
+  .item.next{
+    border-left-color: var(--amber);
+    background: var(--amber-bg);
+  }
+  .item.done{
+    background: var(--green-bg);
+    border-left-color: var(--green);
+  }
+  .item.done .item-text{
+    color: var(--muted);
+    text-decoration: line-through;
+  }
+  .item.dragging{
+    opacity:.4;
+  }
+  .item.drag-over{
+    box-shadow: 0 -2px 0 var(--navy);
+  }
+  .drag-handle{
+    cursor: grab;
+    color: #b7bec9;
+    font-size:15px;
+    line-height:1;
+    padding:4px;
+    user-select:none;
+    touch-action:none;
+  }
+  .order-badge{
+    flex-shrink:0;
+    width:26px; height:26px;
+    border-radius:50%;
+    border:1.5px solid var(--navy);
+    color:var(--navy);
+    font-weight:700;
+    font-size:12.5px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .item.done .order-badge{
+    background:var(--green);
+    border-color:var(--green);
+    color:#fff;
+  }
+  .item.next .order-badge{
+    background:var(--amber);
+    border-color:var(--amber);
+    color:#fff;
+  }
+  .item-check{
+    flex-shrink:0;
+    width:19px; height:19px;
+    cursor:pointer;
+    accent-color: var(--green);
+  }
+  .item-text{
+    flex:1;
+    border:none;
+    background:transparent;
+    font-family:inherit;
+    font-size:14.5px;
+    color:var(--ink);
+    padding:6px 4px;
+    min-width:0;
+  }
+  .item-text:focus{
+    outline:1px solid var(--navy);
+    border-radius:4px;
+    background:#fff;
+  }
+  .fund-select{
+    flex-shrink:0;
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:.02em;
+    padding:4px 20px 4px 8px;
+    border-radius:99px;
+    border:1.5px solid transparent;
+    cursor:pointer;
+    -webkit-appearance:none;
+    appearance:none;
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 9px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0 L5 6 L10 0 Z' fill='%23666'/></svg>");
+  }
+  .fund-select.fund-general{
+    background-color:#e7edf6;
+    color: var(--navy);
+    border-color:#c7d5e8;
+  }
+  .fund-select.fund-special{
+    background-color:#fbeee0;
+    color:#a15a1a;
+    border-color:#f0d3ae;
+  }
+  .fund-select:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .amount-input{
+    flex-shrink:0;
+    width:92px;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:right;
+    padding:6px 8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .amount-input::placeholder{ font-weight:400; color:#b7bec9; }
+  .amount-input:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .next-tag{
+    flex-shrink:0;
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--amber);
+    background:#fff;
+    border:1px solid var(--amber);
+    padding:2px 6px;
+    border-radius:99px;
+  }
+  .move-btns{
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+  }
+  .move-btns button{
+    background:none;
+    border:none;
+    color:#a6adb8;
+    cursor:pointer;
+    font-size:11px;
+    line-height:1;
+    padding:2px 3px;
+  }
+  .move-btns button:hover{ color:var(--navy); }
+  .delete-btn{
+    flex-shrink:0;
+    background:none;
+    border:none;
+    color:#c3c9d1;
+    font-size:18px;
+    cursor:pointer;
+    line-height:1;
+    padding:4px;
+  }
+  .delete-btn:hover{ color: var(--danger); }
+
+  .empty-state{
+    text-align:center;
+    padding: 40px 20px;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .empty-state div.icon{ font-size:26px; margin-bottom:8px; }
+
+  .add-row{
+    margin-top: 14px;
+  }
+  .fund-legend{
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+
+  /* ---------- Planner tabs (План роботи / План закупівель) ---------- */
+  .planner-tabs{
+    display:flex;
+    gap:8px;
+    margin: 18px 0;
+  }
+  .planner-tab{
+    flex:1;
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:700;
+    padding:10px 14px;
+    border-radius:9px;
+    border:1.5px solid var(--border);
+    background:#fff;
+    color:var(--muted);
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .planner-tab:hover{ border-color: var(--navy); color: var(--navy); }
+  .planner-tab.active{
+    background:var(--navy);
+    border-color:var(--navy);
+    color:#fff;
+  }
+
+  /* ---------- Procurement plan (План закупівель) ---------- */
+  #procurementScreen{ display:none; }
+  .proc-head{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom: 14px;
+  }
+  .proc-head h2{
+    margin:0;
+    font-size:19px;
+    color: var(--navy-dark);
+  }
+  .proc-head .proc-sub{
+    font-size:12px;
+    color: var(--muted);
+  }
+  .proc-url-row{
+    display:flex;
+    gap:8px;
+    margin-bottom: 14px;
+  }
+  .proc-url-row input{
+    flex:1;
+    min-width:0;
+    font-family:inherit;
+    font-size:12px;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .proc-url-row input:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .proc-table{
+    width:100%;
+    border-collapse:collapse;
+    margin-bottom: 16px;
+    font-size:13px;
+  }
+  .proc-table th{
+    text-align:left;
+    font-size:10.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color: var(--muted);
+    padding: 0 8px 6px;
+  }
+  .proc-table td{
+    padding: 7px 8px;
+    border-top: 1px solid var(--border);
+    vertical-align:middle;
+  }
+  .proc-table tr:first-child td{ border-top:none; }
+  .proc-num{
+    width:34px;
+    color:var(--muted);
+    font-size:12px;
+    white-space:nowrap;
+  }
+  .proc-kekv{
+    width:66px;
+    font-family:inherit;
+    font-size:12px;
+    font-weight:700;
+    padding:5px 6px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--navy-dark);
+  }
+  .proc-kekv:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .proc-text{
+    font-family:inherit;
+    font-size:13.5px;
+    border:none;
+    background:transparent;
+    color:var(--ink);
+    padding:5px 4px;
+    width:100%;
+    min-width:140px;
+  }
+  .proc-text:focus{ outline:1px solid var(--navy); border-radius:4px; background:#fff; }
+  .proc-amount{
+    width:108px;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    text-align:right;
+    padding:6px 8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .proc-amount:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .proc-type{
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:700;
+    padding:5px 8px;
+    border-radius:99px;
+    border:1.5px solid #c9cfd8;
+    background:#eef0f3;
+    color:#3f4b5c;
+    cursor:pointer;
+    max-width:160px;
+    -webkit-appearance:none;
+    appearance:none;
+    background-repeat:no-repeat;
+    background-position: right 7px center;
+    background-size: 9px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0 L5 6 L10 0 Z' fill='%23666'/></svg>");
+  }
+  .proc-type.prozorro{ background-color:#e7edf6; color:var(--navy); border-color:#c7d5e8; }
+  .proc-type.direct{ background-color:#e9f5ee; color:var(--green); border-color:#b9dfc9; }
+  .proc-type.tender{ background-color:#fbeee0; color:#a15a1a; border-color:#f0d3ae; }
+  .proc-type:focus{ outline:2px solid var(--navy); outline-offset:1px; }
+  .proc-check{
+    width:20px; height:20px;
+    cursor:pointer;
+    accent-color: var(--green);
+  }
+  .proc-del{
+    background:none;
+    border:none;
+    color:#c3c9d1;
+    font-size:17px;
+    cursor:pointer;
+    line-height:1;
+    padding:4px;
+  }
+  .proc-del:hover{ color: var(--danger); }
+  .proc-empty{
+    text-align:center;
+    padding: 40px 20px;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+  }
+  .proc-status{
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+    margin-top:20px;
+    min-height:16px;
+  }
+  .proc-kekv-summary{
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px 14px;
+    font-size:12px;
+    color:var(--muted);
+    background:#f4f6f9;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 14px;
+    margin-bottom: 16px;
+  }
+  .proc-kekv-summary b{ color:var(--navy-dark); }
+  .proc-csv-box{
+    background:#fdf8ee;
+    border:1px solid #f0d3ae;
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:16px;
+    font-size:12.5px;
+    color:#7a5a2d;
+    line-height:1.6;
+  }
+  .proc-csv-box textarea{
+    width:100%;
+    font-family:'Consolas', 'Courier New', monospace;
+    font-size:11.5px;
+    min-height:120px;
+    padding:10px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:#fff;
+    color:var(--ink);
+    margin:10px 0;
+    resize:vertical;
+  }
+  .proc-sync-btn.loading{ opacity:.6; pointer-events:none; }
+
+  footer.meta{
+    margin-top: 30px;
+    font-size:12px;
+    color: var(--muted);
+    text-align:center;
+  }
+
+  /* ---------- Print ---------- */
+  /* ---------- KEKV picker modal ---------- */
+  .modal-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(20,30,50,0.45);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-box{
+    background:#fff;
+    border-radius: 12px;
+    padding: 26px 24px;
+    max-width: 340px;
+    width:100%;
+    box-shadow: 0 10px 30px rgba(20,30,50,0.25);
+  }
+  .modal-box h3{
+    margin: 0 0 4px;
+    font-size: 17px;
+    color: var(--navy-dark);
+  }
+  .modal-box p{
+    margin: 0 0 18px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .kekv-modal-options{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .kekv-modal-option{
+    font-family:inherit;
+    font-size:16px;
+    font-weight:700;
+    padding: 16px 8px;
+    border-radius:9px;
+    border: 1.5px solid var(--border);
+    background:#f4f6f9;
+    color: var(--navy-dark);
+    cursor:pointer;
+  }
+  .kekv-modal-option:hover{
+    background: var(--navy);
+    color:#fff;
+    border-color: var(--navy);
+  }
+
+  @media print{
+    body{ background:#fff; }
+    .toolbar, .drag-handle, .move-btns, .delete-btn, .add-row,
+    .change-month-btn, footer.meta, .fund-legend,
+    .planner-tabs, .proc-url-row, .proc-csv-box{ display:none !important; }
+    #procurementScreen .proc-head .proc-sub{ display:none; }
+    .proc-table th{ color:#000 !important; }
+    .proc-table td{ color:#000 !important; border-color:#999 !important; }
+    .proc-kekv, .proc-amount{
+      border:1px solid #333 !important;
+      color:#000 !important;
+      background:#fff !important;
+      -webkit-appearance:none;
+      appearance:none;
+    }
+    .proc-text{ color:#000 !important; -webkit-text-fill-color:#000; }
+    .proc-type{
+      -webkit-appearance:none;
+      appearance:none;
+      background-image:none !important;
+      border:1px solid #333 !important;
+      color:#000 !important;
+      background:#fff !important;
+    }
+    .proc-num{ color:#333 !important; }
+    .proc-del{ display:none !important; }
+    .proc-kekv-summary{
+      background:#fff !important;
+      border:1px solid #333 !important;
+      color:#000 !important;
+    }
+    .proc-kekv-summary b{ color:#000 !important; }
+    .proc-check{ accent-color:#000; }
+    #procEmptyState{ display:none !important; }
+    #setupScreen{ display:none !important; }
+    .modal-overlay{ display:none !important; }
+    .wrap{ max-width:100%; padding:0; }
+    .item{
+      border: none;
+      border-bottom: 1px solid #ccc;
+      border-radius:0;
+      background:#fff !important;
+      padding: 8px 0;
+      break-inside: avoid;
+    }
+    .item.next, .item.done{ background:#fff !important; }
+    .order-badge{
+      border-color:#333 !important;
+      color:#333 !important;
+      background:#fff !important;
+    }
+    .item.done .order-badge{ background:#333 !important; color:#fff !important; }
+    .item-text{ color:#000 !important; -webkit-text-fill-color:#000; }
+    .fund-select, .kekv-select{
+      -webkit-appearance:none;
+      appearance:none;
+      background-image:none !important;
+      border:1px solid #333 !important;
+      color:#000 !important;
+      background:#fff !important;
+      padding:2px 8px !important;
+    }
+    .amount-input{
+      border:none !important;
+      color:#000 !important;
+      background:#fff !important;
+      -webkit-text-fill-color:#000;
+    }
+    .totals-bar{
+      background:#fff !important;
+      border:1px solid #333 !important;
+      color:#000 !important;
+    }
+    .totals-bar .sub{ color:#333 !important; }
+    .item-meta{ padding-left:0; }
+    .proc-check{ color:#000 !important; }
+    .proc-check.checked{ color:#000 !important; font-weight:700; }
+    .proc-check input{ accent-color:#000; }
+    .dept-select{
+      -webkit-appearance:none;
+      appearance:none;
+      background-image:none !important;
+      border:1px solid #333 !important;
+      color:#000 !important;
+      background:#fff !important;
+    }
+    .item-note-row{ padding-left:0; border-top:none; }
+    .note-input{ color:#000 !important; font-style:italic; -webkit-text-fill-color:#000; }
+    .note-input:placeholder-shown{ display:none; }
+    .progress-stats .stat-line{ color:#000 !important; }
+    .progress-stats .stat-sub{ color:#333 !important; }
+    .gauge-box{ background:#fff !important; box-shadow:none !important; }
+    #needleGroup, #procNeedleGroup{ transition:none !important; }
+    .gauge-pct{ color:#000 !important; text-shadow:none !important; }
+    #procGaugePct{ color:#000 !important; text-shadow:none !important; }
+    .gauge-ring{ filter:none !important; }
+    .gauge-ring-track{ stroke:#ccc !important; }
+    .gauge-ring-halo, .gauge-ring-shine{ display:none !important; }
+    .gauge-needle-tail{ stroke:#000 !important; filter:none !important; }
+    .gauge-needle-body{ fill:#000 !important; stroke:#000 !important; }
+    .gauge-pivot-outer{ stroke:#000 !important; }
+    .gauge-tick, .gauge-tick-major{ stroke:#999 !important; }
+    .gauge-label, .gauge-label-glow{ filter:none !important; }
+    .kekv-table th{ color:#000 !important; }
+    .kekv-table td{ color:#000 !important; border-color:#999 !important; }
+    .kekv-code, .kekv-pct{ color:#000 !important; }
+    .kekv-sum-done{ color:#000 !important; }
+    .hbar{ background:#eee !important; border:1px solid #999; }
+    .hbar-fill{ background:#333 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .title-block h1{ color:#000; }
+    .title-block .eyebrow{ color:#000; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- SETUP SCREEN -->
+  <div id="setupScreen">
+    <h1>Планер на місяць</h1>
+    <p>Оберіть місяць, для якого складається план роботи.</p>
+    <div class="field-row">
+      <div class="field">
+        <label for="monthSelect">Місяць</label>
+        <select id="monthSelect"></select>
+      </div>
+      <div class="field" style="flex:0 0 100px;">
+        <label for="yearInput">Рік</label>
+        <input type="number" id="yearInput" min="2000" max="2100">
+      </div>
+    </div>
+    <button class="btn btn-primary btn-full" id="createPlanBtn">Створити план</button>
+  </div>
+
+  <!-- MAIN SCREEN -->
+  <div id="mainScreen">
+    <header class="top">
+      <div class="title-block">
+        <div class="eyebrow">План роботи на місяць</div>
+        <h1 id="planTitle">—</h1>
+      </div>
+      <button class="change-month-btn" id="changeMonthBtn">Змінити місяць</button>
+    </header>
+
+    <div class="planner-tabs" role="tablist" aria-label="Розділи планера">
+      <button class="planner-tab active" id="tab-work" type="button" role="tab" aria-selected="true">📋 План роботи</button>
+      <button class="planner-tab" id="tab-procurement" type="button" role="tab" aria-selected="false">🛒 План закупівель</button>
+    </div>
+
+    <div id="workScreen">
+
+    <div class="progress-wrap">
+      <div class="gauge-box">
+        <svg viewBox="0 0 210 148">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#ff1b3d"/>
+              <stop offset="25%" stop-color="#ff7200"/>
+              <stop offset="50%" stop-color="#ffd800"/>
+              <stop offset="75%" stop-color="#82ff00"/>
+              <stop offset="100%" stop-color="#00df63"/>
+            </linearGradient>
+            <linearGradient id="needleFillGrad" x1="105" y1="118" x2="20" y2="118" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#07101f"/>
+              <stop offset="45%" stop-color="#0b2145"/>
+              <stop offset="100%" stop-color="#07101f"/>
+            </linearGradient>
+            <linearGradient id="needleEdgeGrad" x1="105" y1="118" x2="20" y2="118" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#008cff"/>
+              <stop offset="55%" stop-color="#00eaff"/>
+              <stop offset="100%" stop-color="#ffffff"/>
+            </linearGradient>
+            <radialGradient id="faceGrad" cx="50%" cy="100%" r="85%">
+              <stop offset="0%" stop-color="#1a2338"/>
+              <stop offset="100%" stop-color="#0a0f1d"/>
+            </radialGradient>
+            <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="3" result="blur"/>
+              <feMerge>
+                <feMergeNode in="blur"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="5"/>
+            </filter>
+          </defs>
+
+          <path d="M15,118 A90,90 0 0 1 195,118 Z" fill="none"/>
+
+          <g id="ticksGroup" filter="url(#glow)"></g>
+
+          <path class="gauge-ring-track" d="M20,118 A85,85 0 0 1 190,118"/>
+          <path class="gauge-ring" d="M20,118 A85,85 0 0 1 190,118" stroke="url(#gaugeGrad)"/>
+          <path class="gauge-ring-halo" d="M20,118 A85,85 0 0 1 190,118" stroke="url(#gaugeGrad)" filter="url(#softGlow)"/>
+          <path class="gauge-ring-shine" d="M20,118 A85,85 0 0 1 190,118" filter="url(#glow)"/>
+
+          <g id="labelsGroup"></g>
+
+          <g id="needleGroup" filter="url(#glow)">
+            <line class="gauge-needle-tail" x1="105" y1="118" x2="123" y2="118"/>
+            <path class="gauge-needle-body" id="gaugeNeedle" d="M105,112.5 L19,118 L105,123.5 Z"/>
+            <circle class="gauge-needle-tip" cx="19" cy="118" r="2"/>
+          </g>
+          <circle class="gauge-pivot-outer" id="gaugePivot" cx="105" cy="118" r="8"/>
+          <circle class="gauge-pivot-shine" cx="105" cy="118" r="2.6" filter="url(#glow)"/>
+        </svg>
+        <div class="gauge-pct" id="gaugePct">0%</div>
+      </div>
+      <div class="progress-stats">
+        <div class="stat-line" id="progressLabel">Виконано 0 з 0 пунктів</div>
+        <div class="stat-sub">Позначайте пункти галочкою — стрілка рухається автоматично</div>
+      </div>
+    </div>
+
+    <table class="kekv-table">
+      <thead>
+        <tr><th>КЕКВ</th><th>Прогрес</th><th></th><th>Виконано</th><th>Сума плану</th><th>Сума виконано</th></tr>
+      </thead>
+      <tbody id="kekvTableBody"></tbody>
+    </table>
+
+    <div class="totals-bar" id="totalsBar">Разом: 0,00 грн</div>
+
+    <div class="toolbar">
+      <button class="btn btn-primary" id="addItemBtn">＋ Додати пункт</button>
+      <button class="btn btn-ghost" id="saveBtn">💾 Зберегти</button>
+      <button class="btn btn-ghost" id="printBtn">🖨 Друк</button>
+      <button class="btn btn-ghost" id="exportBtn">⬇ Експорт</button>
+      <button class="btn btn-ghost" id="importBtn">⬆ Імпорт</button>
+      <input type="file" id="importFile" accept="application/json">
+      <div class="spacer"></div>
+      <button class="btn btn-danger-ghost" id="clearAllBtn">🗑 Очистити всі пункти</button>
+    </div>
+
+    <div class="fund-legend">ЗФ — загальний фонд · СФ — спеціальний фонд</div>
+
+    <ul id="itemsList"></ul>
+
+    <div id="emptyState" class="empty-state" style="display:none;">
+      <div class="icon">📋</div>
+      Пунктів ще немає. Додайте перший пункт плану.
+    </div>
+
+    <div class="add-row">
+      <button class="btn btn-ghost btn-full" id="addItemBtn2">＋ Додати пункт</button>
+    </div>
+
+    <footer class="meta">
+      Дані зберігаються локально у цьому браузері. Для перенесення на інший пристрій використовуйте Експорт / Імпорт.<br>
+      <span id="saveStatus"></span>
+    </footer>
+
+    </div><!-- /workScreen -->
+
+    <!-- ============ PLAN ZAKUPIVEL (План закупівель) ============ -->
+    <div id="procurementScreen" role="tabpanel">
+      <div class="progress-wrap" id="procProgressWrap">
+        <div class="gauge-box">
+          <svg viewBox="0 0 210 148">
+            <defs>
+              <linearGradient id="procGaugeGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#ff1b3d"/>
+                <stop offset="25%" stop-color="#ff7200"/>
+                <stop offset="50%" stop-color="#ffd800"/>
+                <stop offset="75%" stop-color="#82ff00"/>
+                <stop offset="100%" stop-color="#00df63"/>
+              </linearGradient>
+              <linearGradient id="procNeedleFillGrad" x1="105" y1="118" x2="20" y2="118" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#07101f"/>
+                <stop offset="45%" stop-color="#0b2145"/>
+                <stop offset="100%" stop-color="#07101f"/>
+              </linearGradient>
+              <linearGradient id="procNeedleEdgeGrad" x1="105" y1="118" x2="20" y2="118" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="#008cff"/>
+                <stop offset="55%" stop-color="#00eaff"/>
+                <stop offset="100%" stop-color="#ffffff"/>
+              </linearGradient>
+              <filter id="procGlow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+              <filter id="procSoftGlow" x="-80%" y="-80%" width="260%" height="260%">
+                <feGaussianBlur stdDeviation="5"/>
+              </filter>
+            </defs>
+
+            <path d="M15,118 A90,90 0 0 1 195,118 Z" fill="none"/>
+
+            <g id="procTicksGroup" filter="url(#procGlow)"></g>
+
+            <path class="gauge-ring-track" d="M20,118 A85,85 0 0 1 190,118"/>
+            <path class="gauge-ring" d="M20,118 A85,85 0 0 1 190,118" stroke="url(#procGaugeGrad)"/>
+            <path class="gauge-ring-halo" d="M20,118 A85,85 0 0 1 190,118" stroke="url(#procGaugeGrad)" filter="url(#procSoftGlow)"/>
+            <path class="gauge-ring-shine" d="M20,118 A85,85 0 0 1 190,118" filter="url(#procGlow)"/>
+
+            <g id="procLabelsGroup"></g>
+
+            <g id="procNeedleGroup" filter="url(#procGlow)">
+              <line class="gauge-needle-tail" x1="105" y1="118" x2="123" y2="118"/>
+              <path class="gauge-needle-body" id="procGaugeNeedle" d="M105,112.5 L19,118 L105,123.5 Z"/>
+              <circle class="gauge-needle-tip" cx="19" cy="118" r="2"/>
+            </g>
+            <circle class="gauge-pivot-outer" id="procGaugePivot" cx="105" cy="118" r="8"/>
+            <circle class="gauge-pivot-shine" cx="105" cy="118" r="2.6" filter="url(#procGlow)"/>
+          </svg>
+          <div class="gauge-pct" id="procGaugePct">0%</div>
+        </div>
+        <div class="progress-stats">
+          <div class="stat-line" id="procProgressLabel">Виконано 0 з 0 позицій</div>
+          <div class="stat-sub">Позначайте позиції галочкою — стрілка рухається автоматично</div>
+        </div>
+      </div>
+
+      <div class="proc-head">
+        <div>
+          <h2 id="procTitle">План закупівель</h2>
+          <div class="proc-sub">Дані синхронізуються з Google Таблицею · КЕКВ, предмет, вартість, тип угоди</div>
+        </div>
+      </div>
+
+      <div class="totals-bar" id="procTotalsBar">Разом: 0,00 грн</div>
+
+      <div class="toolbar">
+        <button class="btn btn-primary" id="procAddBtn">＋ Додати позицію</button>
+        <button class="btn btn-ghost proc-sync-btn" id="procSyncBtn">🔄 Оновити з Google Таблиці</button>
+        <button class="btn btn-ghost" id="procSaveBtn">💾 Зберегти</button>
+        <button class="btn btn-ghost" id="procPrintBtn">🖨 Друк</button>
+        <button class="btn btn-ghost" id="procExportBtn">⬇ Експорт</button>
+        <button class="btn btn-ghost" id="procImportBtn">⬆ Імпорт</button>
+        <input type="file" id="procImportFile" accept="application/json">
+        <div class="spacer"></div>
+        <button class="btn btn-danger-ghost" id="procClearBtn">🗑 Очистити всі позиції</button>
+      </div>
+
+      <div class="proc-url-row">
+        <input type="text" id="procSheetUrl" placeholder="URL Google Таблиці (за замовчуванням — таблиця плану закупівель)">
+        <button class="btn btn-ghost" id="procUrlSaveBtn">💾 URL таблиці</button>
+      </div>
+
+      <div class="proc-csv-box" id="procCsvBox" style="display:none;">
+        <b>⚠️ Браузер заблокував пряме завантаження таблиці (CORS).</b><br>
+        Відкрийте таблицю → <b>Файл → Завантажити → CSV</b> (або «Файл → Поділитися → Копіювати дані»), вставте текст нижче та натисніть «Імпортувати CSV»:
+        <textarea id="procCsvTextarea" placeholder="№ з/п,КЕКВ,Предмет закупівлі,Вартість,Тип угоди&#10;1,2210,Пальне,12000,Prozorro Market"></textarea>
+        <button class="btn btn-primary" id="procCsvImportBtn">📥 Імпортувати CSV</button>
+        <button class="btn btn-ghost" id="procCsvCancelBtn">Скасувати</button>
+      </div>
+
+      <table class="proc-table">
+        <thead>
+          <tr>
+            <th>№</th>
+            <th>КЕКВ</th>
+            <th>Предмет закупівлі</th>
+            <th>Вартість, грн</th>
+            <th>Тип угоди</th>
+            <th>✓</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="procTableBody"></tbody>
+      </table>
+
+      <div class="proc-kekv-summary" id="procKekvSummary"></div>
+
+      <div id="procEmptyState" class="proc-empty" style="display:none;">
+        <div class="icon">🛒</div>
+        Позицій ще немає. Додайте першу позицію або натисніть «Оновити з Google Таблиці».
+      </div>
+
+      <footer class="meta">
+        <span id="procStatus"></span>
+      </footer>
+    </div>
+
+  </div>
+
+  <div id="kekvModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3>Оберіть код КЕКВ</h3>
+      <p>Без коду КЕКВ пункт додати не можна.</p>
+      <div class="kekv-modal-options">
+        <button class="kekv-modal-option" type="button" data-code="2210">2210</button>
+        <button class="kekv-modal-option" type="button" data-code="2240">2240</button>
+        <button class="kekv-modal-option" type="button" data-code="3110">3110</button>
+        <button class="kekv-modal-option" type="button" data-code="3130">3130</button>
+      </div>
+      <button class="btn btn-ghost btn-full" id="kekvModalCancel">Скасувати</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var MONTHS = ["Січень","Лютий","Березень","Квітень","Травень","Червень",
+                "Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
+
+  var DEPARTMENTS = ["1 ДПРЗ","1 ДПРЧ","2 ДПРЧ","3 ДПРЧ","4 ДПРЧ","5 ДПРЧ","6 ДПРЧ",
+                     "8 ДПРЧ","9 ДПРЧ","10 ДПРЧ","20 ДПРЧ","25 ДПРЧ","33 ДПРЧ",
+                     "2 ДПРП","3 ДПРП","4 ДПРП","6 ДПРП","8 ДПРП","10 ДПРП"];
+
+  var PROC_TYPES = { prozorro:"Prozorro Market", direct:"Пряма угода", tender:"Відкриті торги (тендер)" };
+
+  var KEKV_CODES = ["2210","2240","3110","3130"];
+
+  var STORAGE_KEY = "monthPlannerData_v1";
+
+  var state = null; // { month, year, items:[{id,text,done}] }
+  var dragSrcId = null;
+
+  var setupScreen = document.getElementById('setupScreen');
+  var mainScreen = document.getElementById('mainScreen');
+  var monthSelect = document.getElementById('monthSelect');
+  var yearInput = document.getElementById('yearInput');
+
+  function uid(){
+    return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  }
+
+  function populateSetup(){
+    monthSelect.innerHTML = '';
+    var now = new Date();
+    MONTHS.forEach(function(name, idx){
+      var opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = name;
+      if(idx === now.getMonth()) opt.selected = true;
+      monthSelect.appendChild(opt);
+    });
+    yearInput.value = now.getFullYear();
+  }
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+
+  function saveState(){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      markSaved();
+    }catch(e){
+      markSaveError();
+    }
+  }
+
+  function markSaved(){
+    var el = document.getElementById('saveStatus');
+    if(!el) return;
+    var now = new Date();
+    var hh = String(now.getHours()).padStart(2,'0');
+    var mm = String(now.getMinutes()).padStart(2,'0');
+    el.textContent = 'Збережено о ' + hh + ':' + mm;
+    el.style.color = '';
+  }
+
+  function markSaveError(){
+    var el = document.getElementById('saveStatus');
+    if(!el) return;
+    el.textContent = 'Не вдалося зберегти. Перевірте налаштування браузера.';
+    el.style.color = 'var(--danger)';
+  }
+
+  function showSetup(){
+    populateSetup();
+    setupScreen.style.display = 'block';
+    mainScreen.style.display = 'none';
+  }
+
+  function showMain(){
+    setupScreen.style.display = 'none';
+    mainScreen.style.display = 'block';
+    render();
+    renderProcurement();
+  }
+
+  function init(){
+    buildGaugeStatic();
+    buildGaugeStatic('proc');
+    procState = loadProcState();
+    state = loadState();
+    bindProcurementEvents();
+
+    // Відновлення активної вкладки планера
+    var savedTab = '';
+    try{ savedTab = localStorage.getItem(PROC_TAB_KEY); }catch(e){}
+    if(savedTab === 'procurement') switchPlannerTab('procurement');
+    else switchPlannerTab('work');
+
+    if(state){
+      showMain();
+    }else{
+      showSetup();
+    }
+  }
+
+  document.getElementById('createPlanBtn').addEventListener('click', function(){
+    var month = parseInt(monthSelect.value, 10);
+    var year = parseInt(yearInput.value, 10) || new Date().getFullYear();
+    if(state){
+      state.month = month;
+      state.year = year;
+    }else{
+      state = { month: month, year: year, items: [] };
+    }
+    saveState();
+    showMain();
+  });
+
+  document.getElementById('changeMonthBtn').addEventListener('click', function(){
+    monthSelect.value = state.month;
+    yearInput.value = state.year;
+    setupScreen.style.display = 'block';
+    mainScreen.style.display = 'none';
+  });
+
+  function addItem(){
+    openKekvModal();
+  }
+
+  function openKekvModal(){
+    document.getElementById('kekvModal').style.display = 'flex';
+  }
+
+  function closeKekvModal(){
+    document.getElementById('kekvModal').style.display = 'none';
+  }
+
+  function createItemWithKekv(code){
+    if(!code) return;
+    if(!state.items) state.items = [];
+    state.items.push({ id: uid(), text: '', done: false, fund: 'general', amount: '', department: '', proc: {}, note: '', kekv: code });
+    saveState();
+    closeKekvModal();
+    render();
+    // focus last input
+    var inputs = document.querySelectorAll('.item-text');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  }
+
+  document.querySelectorAll('.kekv-modal-option').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      createItemWithKekv(btn.dataset.code);
+    });
+  });
+  document.getElementById('kekvModalCancel').addEventListener('click', closeKekvModal);
+  document.getElementById('kekvModal').addEventListener('click', function(e){
+    if(e.target.id === 'kekvModal') closeKekvModal();
+  });
+
+  document.getElementById('addItemBtn').addEventListener('click', addItem);
+  document.getElementById('addItemBtn2').addEventListener('click', addItem);
+
+  document.getElementById('saveBtn').addEventListener('click', function(){
+    // flush any focused, unblurred input before saving
+    if(document.activeElement && typeof document.activeElement.blur === 'function'){
+      document.activeElement.blur();
+    }
+    saveState();
+  });
+
+  document.getElementById('printBtn').addEventListener('click', function(){
+    window.print();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', function(){
+    var blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'planner_' + (state.month+1) + '_' + state.year + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('importBtn').addEventListener('click', function(){
+    document.getElementById('importFile').click();
+  });
+  document.getElementById('importFile').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        var data = JSON.parse(ev.target.result);
+        if(typeof data.month !== 'number' || typeof data.year !== 'number' || !Array.isArray(data.items)){
+          throw new Error('bad format');
+        }
+        state = data;
+        saveState();
+        showMain();
+      }catch(err){
+        alert('Не вдалося прочитати файл. Перевірте, що це коректний файл експорту планера.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  document.getElementById('clearAllBtn').addEventListener('click', function(){
+    if(!state.items || !state.items.length) return;
+    if(confirm('Видалити всі пункти плану? Цю дію не можна скасувати.')){
+      state.items = [];
+      saveState();
+      render();
+    }
+  });
+
+  function render(){
+    document.getElementById('planTitle').textContent = MONTHS[state.month] + ' ' + state.year;
+    updateProcTitle();
+
+    var list = document.getElementById('itemsList');
+    var empty = document.getElementById('emptyState');
+    list.innerHTML = '';
+
+    var items = state.items || [];
+    if(!items.length){
+      empty.style.display = 'block';
+    }else{
+      empty.style.display = 'none';
+    }
+
+    var doneCount = items.filter(function(i){ return i.done; }).length;
+    var total = items.length;
+    var pct = total ? Math.round((doneCount/total)*100) : 0;
+    document.getElementById('progressLabel').textContent = 'Виконано ' + doneCount + ' з ' + total + (total === 1 ? ' пункт' : ' пунктів');
+    updateGauge(pct);
+
+    var nextIdx = -1;
+    for(var i=0;i<items.length;i++){
+      if(!items[i].done){ nextIdx = i; break; }
+    }
+
+    items.forEach(function(item, idx){
+      var li = document.createElement('li');
+      li.className = 'item' + (item.done ? ' done' : '') + (idx === nextIdx ? ' next' : '');
+      li.draggable = true;
+      li.dataset.id = item.id;
+
+      li.innerHTML =
+        '<div class="item-main">' +
+          '<span class="drag-handle" title="Перетягнути">⋮⋮</span>' +
+          '<span class="order-badge">' + (idx+1) + '</span>' +
+          '<input type="checkbox" class="item-check" ' + (item.done ? 'checked' : '') + '>' +
+          '<input type="text" class="item-text" placeholder="Опис пункту плану…" value="' + escapeAttr(item.text) + '">' +
+          (idx === nextIdx ? '<span class="next-tag">Наступний</span>' : '') +
+          '<span class="move-btns"><button class="mv-up" title="Вгору">▲</button><button class="mv-down" title="Вниз">▼</button></span>' +
+          '<button class="delete-btn" title="Видалити">×</button>' +
+        '</div>' +
+        '<div class="item-meta">' +
+          '<span class="meta-left">' +
+            '<input type="text" inputmode="decimal" class="amount-input" placeholder="сума, грн" value="' + escapeAttr(item.amount || '') + '">' +
+            kekvSelectHtml(item) +
+            '<select class="fund-select fund-' + (item.fund || 'general') + '" title="Джерело фінансування">' +
+              '<option value="general"' + ((item.fund||'general')==='general' ? ' selected' : '') + '>ЗФ</option>' +
+              '<option value="special"' + (item.fund==='special' ? ' selected' : '') + '>СФ</option>' +
+            '</select>' +
+          '</span>' +
+          '<span class="meta-center">' +
+            procCheckHtml(item, 'prozorro', 'Prozorro Market') +
+            procCheckHtml(item, 'direct', 'Пряма угода') +
+            procCheckHtml(item, 'tender', 'Відкриті торги (тендер)') +
+          '</span>' +
+          '<span class="meta-right">' +
+            deptSelectHtml(item) +
+          '</span>' +
+        '</div>' +
+        '<div class="item-note-row">' +
+          '<input type="text" class="note-input" placeholder="Примітка (необов\'язково)…" value="' + escapeAttr(item.note || '') + '">' +
+        '</div>';
+
+      // checkbox
+      li.querySelector('.item-check').addEventListener('change', function(e){
+        item.done = e.target.checked;
+        saveState();
+        render();
+      });
+
+      // text edit
+      var textInput = li.querySelector('.item-text');
+      textInput.addEventListener('input', function(e){
+        item.text = e.target.value;
+      });
+      textInput.addEventListener('blur', function(){ saveState(); });
+      textInput.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); textInput.blur(); }
+      });
+
+      // amount
+      var amountInput = li.querySelector('.amount-input');
+      amountInput.addEventListener('input', function(e){
+        item.amount = e.target.value;
+        updateTotals();
+      });
+      amountInput.addEventListener('blur', function(){
+        saveState();
+        updateTotals();
+      });
+
+      // fund select
+      var fundSelect = li.querySelector('.fund-select');
+      fundSelect.addEventListener('change', function(e){
+        item.fund = e.target.value;
+        fundSelect.className = 'fund-select fund-' + item.fund;
+        saveState();
+        updateKekvStats();
+      });
+
+      // kekv select
+      li.querySelector('.kekv-select').addEventListener('change', function(e){
+        item.kekv = e.target.value;
+        saveState();
+        render();
+      });
+
+      // procurement type checkboxes
+      li.querySelectorAll('[data-proc-input]').forEach(function(cb){
+        cb.addEventListener('change', function(e){
+          if(!item.proc) item.proc = {};
+          var key = e.target.getAttribute('data-proc-input');
+          item.proc[key] = e.target.checked;
+          var labelEl = li.querySelector('.proc-check[data-proc="' + key + '"]');
+          if(labelEl) labelEl.classList.toggle('checked', e.target.checked);
+          saveState();
+        });
+      });
+
+      // department
+      li.querySelector('.dept-select').addEventListener('change', function(e){
+        item.department = e.target.value;
+        saveState();
+      });
+
+      // note
+      var noteInput = li.querySelector('.note-input');
+      noteInput.addEventListener('input', function(e){
+        item.note = e.target.value;
+      });
+      noteInput.addEventListener('blur', function(){ saveState(); });
+      noteInput.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); noteInput.blur(); }
+      });
+
+      // delete
+      li.querySelector('.delete-btn').addEventListener('click', function(){
+        state.items = state.items.filter(function(it){ return it.id !== item.id; });
+        saveState();
+        render();
+      });
+
+      // move up/down buttons (accessible / touch-friendly reorder)
+      li.querySelector('.mv-up').addEventListener('click', function(){
+        moveItem(idx, idx-1);
+      });
+      li.querySelector('.mv-down').addEventListener('click', function(){
+        moveItem(idx, idx+1);
+      });
+
+      // drag and drop reorder
+      li.addEventListener('dragstart', function(e){
+        dragSrcId = item.id;
+        li.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      li.addEventListener('dragend', function(){
+        li.classList.remove('dragging');
+        document.querySelectorAll('.item.drag-over').forEach(function(el){ el.classList.remove('drag-over'); });
+      });
+      li.addEventListener('dragover', function(e){
+        e.preventDefault();
+        li.classList.add('drag-over');
+      });
+      li.addEventListener('dragleave', function(){
+        li.classList.remove('drag-over');
+      });
+      li.addEventListener('drop', function(e){
+        e.preventDefault();
+        li.classList.remove('drag-over');
+        if(!dragSrcId || dragSrcId === item.id) return;
+        var fromIdx = state.items.findIndex(function(it){ return it.id === dragSrcId; });
+        var toIdx = state.items.findIndex(function(it){ return it.id === item.id; });
+        if(fromIdx === -1 || toIdx === -1) return;
+        moveItem(fromIdx, toIdx);
+        dragSrcId = null;
+      });
+
+      list.appendChild(li);
+    });
+
+    updateTotals();
+    updateKekvStats();
+  }
+
+  var GAUGE_CX = 105, GAUGE_CY = 118;
+
+  function gaugePoint(r, pct){
+    var thetaDeg = 180 * (1 - pct / 100);
+    var thetaRad = thetaDeg * Math.PI / 180;
+    return {
+      x: GAUGE_CX + r * Math.cos(thetaRad),
+      y: GAUGE_CY - r * Math.sin(thetaRad)
+    };
+  }
+
+  function buildGaugeStatic(prefix){
+    prefix = prefix || '';
+    var ticksGroup = document.getElementById(prefix + 'ticksGroup');
+    var labelsGroup = document.getElementById(prefix + 'labelsGroup');
+    if(!ticksGroup || !labelsGroup || ticksGroup.childNodes.length) return; // build once
+    var glowId = 'url(#' + (prefix ? prefix + 'Glow' : 'glow') + ')';
+
+    var ticksHtml = '';
+    for(var v = 0; v <= 100; v += 10){
+      var major = (v % 25 === 0);
+      var p1 = gaugePoint(major ? 60 : 68, v);
+      var p2 = gaugePoint(76, v);
+      ticksHtml += '<line class="' + (major ? 'gauge-tick-major' : 'gauge-tick') + '" x1="' + p1.x.toFixed(1) + '" y1="' + p1.y.toFixed(1) + '" x2="' + p2.x.toFixed(1) + '" y2="' + p2.y.toFixed(1) + '"/>';
+    }
+    ticksGroup.innerHTML = ticksHtml;
+
+    var labelColors = { 0:'#ff1b3d', 25:'#ff7200', 50:'#ffd800', 75:'#82ff00', 100:'#00df63' };
+    var labelsHtml = '';
+    [0,25,50,75,100].forEach(function(v){
+      var p = gaugePoint(100, v);
+      p.y += 10;
+      labelsHtml += '<text class="gauge-label-glow" x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" fill="' + labelColors[v] + '" filter="' + glowId + '">' + v + '%</text>';
+      labelsHtml += '<text class="gauge-label" x="' + p.x.toFixed(1) + '" y="' + p.y.toFixed(1) + '" fill="' + labelColors[v] + '">' + v + '%</text>';
+    });
+    labelsGroup.innerHTML = labelsHtml;
+  }
+
+  function updateGauge(pct, prefix){
+    prefix = prefix || '';
+    var needleGroup = document.getElementById(prefix + 'needleGroup');
+    if(needleGroup) needleGroup.style.transform = 'rotate(' + (1.8 * pct).toFixed(1) + 'deg)';
+
+    var complete = pct >= 100;
+    var pivot = document.getElementById(prefix + 'gaugePivot');
+    if(pivot) pivot.classList.toggle('complete', complete);
+
+    var pctEl = document.getElementById(prefix + 'gaugePct');
+    if(pctEl){
+      pctEl.textContent = pct + '%';
+      pctEl.classList.toggle('complete', complete);
+    }
+  }
+
+  function fmtMoney(n){
+    return n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function parseAmount(raw){
+    if(raw === null || raw === undefined) return 0;
+    var s = String(raw).trim();
+    if(!s) return 0;
+    // strip spaces (regular + non-breaking) sometimes used as thousands separators
+    s = s.replace(/[\s\u00A0]/g, '');
+    var lastComma = s.lastIndexOf(',');
+    var lastDot = s.lastIndexOf('.');
+    if(lastComma > -1 && lastDot > -1){
+      if(lastComma > lastDot){
+        // comma is the decimal separator, dots are thousands separators
+        s = s.split('.').join('').replace(',', '.');
+      }else{
+        // dot is the decimal separator, commas are thousands separators
+        s = s.split(',').join('');
+      }
+    }else if(lastComma > -1){
+      s = s.replace(',', '.');
+    }
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function updateTotals(){
+    var items = state.items || [];
+    var totalAll = 0, totalGeneral = 0, totalSpecial = 0;
+    items.forEach(function(item){
+      var v = parseAmount(item.amount);
+      totalAll += v;
+      if((item.fund || 'general') === 'special') totalSpecial += v;
+      else totalGeneral += v;
+    });
+    var bar = document.getElementById('totalsBar');
+    bar.innerHTML =
+      '<span>Разом: ' + fmtMoney(totalAll) + ' грн</span>' +
+      '<span class="sub">ЗФ: ' + fmtMoney(totalGeneral) + ' грн</span>' +
+      '<span class="sub">СФ: ' + fmtMoney(totalSpecial) + ' грн</span>';
+  }
+
+  function updateKekvStats(){
+    var items = state.items || [];
+    var tbody = document.getElementById('kekvTableBody');
+    if(!tbody) return;
+    var rows = '';
+    KEKV_CODES.forEach(function(code){
+      var codeItems = items.filter(function(it){ return it.kekv === code; });
+      var total = codeItems.length;
+      var done = codeItems.filter(function(it){ return it.done; }).length;
+      var pct = total ? Math.round((done/total)*100) : 0;
+      var sumPlan = 0, sumDone = 0;
+      codeItems.forEach(function(it){
+        var v = parseAmount(it.amount);
+        sumPlan += v;
+        if(it.done) sumDone += v;
+      });
+      rows +=
+        '<tr>' +
+          '<td class="kekv-code">' + code + '</td>' +
+          '<td class="kekv-bar-cell"><div class="hbar"><div class="hbar-fill' + (pct>=100?' complete':'') + '" style="width:' + pct + '%"></div></div></td>' +
+          '<td class="kekv-pct">' + pct + '%</td>' +
+          '<td class="kekv-count">' + done + ' з ' + total + '</td>' +
+          '<td class="kekv-sum">' + fmtMoney(sumPlan) + ' грн</td>' +
+          '<td class="kekv-sum kekv-sum-done">' + fmtMoney(sumDone) + ' грн</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = rows;
+  }
+
+
+  function moveItem(fromIdx, toIdx){
+    if(toIdx < 0 || toIdx >= state.items.length) return;
+    var arr = state.items;
+    var moved = arr.splice(fromIdx, 1)[0];
+    arr.splice(toIdx, 0, moved);
+    saveState();
+    render();
+  }
+
+  function procCheckHtml(item, key, label){
+    var checked = !!(item.proc && item.proc[key]);
+    return '<label class="proc-check' + (checked ? ' checked' : '') + '" data-proc="' + key + '">' +
+             '<input type="checkbox" data-proc-input="' + key + '"' + (checked ? ' checked' : '') + '>' +
+             '<span>' + label + '</span>' +
+           '</label>';
+  }
+
+  function deptSelectHtml(item){
+    var html = '<select class="dept-select" title="Підрозділ"><option value="">Підрозділ —</option>';
+    DEPARTMENTS.forEach(function(d){
+      html += '<option value="' + d + '"' + (item.department === d ? ' selected' : '') + '>' + d + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function kekvSelectHtml(item){
+    var html = '<select class="kekv-select' + (!item.kekv ? ' invalid' : '') + '" title="Код КЕКВ (обов\'язково)">';
+    if(!item.kekv){
+      html += '<option value="" disabled selected>КЕКВ — оберіть</option>';
+    }
+    KEKV_CODES.forEach(function(c){
+      html += '<option value="' + c + '"' + (item.kekv === c ? ' selected' : '') + '>' + c + '</option>';
+    });
+    html += '</select>';
+    return html;
+  }
+
+  function escapeAttr(str){
+    return String(str == null ? '' : str)
+      .replace(/&/g,'&amp;')
+      .replace(/"/g,'&quot;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;');
+  }
+
+  // ==================== План закупівель ====================
+  var PROC_STORAGE_KEY = 'procurementPlanData_v1';
+  var PROC_SHEET_URL_KEY = 'procurementPlanSheetUrl';
+  var PROC_TAB_KEY = 'plannerActiveTab';
+  var DEFAULT_PROC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/19LXzN-l0uAnJen8-NtcXDdL6iBDfAY3UYKUAV7e1P-I/edit?usp=sharing';
+
+  var procState = null; // { items: [{id, kekv, text, amount, procType, done}] }
+  var activePlannerTab = 'work';
+
+  function loadProcState(){
+    try{
+      var raw = localStorage.getItem(PROC_STORAGE_KEY);
+      if(raw){
+        var d = JSON.parse(raw);
+        if(d && Array.isArray(d.items)) return d;
+      }
+    }catch(e){}
+    return { items: [] };
+  }
+
+  function saveProcState(){
+    try{
+      localStorage.setItem(PROC_STORAGE_KEY, JSON.stringify(procState));
+      var el = document.getElementById('procStatus');
+      if(el){
+        var now = new Date();
+        var hh = String(now.getHours()).padStart(2,'0');
+        var mm = String(now.getMinutes()).padStart(2,'0');
+        el.textContent = 'Збережено о ' + hh + ':' + mm + ' · позицій: ' + (procState.items||[]).length;
+        el.style.color = '';
+      }
+    }catch(e){
+      var el2 = document.getElementById('procStatus');
+      if(el2){ el2.textContent = 'Не вдалося зберегти.'; el2.style.color = 'var(--danger)'; }
+    }
+  }
+
+  function getProcSheetUrl(){
+    var v = (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
+    return v || DEFAULT_PROC_SHEET_URL;
+  }
+
+  // ---- Вкладки планера ----
+  function switchPlannerTab(tab){
+    activePlannerTab = tab;
+    try{ localStorage.setItem(PROC_TAB_KEY, tab); }catch(e){}
+    var workTab = document.getElementById('tab-work');
+    var procTab = document.getElementById('tab-procurement');
+    if(workTab) workTab.classList.toggle('active', tab === 'work');
+    if(procTab) procTab.classList.toggle('active', tab === 'procurement');
+    var work = document.getElementById('workScreen');
+    var proc = document.getElementById('procurementScreen');
+    if(work) work.style.display = tab === 'work' ? '' : 'none';
+    if(proc) proc.style.display = tab === 'procurement' ? '' : 'none';
+    if(tab === 'procurement') renderProcurement();
+  }
+
+  // ---- CSV: завантаження з Google Sheets (з CORS-фолбеком) ----
+  function tryFetchCsvLocal(url){
+    return fetch(url, { mode: 'cors' }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function(text){
+      if(!text || !text.trim()) throw new Error('empty');
+      return text;
+    }).catch(function(){ return null; });
+  }
+
+  async function fetchProcurementCsv(){
+    var url = getProcSheetUrl();
+    if(!url) return null;
+    var candidates;
+    if(url.includes('script.google.com/macros')){
+      candidates = [url];
+    }else{
+      var idMatch = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if(!idMatch){
+        candidates = [url];
+      }else{
+        var docId = idMatch[1];
+        var gidMatch = url.match(/[?&]gid=([0-9]+)/) || url.match(/#gid=([0-9]+)/);
+        var gid = gidMatch ? gidMatch[1] : '0';
+        candidates = [
+          'https://docs.google.com/spreadsheets/d/' + docId + '/export?format=csv&gid=' + gid,
+          'https://docs.google.com/spreadsheets/d/' + docId + '/gviz/tq?tqx=out:csv&gid=' + gid,
+          'https://docs.google.com/spreadsheets/d/' + docId + '/export?format=csv'
+        ];
+      }
+    }
+    for(var i = 0; i < candidates.length; i++){
+      var txt = await tryFetchCsvLocal(candidates[i]);
+      if(txt) return txt;
+    }
+    return null;
+  }
+
+  // ---- CSV: парсер (повний, з лапками та переносами) ----
+  function parseCsvLinesLocal(text){
+    var rows = [];
+    var row = [];
+    var cur = '';
+    var inQuotes = false;
+    for(var i = 0; i < text.length; i++){
+      var ch = text[i];
+      if(inQuotes){
+        if(ch === '"'){
+          if(text[i+1] === '"'){ cur += '"'; i++; }
+          else inQuotes = false;
+        }else cur += ch;
+      }else{
+        if(ch === '"') inQuotes = true;
+        else if(ch === ','){ row.push(cur.trim()); cur = ''; }
+        else if(ch === '\n'){ row.push(cur.trim()); rows.push(row); row = []; cur = ''; }
+        else if(ch === '\r'){ /* skip */ }
+        else cur += ch;
+      }
+    }
+    if(cur.length || row.length){ row.push(cur.trim()); rows.push(row); }
+    return rows.filter(function(r){
+      return r.some(function(c){ return String(c) !== ''; });
+    });
+  }
+
+  function normalizeProcType(raw){
+    var s = String(raw || '').toLowerCase();
+    if(s.includes('prozzoo') || s.includes('prozorro') || s.includes('market')) return 'prozorro';
+    if(s.includes('прям')) return 'direct';
+    if(s.includes('тендер') || s.includes('торг')) return 'tender';
+    return '';
+  }
+
+  function parseProcurementCsv(csvText){
+    var rows = parseCsvLinesLocal(csvText);
+    var items = [];
+    var periodLabel = '';
+    var headerFound = false;
+    var monthRe = /(Січ|Лют|Бер|Кві|Тра|Чер|Лип|Сер|Вер|Жов|Лис|Гру)/i;
+
+    for(var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      if(!r || !r.length) continue;
+
+      var first = String(r[0] || '').trim();
+
+      // Мітка періоду, напр. «Серпень 2026»
+      if(!headerFound && r.length <= 3 && monthRe.test(first) && !/предмет/i.test(first)){
+        periodLabel = r.join(' ');
+        continue;
+      }
+
+      // Рядок заголовків
+      if(!headerFound && (/№/.test(first) || /предмет/i.test(String(r[2]||'')) || /КЕКВ/i.test(String(r[1]||'')))){
+        headerFound = true;
+        continue;
+      }
+
+      if(!headerFound) continue;
+
+      var num = first.replace(/\D/g, '');
+      var kekv = String(r[1] || '').trim();
+      var text = String(r[2] || '').trim();
+      var amount = String(r[3] || '').trim();
+      var typeRaw = String(r[4] || '').trim();
+
+      // Пропускаємо порожні та службові рядки
+      if(!num && !text && !kekv && !amount) continue;
+      if(/^всього|^разом|^итого|^итог/i.test(text)) continue;
+
+      items.push({
+        id: uid(),
+        kekv: kekv,
+        text: text,
+        amount: amount,
+        procType: normalizeProcType(typeRaw),
+        done: false
+      });
+    }
+    return { items: items, period: periodLabel };
+  }
+
+  // ---- Рендер ----
+  function procTypeSelectHtml(item){
+    var html = '<select class="proc-type' + (item.procType ? ' ' + item.procType : '') + '" title="Тип угоди">' +
+      '<option value="">Тип угоди —</option>' +
+      '<option value="prozorro"' + (item.procType === 'prozorro' ? ' selected' : '') + '>Prozorro Market</option>' +
+      '<option value="direct"' + (item.procType === 'direct' ? ' selected' : '') + '>Пряма угода</option>' +
+      '<option value="tender"' + (item.procType === 'tender' ? ' selected' : '') + '>Відкриті торги (тендер)</option>' +
+      '</select>';
+    return html;
+  }
+
+  function updateProcTitle(){
+    var title = document.getElementById('procTitle');
+    if(!title) return;
+    if(state && typeof state.month === 'number'){
+      title.textContent = 'План закупівель — ' + MONTHS[state.month] + ' ' + (state.year || '');
+    }else{
+      title.textContent = 'План закупівель';
+    }
+  }
+
+  function updateProcGauge(){
+    var items = procState ? procState.items : [];
+    var done = items.filter(function(it){ return it.done; }).length;
+    var pct = items.length ? Math.round((done / items.length) * 100) : 0;
+    updateGauge(pct, 'proc');
+    var label = document.getElementById('procProgressLabel');
+    if(label){
+      var word = items.length === 1 ? 'позицію' : (items.length >= 2 && items.length <= 4 ? 'позиції' : 'позицій');
+      label.textContent = 'Виконано ' + done + ' з ' + items.length + ' ' + word;
+    }
+  }
+
+  function updateProcTotals(){
+    var items = procState ? procState.items : [];
+    var total = 0, doneTotal = 0, doneCount = 0;
+    var byType = { prozorro: 0, direct: 0, tender: 0 };
+    items.forEach(function(it){
+      var v = parseAmount(it.amount);
+      total += v;
+      if(it.done){ doneTotal += v; doneCount++; }
+      if(byType[it.procType] !== undefined) byType[it.procType] += v;
+    });
+    var bar = document.getElementById('procTotalsBar');
+    if(bar){
+      bar.innerHTML =
+        '<span>Разом: ' + fmtMoney(total) + ' грн</span>' +
+        '<span class="sub">Виконано: ' + fmtMoney(doneTotal) + ' грн (' + doneCount + ' поз.)</span>' +
+        '<span class="sub">Prozorro: ' + fmtMoney(byType.prozorro) + ' грн</span>' +
+        '<span class="sub">Прямі: ' + fmtMoney(byType.direct) + ' грн</span>' +
+        '<span class="sub">Тендери: ' + fmtMoney(byType.tender) + ' грн</span>';
+    }
+  }
+
+  function updateProcKekvSummary(){
+    var el = document.getElementById('procKekvSummary');
+    if(!el) return;
+    var items = procState ? procState.items : [];
+    var map = {};
+    items.forEach(function(it){
+      if(it.kekv) map[it.kekv] = (map[it.kekv] || 0) + parseAmount(it.amount);
+    });
+    var keys = Object.keys(map);
+    if(!keys.length){
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = '';
+    el.innerHTML = '<span>Підсумок за КЕКВ:</span> ' + keys.map(function(k){
+      return '<span><b>' + escapeAttr(k) + '</b> — ' + fmtMoney(map[k]) + ' грн</span>';
+    }).join('');
+  }
+
+  function renderProcurement(){
+    if(!procState) procState = loadProcState();
+    updateProcTitle();
+
+    var body = document.getElementById('procTableBody');
+    var empty = document.getElementById('procEmptyState');
+    if(!body) return;
+
+    var items = procState.items || [];
+    body.innerHTML = '';
+    if(empty) empty.style.display = items.length ? 'none' : 'block';
+
+    items.forEach(function(item, idx){
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="proc-num">' + (idx + 1) + '</td>' +
+        '<td><input type="text" class="proc-kekv" value="' + escapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
+        '<td><input type="text" class="proc-text" value="' + escapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
+        '<td><input type="text" inputmode="decimal" class="proc-amount" value="' + escapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
+        '<td>' + procTypeSelectHtml(item) + '</td>' +
+        '<td><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
+        '<td><button class="proc-del" title="Видалити">×</button></td>';
+
+      var textInput = tr.querySelector('.proc-text');
+      textInput.addEventListener('input', function(e){ item.text = e.target.value; });
+      textInput.addEventListener('blur', saveProcState);
+      textInput.addEventListener('keydown', function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); textInput.blur(); }
+      });
+
+      var kekvInput = tr.querySelector('.proc-kekv');
+      kekvInput.addEventListener('input', function(e){ item.kekv = e.target.value; });
+      kekvInput.addEventListener('blur', function(){ saveProcState(); updateProcKekvSummary(); });
+
+      var amountInput = tr.querySelector('.proc-amount');
+      amountInput.addEventListener('input', function(e){ item.amount = e.target.value; updateProcTotals(); });
+      amountInput.addEventListener('blur', function(){ saveProcState(); updateProcTotals(); });
+
+      var typeSel = tr.querySelector('.proc-type');
+      typeSel.addEventListener('change', function(e){
+        item.procType = e.target.value;
+        typeSel.className = 'proc-type' + (item.procType ? ' ' + item.procType : '');
+        saveProcState();
+        updateProcTotals();
+      });
+
+      tr.querySelector('.proc-check').addEventListener('change', function(e){
+        item.done = e.target.checked;
+        saveProcState();
+        updateProcTotals();
+      });
+
+      tr.querySelector('.proc-del').addEventListener('click', function(){
+        if(!confirm('Видалити позицію "' + item.text + '"?') && item.text) return;
+        procState.items = procState.items.filter(function(it){ return it.id !== item.id; });
+        saveProcState();
+        renderProcurement();
+      });
+
+      body.appendChild(tr);
+    });
+
+    updateProcTotals();
+    updateProcKekvSummary();
+    updateProcGauge();
+  }
+
+  // ---- Синхронізація з Google Таблицею ----
+  async function syncProcurementFromSheet(){
+    var btn = document.getElementById('procSyncBtn');
+    var status = document.getElementById('procStatus');
+    if(!procState) procState = loadProcState();
+    if(btn){ btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
+    try{
+      var csv = await fetchProcurementCsv();
+      if(csv){
+        var parsed = parseProcurementCsv(csv);
+        if(parsed.items.length){
+          // Зберігаємо статус виконання за текстом позиції
+          var doneMap = {};
+          (procState.items || []).forEach(function(it){
+            if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+          });
+          parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+          procState.items = parsed.items;
+          saveProcState();
+          renderProcurement();
+          if(status){
+            status.textContent = '✅ Синхронізовано з Google Таблицею: ' + parsed.items.length + ' позицій' + (parsed.period ? ' · ' + parsed.period : '');
+            status.style.color = 'var(--green)';
+          }
+        }else{
+          if(status){
+            status.textContent = '⚠️ У таблиці поки немає заповнених позицій.';
+            status.style.color = 'var(--amber)';
+          }
+          showProcCsvBox();
+        }
+      }else{
+        showProcCsvBox();
+      }
+    }catch(err){
+      console.error('Procurement sync error:', err);
+      showProcCsvBox();
+    }finally{
+      if(btn){ btn.classList.remove('loading'); btn.textContent = '🔄 Оновити з Google Таблиці'; }
+    }
+  }
+
+  function showProcCsvBox(){
+    var box = document.getElementById('procCsvBox');
+    if(box) box.style.display = 'block';
+    var status = document.getElementById('procStatus');
+    if(status){
+      status.textContent = '⚠️ Пряме завантаження таблиці заблоковане браузером. Відкрийте таблицю → Файл → Завантажити → CSV і вставте дані нижче.';
+      status.style.color = 'var(--amber)';
+    }
+  }
+
+  // ---- Прив'язка подій розділу закупівель ----
+  function bindProcurementEvents(){
+    var workTab = document.getElementById('tab-work');
+    var procTab = document.getElementById('tab-procurement');
+    if(workTab) workTab.addEventListener('click', function(){ switchPlannerTab('work'); });
+    if(procTab) procTab.addEventListener('click', function(){ switchPlannerTab('procurement'); });
+
+    document.getElementById('procAddBtn').addEventListener('click', function(){
+      if(!procState) procState = loadProcState();
+      procState.items.push({ id: uid(), kekv: '', text: '', amount: '', procType: '', done: false });
+      saveProcState();
+      renderProcurement();
+      var inputs = document.querySelectorAll('#procTableBody .proc-text');
+      if(inputs.length) inputs[inputs.length-1].focus();
+    });
+
+    document.getElementById('procSyncBtn').addEventListener('click', syncProcurementFromSheet);
+
+    document.getElementById('procSaveBtn').addEventListener('click', function(){
+      if(document.activeElement && typeof document.activeElement.blur === 'function'){
+        document.activeElement.blur();
+      }
+      saveProcState();
+    });
+
+    document.getElementById('procPrintBtn').addEventListener('click', function(){
+      window.print();
+    });
+
+    document.getElementById('procExportBtn').addEventListener('click', function(){
+      var blob = new Blob([JSON.stringify(procState, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'procurement_plan_' + ((state ? state.month : 0) + 1) + '_' + (state ? state.year : '') + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('procImportBtn').addEventListener('click', function(){
+      document.getElementById('procImportFile').click();
+    });
+    document.getElementById('procImportFile').addEventListener('change', function(e){
+      var file = e.target.files[0];
+      if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        try{
+          var data = JSON.parse(ev.target.result);
+          if(!Array.isArray(data.items)) throw new Error('bad format');
+          procState = data;
+          saveProcState();
+          renderProcurement();
+        }catch(err){
+          alert('Не вдалося прочитати файл. Перевірте, що це коректний файл експорту плану закупівель.');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('procClearBtn').addEventListener('click', function(){
+      if(!procState || !procState.items.length) return;
+      if(confirm('Видалити всі позиції плану закупівель? Цю дію не можна скасувати.')){
+        procState.items = [];
+        saveProcState();
+        renderProcurement();
+      }
+    });
+
+    document.getElementById('procUrlSaveBtn').addEventListener('click', function(){
+      var url = document.getElementById('procSheetUrl').value.trim();
+      if(url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
+      else localStorage.removeItem(PROC_SHEET_URL_KEY);
+      alert('URL Google Таблиці збережено.');
+    });
+
+    document.getElementById('procCsvImportBtn').addEventListener('click', function(){
+      var csv = document.getElementById('procCsvTextarea').value;
+      if(!csv.trim()){
+        alert('Спочатку вставте текст CSV у поле вище.');
+        return;
+      }
+      var parsed = parseProcurementCsv(csv);
+      if(!parsed.items.length){
+        alert('Не вдалося розпізнати позиції. Перевірте формат: №,КЕКВ,Предмет,Вартість,Тип угоди');
+        return;
+      }
+      if(!procState) procState = loadProcState();
+      var doneMap = {};
+      (procState.items || []).forEach(function(it){
+        if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+      });
+      parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+      procState.items = parsed.items;
+      saveProcState();
+      document.getElementById('procCsvBox').style.display = 'none';
+      document.getElementById('procCsvTextarea').value = '';
+      renderProcurement();
+      var status = document.getElementById('procStatus');
+      if(status){
+        status.textContent = '✅ CSV імпортовано: ' + parsed.items.length + ' позицій' + (parsed.period ? ' · ' + parsed.period : '');
+        status.style.color = 'var(--green)';
+      }
+    });
+
+    document.getElementById('procCsvCancelBtn').addEventListener('click', function(){
+      document.getElementById('procCsvBox').style.display = 'none';
+      document.getElementById('procCsvTextarea').value = '';
+      var status = document.getElementById('procStatus');
+      if(status){ status.textContent = ''; status.style.color = ''; }
+    });
+  }
+
+  init();
+})();
+</script>
+
+</body>
+</html>
