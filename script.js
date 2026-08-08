@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.10';
+const APP_VERSION_FALLBACK = '9.11';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -5767,7 +5767,7 @@ function initVoiceInput() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
-  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.10)
+  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.11)
   const versionEl = document.getElementById('topbarVersion');
   if (versionEl) {
     const m = APP_SCRIPT_SRC.match(/[?&]v=([\d.]+)/);
@@ -7145,6 +7145,12 @@ function procTypeSelectHtml(item) {
 /* ---- Гейдж виконання плану закупівель (SVG) ---- */
 const GAUGE_CX = 105, GAUGE_CY = 118;
 
+// ВАЖЛИВО: ID у HTML пишуться з великої літери після префікса (procTicksGroup),
+// getElementById чутливий до регістру — тому збираємо ID тут, а не конкатенацією.
+function gaugeId(prefix, base) {
+  return prefix ? prefix + base.charAt(0).toUpperCase() + base.slice(1) : base;
+}
+
 function gaugePoint(r, pct) {
   const thetaDeg = 180 * (1 - pct / 100);
   const thetaRad = thetaDeg * Math.PI / 180;
@@ -7156,8 +7162,8 @@ function gaugePoint(r, pct) {
 
 function buildGaugeStatic(prefix) {
   prefix = prefix || '';
-  const ticksGroup = document.getElementById(prefix + 'ticksGroup');
-  const labelsGroup = document.getElementById(prefix + 'labelsGroup');
+  const ticksGroup = document.getElementById(gaugeId(prefix, 'ticksGroup'));
+  const labelsGroup = document.getElementById(gaugeId(prefix, 'labelsGroup'));
   if (!ticksGroup || !labelsGroup || ticksGroup.childNodes.length) return; // build once
   const glowId = 'url(#' + (prefix ? prefix + 'Glow' : 'glow') + ')';
 
@@ -7184,7 +7190,7 @@ function buildGaugeStatic(prefix) {
 function updateGauge(pct, prefix) {
   prefix = prefix || '';
   const deg = (1.8 * pct).toFixed(1);
-  const needleGroup = document.getElementById(prefix + 'needleGroup');
+  const needleGroup = document.getElementById(gaugeId(prefix, 'needleGroup'));
   if (needleGroup) {
     // CSS-трансформація — плавна анімація в сучасних браузерах
     needleGroup.style.transform = 'rotate(' + deg + 'deg)';
@@ -7193,10 +7199,10 @@ function updateGauge(pct, prefix) {
   }
 
   const complete = pct >= 100;
-  const pivot = document.getElementById(prefix + 'gaugePivot');
+  const pivot = document.getElementById(gaugeId(prefix, 'gaugePivot'));
   if (pivot) pivot.classList.toggle('complete', complete);
 
-  const pctEl = document.getElementById(prefix + 'gaugePct');
+  const pctEl = document.getElementById(gaugeId(prefix, 'gaugePct'));
   if (pctEl) {
     pctEl.textContent = pct + '%';
     pctEl.classList.toggle('complete', complete);

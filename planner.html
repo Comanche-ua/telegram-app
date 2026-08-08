@@ -1696,6 +1696,12 @@
 
   var GAUGE_CX = 105, GAUGE_CY = 118;
 
+  // ВАЖЛИВО: ID у HTML пишуться з великої літери після префікса (procTicksGroup),
+  // getElementById чутливий до регістру — тому збираємо ID тут, а не конкатенацією.
+  function gaugeId(prefix, base){
+    return prefix ? prefix + base.charAt(0).toUpperCase() + base.slice(1) : base;
+  }
+
   function gaugePoint(r, pct){
     var thetaDeg = 180 * (1 - pct / 100);
     var thetaRad = thetaDeg * Math.PI / 180;
@@ -1707,8 +1713,8 @@
 
   function buildGaugeStatic(prefix){
     prefix = prefix || '';
-    var ticksGroup = document.getElementById(prefix + 'ticksGroup');
-    var labelsGroup = document.getElementById(prefix + 'labelsGroup');
+    var ticksGroup = document.getElementById(gaugeId(prefix, 'ticksGroup'));
+    var labelsGroup = document.getElementById(gaugeId(prefix, 'labelsGroup'));
     if(!ticksGroup || !labelsGroup || ticksGroup.childNodes.length) return; // build once
     var glowId = 'url(#' + (prefix ? prefix + 'Glow' : 'glow') + ')';
 
@@ -1735,7 +1741,7 @@
   function updateGauge(pct, prefix){
     prefix = prefix || '';
     var deg = (1.8 * pct).toFixed(1);
-    var needleGroup = document.getElementById(prefix + 'needleGroup');
+    var needleGroup = document.getElementById(gaugeId(prefix, 'needleGroup'));
     if(needleGroup){
       // CSS-трансформація — плавна анімація в сучасних браузерах
       needleGroup.style.transform = 'rotate(' + deg + 'deg)';
@@ -1744,10 +1750,10 @@
     }
 
     var complete = pct >= 100;
-    var pivot = document.getElementById(prefix + 'gaugePivot');
+    var pivot = document.getElementById(gaugeId(prefix, 'gaugePivot'));
     if(pivot) pivot.classList.toggle('complete', complete);
 
-    var pctEl = document.getElementById(prefix + 'gaugePct');
+    var pctEl = document.getElementById(gaugeId(prefix, 'gaugePct'));
     if(pctEl){
       pctEl.textContent = pct + '%';
       pctEl.classList.toggle('complete', complete);
