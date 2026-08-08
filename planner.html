@@ -2185,13 +2185,6 @@
         updateProcTotals();
       });
 
-      tr.querySelector('.proc-check').addEventListener('change', function(e){
-        item.done = e.target.checked;
-        saveProcState();
-        updateProcTotals();
-        updateProcGauge();
-      });
-
       tr.querySelector('.proc-del').addEventListener('click', function(){
         if(!confirm('Видалити позицію "' + item.text + '"?') && item.text) return;
         procState.items = procState.items.filter(function(it){ return it.id !== item.id; });
@@ -2267,6 +2260,22 @@
     var procTab = document.getElementById('tab-procurement');
     if(workTab) workTab.addEventListener('click', function(){ switchPlannerTab('work'); });
     if(procTab) procTab.addEventListener('click', function(){ switchPlannerTab('procurement'); });
+
+    // Делегований обробник: чекбокс «виконано» → стан, підсумки, гейдж
+    var procBody = document.getElementById('procTableBody');
+    if(procBody) procBody.addEventListener('change', function(e){
+      var cb = e.target;
+      if(!cb || !cb.classList || !cb.classList.contains('proc-check')) return;
+      var tr = cb.closest ? cb.closest('tr') : null;
+      if(!tr || !procState) return;
+      var idx = Array.prototype.indexOf.call(tr.parentNode.children, tr);
+      var item = procState.items[idx];
+      if(!item) return;
+      item.done = cb.checked;
+      saveProcState();
+      updateProcTotals();
+      updateProcGauge();
+    });
 
     document.getElementById('procAddBtn').addEventListener('click', function(){
       if(!procState) procState = loadProcState();

@@ -7298,13 +7298,6 @@ function renderProcurementTable() {
       updateProcTotals();
     });
 
-    tr.querySelector('.proc-check').addEventListener('change', e => {
-      item.done = e.target.checked;
-      saveProcState();
-      updateProcTotals();
-      updateProcGauge();
-    });
-
     tr.querySelector('.proc-del').addEventListener('click', () => {
       if (item.text && !confirm('Видалити позицію "' + item.text + '"?')) return;
       procState.items = procState.items.filter(it => it.id !== item.id);
@@ -7374,6 +7367,21 @@ async function syncProcurementFromSheet() {
 function bindProcurementEvents() {
   if (procEventsBound) return;
   procEventsBound = true;
+
+  // Делегований обробник: чекбокс «виконано» → стан, підсумки, гейдж
+  document.getElementById('procurement-table-body')?.addEventListener('change', e => {
+    const cb = e.target;
+    if (!cb.classList || !cb.classList.contains('proc-check')) return;
+    const tr = cb.closest('tr');
+    if (!tr) return;
+    const idx = Array.prototype.indexOf.call(tr.parentNode.children, tr);
+    const item = procState && procState.items[idx];
+    if (!item) return;
+    item.done = cb.checked;
+    saveProcState();
+    updateProcTotals();
+    updateProcGauge();
+  });
 
   document.getElementById('procurement-sync-btn')?.addEventListener('click', syncProcurementFromSheet);
 
@@ -7484,6 +7492,7 @@ function renderProcurementWorkspace() {
   if (urlInput) urlInput.value = getProcSheetUrl();
 
   renderProcurementTable();
+  updateProcGauge();
 
   // Заголовок з поточним місяцем
   const title = document.getElementById('procurement-title');
