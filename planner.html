@@ -1997,11 +1997,21 @@
     return '';
   }
 
+  // «Так»/«Ні» з колонки виконання Google Таблиці → boolean; null — значення немає
+  function parseProcDone(raw){
+    var s = String(raw == null ? '' : raw).trim().toLowerCase();
+    if(!s) return null;
+    if(s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано') return true;
+    if(s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-') return false;
+    return null;
+  }
+
   function parseProcurementCsv(csvText){
     var rows = parseCsvLinesLocal(csvText);
     var items = [];
     var periodLabel = '';
     var headerFound = false;
+    var hasDoneColumn = false;
     var monthRe = /(Січ|Лют|Бер|Кві|Тра|Чер|Лип|Сер|Вер|Жов|Лис|Гру)/i;
 
     for(var i = 0; i < rows.length; i++){
@@ -2029,6 +2039,9 @@
       var text = String(r[2] || '').trim();
       var amount = String(r[3] || '').trim();
       var typeRaw = String(r[4] || '').trim();
+      // Колонка «Так»/«Ні» — визначення виконання позиції
+      var doneVal = parseProcDone(r[5]);
+      if(doneVal !== null) hasDoneColumn = true;
 
       // Пропускаємо порожні та службові рядки
       if(!num && !text && !kekv && !amount) continue;
@@ -2040,10 +2053,10 @@
         text: text,
         amount: amount,
         procType: normalizeProcType(typeRaw),
-        done: false
+        done: doneVal === true
       });
     }
-    return { items: items, period: periodLabel };
+    return { items: items, period: periodLabel, hasDoneColumn: hasDoneColumn };
   }
 
   // ---- Рендер ----
@@ -2169,6 +2182,7 @@
         item.done = e.target.checked;
         saveProcState();
         updateProcTotals();
+        updateProcGauge();
       });
 
       tr.querySelector('.proc-del').addEventListener('click', function(){
@@ -2197,12 +2211,14 @@
       if(csv){
         var parsed = parseProcurementCsv(csv);
         if(parsed.items.length){
-          // Зберігаємо статус виконання за текстом позиції
-          var doneMap = {};
-          (procState.items || []).forEach(function(it){
-            if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
-          });
-          parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+          if(!parsed.hasDoneColumn){
+            // Немає колонки «Так/Ні» — зберігаємо статус виконання за текстом позиції
+            var doneMap = {};
+            (procState.items || []).forEach(function(it){
+              if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+            });
+            parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+          }
           procState.items = parsed.items;
           saveProcState();
           renderProcurement();
@@ -2329,11 +2345,13 @@
         return;
       }
       if(!procState) procState = loadProcState();
-      var doneMap = {};
-      (procState.items || []).forEach(function(it){
-        if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
-      });
-      parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+      if(!parsed.hasDoneColumn){
+        var doneMap = {};
+        (procState.items || []).forEach(function(it){
+          if(it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+        });
+        parsed.items.forEach(function(it){ it.done = !!doneMap[it.text]; });
+      }
       procState.items = parsed.items;
       saveProcState();
       document.getElementById('procCsvBox').style.display = 'none';

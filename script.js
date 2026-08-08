@@ -7002,11 +7002,21 @@ function normalizeProcType(raw) {
   return '';
 }
 
+// «Так»/«Ні» з колонки виконання Google Таблиці → boolean; null — значення немає
+function parseProcDone(raw) {
+  const s = String(raw == null ? '' : raw).trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано') return true;
+  if (s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-') return false;
+  return null;
+}
+
 function parseProcurementCsv(csvText) {
   const rows = parseCsvLines(csvText);
   const items = [];
   let periodLabel = '';
   let headerFound = false;
+  let hasDoneColumn = false;
   const monthRe = /(Січ|Лют|Бер|Кві|Тра|Чер|Лип|Сер|Вер|Жов|Лис|Гру)/i;
 
   for (let i = 0; i < rows.length; i++) {
@@ -7034,6 +7044,9 @@ function parseProcurementCsv(csvText) {
     const text = String(r[2] || '').trim();
     const amount = String(r[3] || '').trim();
     const typeRaw = String(r[4] || '').trim();
+    // Колонка «Так»/«Ні» — визначення виконання позиції
+    const doneVal = parseProcDone(r[5]);
+    if (doneVal !== null) hasDoneColumn = true;
 
     if (!num && !text && !kekv && !amount) continue;
     if (/^всього|^разом|^итого|^итог/i.test(text)) continue;
@@ -7044,10 +7057,10 @@ function parseProcurementCsv(csvText) {
       text: text,
       amount: amount,
       procType: normalizeProcType(typeRaw),
-      done: false
+      done: doneVal === true
     });
   }
-  return { items, period: periodLabel };
+  return { items, period: periodLabel, hasDoneColumn };
 }
 
 async function fetchProcurementCsv() {
@@ -7314,12 +7327,14 @@ async function syncProcurementFromSheet() {
     if (csv) {
       const parsed = parseProcurementCsv(csv);
       if (parsed.items.length) {
-        // Зберігаємо статус виконання за текстом позиції
-        const doneMap = {};
-        (procState.items || []).forEach(it => {
-          if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
-        });
-        parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+        if (!parsed.hasDoneColumn) {
+          // Немає колонки «Так/Ні» — зберігаємо статус виконання за текстом позиції
+          const doneMap = {};
+          (procState.items || []).forEach(it => {
+            if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+          });
+          parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+        }
         procState.items = parsed.items;
         saveProcState();
         renderProcurementTable();
@@ -7417,11 +7432,13 @@ function bindProcurementEvents() {
       return;
     }
     if (!procState) procState = loadProcState();
-    const doneMap = {};
-    (procState.items || []).forEach(it => {
-      if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
-    });
-    parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+    if (!parsed.hasDoneColumn) {
+      const doneMap = {};
+      (procState.items || []).forEach(it => {
+        if (it.text) doneMap[it.text] = doneMap[it.text] || it.done;
+      });
+      parsed.items.forEach(it => { it.done = !!doneMap[it.text]; });
+    }
     procState.items = parsed.items;
     saveProcState();
     document.getElementById('procurement-csv-box').style.display = 'none';
