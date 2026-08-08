@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.11';
+const APP_VERSION_FALLBACK = '9.12';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -5767,7 +5767,7 @@ function initVoiceInput() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
-  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.11)
+  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.12)
   const versionEl = document.getElementById('topbarVersion');
   if (versionEl) {
     const m = APP_SCRIPT_SRC.match(/[?&]v=([\d.]+)/);
@@ -7211,13 +7211,19 @@ function updateGauge(pct, prefix) {
 
 function updateProcGauge() {
   const items = procState ? procState.items : [];
-  const done = items.filter(it => it.done).length;
-  const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+  // Відсоток виконання рахується за сумами (план/виконання в гривнях),
+  // а не за кількістю позицій — так вплив має сума закупівлі.
+  let total = 0, doneTotal = 0;
+  items.forEach(it => {
+    const v = procParseAmount(it.amount);
+    total += v;
+    if (it.done) doneTotal += v;
+  });
+  const pct = total ? Math.round((doneTotal / total) * 100) : 0;
   updateGauge(pct, 'proc');
   const label = document.getElementById('procGaugeLabel');
   if (label) {
-    const word = items.length === 1 ? 'позицію' : (items.length >= 2 && items.length <= 4 ? 'позиції' : 'позицій');
-    label.textContent = 'Виконано ' + done + ' з ' + items.length + ' ' + word;
+    label.textContent = 'Виконано ' + procFmtMoney(doneTotal) + ' грн з ' + procFmtMoney(total) + ' грн';
   }
 }
 

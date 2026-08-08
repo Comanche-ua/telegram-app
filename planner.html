@@ -2095,13 +2095,19 @@
 
   function updateProcGauge(){
     var items = procState ? procState.items : [];
-    var done = items.filter(function(it){ return it.done; }).length;
-    var pct = items.length ? Math.round((done / items.length) * 100) : 0;
+    // Відсоток виконання рахується за сумами (план/виконання в гривнях),
+    // а не за кількістю позицій — так вплив має сума закупівлі.
+    var total = 0, doneTotal = 0;
+    items.forEach(function(it){
+      var v = parseAmount(it.amount);
+      total += v;
+      if(it.done) doneTotal += v;
+    });
+    var pct = total ? Math.round((doneTotal / total) * 100) : 0;
     updateGauge(pct, 'proc');
     var label = document.getElementById('procProgressLabel');
     if(label){
-      var word = items.length === 1 ? 'позицію' : (items.length >= 2 && items.length <= 4 ? 'позиції' : 'позицій');
-      label.textContent = 'Виконано ' + done + ' з ' + items.length + ' ' + word;
+      label.textContent = 'Виконано ' + fmtMoney(doneTotal) + ' грн з ' + fmtMoney(total) + ' грн';
     }
   }
 
