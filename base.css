@@ -2923,7 +2923,7 @@ body.procurement-mode .procurement-workspace { display: block; }
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 14px;
-  margin-top: 14px;
+  margin: 0 0 14px;
 }
 .procurement-kekv-summary b { color: var(--text); }
 .procurement-status {

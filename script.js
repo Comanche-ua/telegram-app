@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.12';
+const APP_VERSION_FALLBACK = '9.13';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -5767,7 +5767,7 @@ function initVoiceInput() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
-  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.12)
+  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.13)
   const versionEl = document.getElementById('topbarVersion');
   if (versionEl) {
     const m = APP_SCRIPT_SRC.match(/[?&]v=([\d.]+)/);
@@ -7253,8 +7253,12 @@ function updateProcKekvSummary() {
   if (!el) return;
   const items = procState ? procState.items : [];
   const map = {};
+  const doneMap = {};
   items.forEach(it => {
-    if (it.kekv) map[it.kekv] = (map[it.kekv] || 0) + procParseAmount(it.amount);
+    if (!it.kekv) return;
+    const v = procParseAmount(it.amount);
+    map[it.kekv] = (map[it.kekv] || 0) + v;
+    if (it.done) doneMap[it.kekv] = (doneMap[it.kekv] || 0) + v;
   });
   const keys = Object.keys(map);
   if (!keys.length) {
@@ -7262,8 +7266,8 @@ function updateProcKekvSummary() {
     return;
   }
   el.style.display = '';
-  el.innerHTML = '<span>Підсумок за КЕКВ:</span> ' + keys.map(k =>
-    '<span><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(map[k]) + ' грн</span>'
+  el.innerHTML = '<span>Підсумок за КЕКВ · виконано:</span> ' + keys.map(k =>
+    '<span><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(map[k]) + ' грн · виконано ' + procFmtMoney(doneMap[k] || 0) + ' грн</span>'
   ).join('');
 }
 
@@ -7300,7 +7304,7 @@ function renderProcurementTable() {
 
     const amountInput = tr.querySelector('.proc-amount');
     amountInput.addEventListener('input', e => { item.amount = e.target.value; updateProcTotals(); });
-    amountInput.addEventListener('blur', () => { saveProcState(); updateProcTotals(); });
+    amountInput.addEventListener('blur', () => { saveProcState(); updateProcTotals(); updateProcKekvSummary(); });
 
     const typeSel = tr.querySelector('.proc-type');
     typeSel.addEventListener('change', e => {
@@ -7392,6 +7396,7 @@ function bindProcurementEvents() {
     item.done = cb.checked;
     saveProcState();
     updateProcTotals();
+    updateProcKekvSummary();
     updateProcGauge();
   });
 
