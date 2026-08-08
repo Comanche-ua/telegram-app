@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.13';
+const APP_VERSION_FALLBACK = '9.14';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -5767,7 +5767,7 @@ function initVoiceInput() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
-  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.13)
+  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.14)
   const versionEl = document.getElementById('topbarVersion');
   if (versionEl) {
     const m = APP_SCRIPT_SRC.match(/[?&]v=([\d.]+)/);
@@ -7228,24 +7228,24 @@ function updateProcGauge() {
 }
 
 function updateProcTotals() {
+  const el = document.getElementById('procurement-type-summary');
+  if (!el) return;
   const items = procState ? procState.items : [];
-  let total = 0, doneTotal = 0, doneCount = 0;
   const byType = { prozorro: 0, direct: 0, tender: 0 };
   items.forEach(it => {
     const v = procParseAmount(it.amount);
-    total += v;
-    if (it.done) { doneTotal += v; doneCount++; }
     if (byType[it.procType] !== undefined) byType[it.procType] += v;
   });
-  const set = (id, val) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = val;
-  };
-  set('procurement-total-sum', procFmtMoney(total) + ' грн');
-  set('procurement-total-done', procFmtMoney(doneTotal) + ' грн (' + doneCount + ' поз.)');
-  set('procurement-total-prozorro', procFmtMoney(byType.prozorro) + ' грн');
-  set('procurement-total-direct', procFmtMoney(byType.direct) + ' грн');
-  set('procurement-total-tender', procFmtMoney(byType.tender) + ' грн');
+  const names = { prozorro: 'Prozorro', direct: 'Прямі угоди', tender: 'Тендери' };
+  const keys = Object.keys(byType).filter(k => byType[k] > 0);
+  if (!keys.length) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = '<span>Типи угод:</span> ' + keys.map(k =>
+    '<span><b>' + names[k] + '</b> — ' + procFmtMoney(byType[k]) + ' грн</span>'
+  ).join('');
 }
 
 function updateProcKekvSummary() {
@@ -7444,15 +7444,6 @@ function bindProcurementEvents() {
     };
     reader.readAsText(file);
     e.target.value = '';
-  });
-
-  document.getElementById('procurement-clear-btn')?.addEventListener('click', () => {
-    if (!procState || !procState.items.length) return;
-    if (confirm('Видалити всі позиції плану закупівель? Цю дію не можна скасувати.')) {
-      procState.items = [];
-      saveProcState();
-      renderProcurementTable();
-    }
   });
 
   document.getElementById('procurement-url-save-btn')?.addEventListener('click', () => {

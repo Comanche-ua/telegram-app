@@ -271,19 +271,7 @@
         </div>
 
         <div class="procurement-kekv-summary" id="procurement-kekv-summary"></div>
-
-        <div class="procurement-totals" id="procurement-totals">
-          <div class="procurement-total-item"><span>Разом</span><b id="procurement-total-sum">0,00 грн</b></div>
-          <div class="procurement-total-item"><span>Виконано</span><b id="procurement-total-done">0,00 грн</b></div>
-          <div class="procurement-total-item"><span>Prozorro</span><b id="procurement-total-prozorro">0,00 грн</b></div>
-          <div class="procurement-total-item"><span>Прямі угоди</span><b id="procurement-total-direct">0,00 грн</b></div>
-          <div class="procurement-total-item"><span>Тендери</span><b id="procurement-total-tender">0,00 грн</b></div>
-        </div>
-
-        <div class="procurement-toolbar">
-          <span class="procurement-toolbar-spacer"></span>
-          <button type="button" class="procurement-btn procurement-btn-danger" id="procurement-clear-btn">🗑 Очистити</button>
-        </div>
+        <div class="procurement-kekv-summary" id="procurement-type-summary"></div>
 
         <div class="procurement-url-row">
           <input type="text" id="procurement-sheet-url" placeholder="URL Google Таблиці плану закупівель">
@@ -669,7 +657,7 @@
           <div class="settings-section" style="border-top: 1px solid var(--line); padding-top: 15px; margin-top: 15px;">
             <h3>🔄 Оновлення додатку</h3>
             <div style="font-size: 12px; color: var(--text3); margin-bottom: 12px; line-height: 1.5;">
-              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.13).
+              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.14).
             </div>
             <button class="btn-secondary" id="clear-cache-btn" style="width:100%; color: var(--red); border-color: rgba(255,75,75,0.3); background: rgba(255,75,75,0.05); padding: 8px 12px; font-weight: 600;">🧹 Очистити кеш та оновити</button>
           </div>
@@ -709,7 +697,7 @@
     </div>
 </div>
 
-<script src="script.js?v=9.13"></script>
+<script src="script.js?v=9.14"></script>
 <datalist id="assignees-datalist"></datalist>
 <script>
   if ('serviceWorker' in navigator) {
