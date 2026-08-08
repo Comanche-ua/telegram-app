@@ -51,6 +51,7 @@
   <div class="topbar">
     <div class="topbar-icon" aria-hidden="true"><img src="logo-mark.svg" alt=""></div>
     <div class="topbar-title">Контроль дедлайнів</div>
+    <span class="topbar-version" id="topbarVersion" title="Версія застосунку"></span>
     <div class="app-mode-switch" role="tablist" aria-label="Робочий режим">
       <button class="app-mode-btn active" id="mode-deadlines" type="button" data-mode="deadlines" role="tab" aria-selected="true">Дедлайни</button>
       <button class="app-mode-btn" id="mode-ops" type="button" data-mode="ops" role="tab" aria-selected="false">Оперативна область</button>
@@ -671,7 +672,7 @@
           <div class="settings-section" style="border-top: 1px solid var(--line); padding-top: 15px; margin-top: 15px;">
             <h3>🔄 Оновлення додатку</h3>
             <div style="font-size: 12px; color: var(--text3); margin-bottom: 12px; line-height: 1.5;">
-              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.9).
+              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.10).
             </div>
             <button class="btn-secondary" id="clear-cache-btn" style="width:100%; color: var(--red); border-color: rgba(255,75,75,0.3); background: rgba(255,75,75,0.05); padding: 8px 12px; font-weight: 600;">🧹 Очистити кеш та оновити</button>
           </div>
@@ -711,7 +712,7 @@
     </div>
 </div>
 
-<script src="script.js?v=9.9"></script>
+<script src="script.js?v=9.10"></script>
 <datalist id="assignees-datalist"></datalist>
 <script>
   if ('serviceWorker' in navigator) {

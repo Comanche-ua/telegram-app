@@ -211,6 +211,7 @@
   }
   .gauge-needle-tip{ fill:#ffffff; }
   #needleGroup, #procNeedleGroup{
+    transform-box: view-box;
     transform-origin: 105px 118px;
     transition: transform .6s cubic-bezier(.34,1.4,.4,1);
   }
@@ -1733,8 +1734,14 @@
 
   function updateGauge(pct, prefix){
     prefix = prefix || '';
+    var deg = (1.8 * pct).toFixed(1);
     var needleGroup = document.getElementById(prefix + 'needleGroup');
-    if(needleGroup) needleGroup.style.transform = 'rotate(' + (1.8 * pct).toFixed(1) + 'deg)';
+    if(needleGroup){
+      // CSS-трансформація — плавна анімація в сучасних браузерах
+      needleGroup.style.transform = 'rotate(' + deg + 'deg)';
+      // Атрибутний SVG-transform з явним центром — гарантований рух у будь-якому WebView
+      needleGroup.setAttribute('transform', 'rotate(' + deg + ' 105 118)');
+    }
 
     var complete = pct >= 100;
     var pivot = document.getElementById(prefix + 'gaugePivot');
@@ -2001,8 +2008,8 @@
   function parseProcDone(raw){
     var s = String(raw == null ? '' : raw).trim().toLowerCase();
     if(!s) return null;
-    if(s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано') return true;
-    if(s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-') return false;
+    if(s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано' || s === '✓' || s === '✅' || s === 'v' || s === '☑') return true;
+    if(s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-' || s === '✗' || s === '❌' || s === 'x' || s === '✕') return false;
     return null;
   }
 

@@ -69,6 +69,18 @@ input, select, textarea { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.topbar-version {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--text3);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 /* Переключатель режимів (desktop segmented) */
 .app-mode-switch {
@@ -2952,6 +2964,7 @@ body.procurement-mode .procurement-workspace { display: block; }
 }
 .proc-gauge-pct.complete{ color:#d9ffe9; text-shadow: 0 0 10px rgba(52,211,153,.9), 0 0 2px #fff; }
 #procNeedleGroup{
+  transform-box: view-box;
   transform-origin: 105px 118px;
   transition: transform .6s cubic-bezier(.34,1.4,.4,1);
 }

@@ -1,4 +1,8 @@
 // ===== Workspace State =====
+// Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
+const APP_VERSION_FALLBACK = '9.10';
+const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
+
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
 let workspaceOrder = [];      // string[] — порядок вкладок (не включає __all__)
 let activeWorkspaceId = null; // string — ID активної вкладки
@@ -5763,6 +5767,13 @@ function initVoiceInput() {
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[App] DOMContentLoaded, starting init...');
 
+  // Версія застосунку у верхній панелі (читається з URL script.js, напр. ?v=9.10)
+  const versionEl = document.getElementById('topbarVersion');
+  if (versionEl) {
+    const m = APP_SCRIPT_SRC.match(/[?&]v=([\d.]+)/);
+    versionEl.textContent = 'v' + (m ? m[1] : APP_VERSION_FALLBACK);
+  }
+
   // Core listeners (з null-захистом)
   const $ = (id) => document.getElementById(id);
   const on = (id, evt, fn) => { const el = $(id); if (el) el.addEventListener(evt, fn); };
@@ -7006,8 +7017,8 @@ function normalizeProcType(raw) {
 function parseProcDone(raw) {
   const s = String(raw == null ? '' : raw).trim().toLowerCase();
   if (!s) return null;
-  if (s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано') return true;
-  if (s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-') return false;
+  if (s === 'так' || s === 'да' || s === 'yes' || s === 'true' || s === '1' || s === '+' || s === 'виконано' || s === '✓' || s === '✅' || s === 'v' || s === '☑') return true;
+  if (s === 'ні' || s === 'нет' || s === 'no' || s === 'false' || s === '0' || s === '-' || s === '✗' || s === '❌' || s === 'x' || s === '✕') return false;
   return null;
 }
 
@@ -7172,8 +7183,14 @@ function buildGaugeStatic(prefix) {
 
 function updateGauge(pct, prefix) {
   prefix = prefix || '';
+  const deg = (1.8 * pct).toFixed(1);
   const needleGroup = document.getElementById(prefix + 'needleGroup');
-  if (needleGroup) needleGroup.style.transform = 'rotate(' + (1.8 * pct).toFixed(1) + 'deg)';
+  if (needleGroup) {
+    // CSS-трансформація — плавна анімація в сучасних браузерах
+    needleGroup.style.transform = 'rotate(' + deg + 'deg)';
+    // Атрибутний SVG-transform з явним центром — гарантований рух у будь-якому WebView
+    needleGroup.setAttribute('transform', 'rotate(' + deg + ' 105 118)');
+  }
 
   const complete = pct >= 100;
   const pivot = document.getElementById(prefix + 'gaugePivot');
