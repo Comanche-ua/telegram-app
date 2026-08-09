@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.16';
+const APP_VERSION_FALLBACK = '9.17';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -7266,19 +7266,19 @@ function updateProcKekvSummary() {
     return;
   }
   el.style.display = '';
-  el.innerHTML = '<span class="proc-kekv-title">Підсумок за КЕКВ · виконано:</span> ' + keys.map(k => {
+  el.innerHTML = '<span class="pk-title">Підсумок за КЕКВ · виконано:</span> ' + keys.map(k => {
     const total = map[k];
     const done = doneMap[k] || 0;
     const pct = total ? Math.round((done / total) * 100) : 0;
     // Градації виконання плану: <25 червоний, 25-50 оранжевий, 50-75 жовтий, 75-100 зелений
     const step = pct < 25 ? '0' : pct < 50 ? '25' : pct < 75 ? '50' : '75';
     const cls = 'proc-sum-pct-' + step;
-    const fillCls = 'proc-kekv-fill-' + step;
-    return '<div class="proc-kekv">' +
-      '<div class="proc-kekv-head"><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(total) + ' грн · <span class="' + cls + '">виконано ' + procFmtMoney(done) + ' грн</span></div>' +
-      '<div class="proc-kekv-bar-row">' +
-        '<div class="proc-kekv-bar"><div class="proc-kekv-fill ' + fillCls + '" style="width:' + pct + '%"></div></div>' +
-        '<span class="proc-kekv-pct ' + cls + '">' + pct + '%</span>' +
+    const fillCls = 'pk-fill-' + step;
+    return '<div class="pk-card">' +
+      '<div class="pk-head"><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(total) + ' грн · <span class="' + cls + '">виконано ' + procFmtMoney(done) + ' грн</span></div>' +
+      '<div class="pk-bar-row">' +
+        '<div class="pk-bar"><div class="pk-fill ' + fillCls + '" style="width:' + pct + '%"></div></div>' +
+        '<span class="pk-pct ' + cls + '">' + pct + '%</span>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -7296,13 +7296,13 @@ function renderProcurementTable() {
   items.forEach((item, idx) => {
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td class="proc-num">' + (item.done ? '<span class="proc-num-done" title="Виконано">✓</span>' : (idx + 1)) + '</td>' +
-      '<td><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
-      '<td><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
-      '<td><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
-      '<td>' + procTypeSelectHtml(item) + '</td>' +
-      '<td><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
-      '<td><button class="proc-del" title="Видалити">×</button></td>';
+      '<td class="proc-num" data-label="№">' + (item.done ? '<span class="proc-num-done" title="Виконано">✓</span>' : (idx + 1)) + '</td>' +
+      '<td class="proc-text-cell" data-label="Предмет закупівлі"><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
+      '<td class="proc-kekv-cell" data-label="КЕКВ"><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
+      '<td class="proc-amount-cell" data-label="Вартість, грн"><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
+      '<td class="proc-type-cell" data-label="Тип угоди">' + procTypeSelectHtml(item) + '</td>' +
+      '<td class="proc-check-cell" data-label=""><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
+      '<td class="proc-del-cell" data-label=""><button class="proc-del" title="Видалити">×</button></td>';
 
     const textInput = tr.querySelector('.proc-text');
     textInput.addEventListener('input', e => { item.text = e.target.value; });

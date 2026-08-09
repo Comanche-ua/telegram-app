@@ -2857,31 +2857,32 @@ body.procurement-mode .procurement-workspace { display: block; }
 .proc-sum-pct-25 { color: #ffa726; font-weight: 700; }
 .proc-sum-pct-50 { color: #ffd54f; font-weight: 700; }
 .proc-sum-pct-75 { color: #4ade80; font-weight: 700; }
-/* Шкали виконання (0-100%) по кожному КЕКВ */
-.proc-kekv-title { flex: 1 1 100%; }
-.proc-kekv {
+/* Шкали виконання (0-100%) по кожному КЕКВ
+   (класи pk-* — без конфлікту з табличним інпутом .proc-kekv) */
+.pk-title { flex: 1 1 100%; }
+.pk-card {
   display: flex;
   flex-direction: column;
   gap: 5px;
   flex: 1 1 230px;
   min-width: 0;
 }
-.proc-kekv-head { font-size: 12px; color: var(--text3); }
-.proc-kekv-head > span { white-space: nowrap; }
-.proc-kekv-bar-row { display: flex; align-items: center; gap: 8px; }
-.proc-kekv-bar {
+.pk-head { font-size: 12px; color: var(--text3); }
+.pk-head > span { white-space: nowrap; }
+.pk-bar-row { display: flex; align-items: center; gap: 8px; }
+.pk-bar {
   flex: 1;
   height: 7px;
   border-radius: 4px;
   background: var(--surface3);
   overflow: hidden;
 }
-.proc-kekv-fill { height: 100%; border-radius: 4px; transition: width .35s ease; }
-.proc-kekv-fill-0  { background: #ff5a76; }
-.proc-kekv-fill-25 { background: #ffa726; }
-.proc-kekv-fill-50 { background: #ffd54f; }
-.proc-kekv-fill-75 { background: #4ade80; }
-.proc-kekv-pct { font-size: 11px; font-weight: 700; white-space: nowrap; }
+.pk-fill { height: 100%; border-radius: 4px; transition: width .35s ease; }
+.pk-fill-0  { background: #ff5a76; }
+.pk-fill-25 { background: #ffa726; }
+.pk-fill-50 { background: #ffd54f; }
+.pk-fill-75 { background: #4ade80; }
+.pk-pct { font-size: 11px; font-weight: 700; white-space: nowrap; }
 .proc-kekv {
   width: 66px;
   font-family: inherit;
@@ -3093,8 +3094,55 @@ body.procurement-mode .procurement-workspace { display: block; }
   /* Підсумки закупівель: рівні вертикальні абзаци для мобільних */
   .procurement-kekv-summary {
     flex-direction: column;
+    flex-wrap: nowrap; /* column + wrap створює вузькі колонки — забороняємо перенос */
     gap: 9px 0;
     padding: 10px 14px;
     line-height: 1.45;
   }
+  /* Закупівлі: таблиця → картки для мобільних */
+  .procurement-table-wrap { overflow: visible; }
+  .procurement-table { display: block; width: 100%; min-width: 0; }
+  .procurement-table thead { display: none; }
+  .procurement-table tbody { display: block; }
+  .procurement-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .procurement-table tbody td {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    border: none;
+    font-size: 12px;
+  }
+  .procurement-table tbody td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    color: var(--text3);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .procurement-table tbody td.proc-num { order: 1; }
+  .procurement-table tbody td.proc-text-cell { order: 2; flex: 1 1 0; min-width: 0; }
+  .procurement-table tbody td.proc-check-cell { order: 3; }
+  .procurement-table tbody td.proc-del-cell { order: 4; }
+  .procurement-table tbody td.proc-kekv-cell { order: 5; flex: 1 1 100%; }
+  .procurement-table tbody td.proc-amount-cell { order: 6; flex: 1 1 100%; }
+  .procurement-table tbody td.proc-type-cell { order: 7; flex: 1 1 100%; }
+  .procurement-table tbody .proc-text,
+  .procurement-table tbody .proc-kekv,
+  .procurement-table tbody .proc-amount {
+    width: 100%;
+    font-size: 13px;
+    padding: 4px 6px;
+  }
+  .procurement-table tbody .proc-check { width: 22px; height: 22px; }
+  .procurement-table tbody .proc-type { flex: 1; min-width: 0; }
 }
