@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.14';
+const APP_VERSION_FALLBACK = '9.15';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -7266,9 +7266,14 @@ function updateProcKekvSummary() {
     return;
   }
   el.style.display = '';
-  el.innerHTML = '<span>Підсумок за КЕКВ · виконано:</span> ' + keys.map(k =>
-    '<span><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(map[k]) + ' грн · виконано ' + procFmtMoney(doneMap[k] || 0) + ' грн</span>'
-  ).join('');
+  el.innerHTML = '<span>Підсумок за КЕКВ · виконано:</span> ' + keys.map(k => {
+    const total = map[k];
+    const done = doneMap[k] || 0;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    // Градації виконання плану: <25 червоний, 25-50 оранжевий, 50-75 жовтий, 75-100 зелений
+    const cls = pct < 25 ? 'proc-sum-pct-0' : pct < 50 ? 'proc-sum-pct-25' : pct < 75 ? 'proc-sum-pct-50' : 'proc-sum-pct-75';
+    return '<span><b>' + procEscapeAttr(k) + '</b> — ' + procFmtMoney(total) + ' грн · <span class="' + cls + '">виконано ' + procFmtMoney(done) + ' грн</span></span>';
+  }).join('');
 }
 
 function renderProcurementTable() {
@@ -7283,7 +7288,7 @@ function renderProcurementTable() {
   items.forEach((item, idx) => {
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td class="proc-num">' + (idx + 1) + '</td>' +
+      '<td class="proc-num">' + (item.done ? '<span class="proc-num-done" title="Виконано">✓</span>' : (idx + 1)) + '</td>' +
       '<td><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
       '<td><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
       '<td><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
