@@ -207,6 +207,7 @@
             <span class="procurement-eyebrow">План закупівель</span>
             <h2 class="procurement-title" id="procurement-title">План закупівель</h2>
           </div>
+          <button type="button" class="procurement-btn" id="procurement-form-open-btn" style="display:none;">📝 Відкрити форму</button>
           <button type="button" class="procurement-sync-btn" id="procurement-sync-btn">🔄 Оновити з Google Таблиці</button>
         </div>
 
@@ -627,6 +628,20 @@
               <b>Вхід потрібен лише якщо таблиця приватна.</b> Якщо таблиця відкрита «для всіх за посиланням» — авторизація не потрібна, додаток завантажить дані напряму.
             </div>
           </div>
+
+          <div class="settings-section">
+            <h3>📝 Форма плану закупівель</h3>
+            <div style="font-size: 12px; color: var(--text3); margin-bottom: 14px; line-height: 1.5;">
+              Вставте посилання на Google Форму, через яку відбувається погодження плану закупівель. Після збереження у розділі «План закупівель» з'явиться кнопка «Відкрити форму».
+            </div>
+            <div class="api-block" style="margin-bottom: 10px;">
+              <input type="text" id="proc-form-url" placeholder="https://forms.gle/..." style="flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 12px;">
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <button class="btn-primary" id="proc-form-url-save-btn" style="flex: 1; min-width: 160px; background: var(--blue);">💾 Зберегти посилання</button>
+              <span class="api-status" id="proc-form-status"></span>
+            </div>
+          </div>
         </div>
 
         <div class="settings-group" data-group="appearance">
@@ -657,7 +672,7 @@
           <div class="settings-section" style="border-top: 1px solid var(--line); padding-top: 15px; margin-top: 15px;">
             <h3>🔄 Оновлення додатку</h3>
             <div style="font-size: 12px; color: var(--text3); margin-bottom: 12px; line-height: 1.5;">
-              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.20).
+              Якщо ви бачите помилки або старі версії функцій, очистіть кеш для завантаження останньої версії (v9.21).
             </div>
             <button class="btn-secondary" id="clear-cache-btn" style="width:100%; color: var(--red); border-color: rgba(255,75,75,0.3); background: rgba(255,75,75,0.05); padding: 8px 12px; font-weight: 600;">🧹 Очистити кеш та оновити</button>
           </div>
@@ -697,7 +712,7 @@
     </div>
 </div>
 
-<script src="script.js?v=9.20"></script>
+<script src="script.js?v=9.21"></script>
 <datalist id="assignees-datalist"></datalist>
 <script>
   if ('serviceWorker' in navigator) {

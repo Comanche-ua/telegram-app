@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.20';
+const APP_VERSION_FALLBACK = '9.21';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -6275,6 +6275,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ---- Форма плану закупівель (посилання на Google Форму) ----
+  const procFormInput = document.getElementById('proc-form-url');
+  if (procFormInput) {
+    const savedFormUrl = localStorage.getItem(PROC_FORM_URL_KEY);
+    if (savedFormUrl) procFormInput.value = savedFormUrl;
+  }
+
   // Ініціалізація дашборду Штату
   initShtatMode();
 });
@@ -6976,7 +6983,7 @@ async function renderPmmWorkspace() {
 // ============================================================
 const PROC_DATA_KEY = 'procurement_plan_data_v1';
 const PROC_SHEET_URL_KEY = 'procurement_plan_sheet_url';
-const DEFAULT_PROC_SHEET_URL = 'https://docs.google.com/spreadsheets/d/19LXzN-l0uAnJen8-NtcXDdL6iBDfAY3UYKUAV7e1P-I/edit?usp=sharing';
+const PROC_FORM_URL_KEY = 'procurement_plan_form_url';
 
 let procState = null; // { items: [{id, kekv, text, amount, procType, done}] }
 let procEventsBound = false;
@@ -6997,8 +7004,19 @@ function saveProcState() {
 }
 
 function getProcSheetUrl() {
-  const v = (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
-  return v || DEFAULT_PROC_SHEET_URL;
+  return (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
+}
+
+function getProcFormUrl() {
+  return (localStorage.getItem(PROC_FORM_URL_KEY) || '').trim();
+}
+
+// Показує/ховає кнопку «Відкрити форму» залежно від збереженого посилання
+function updateProcFormButton() {
+  const btn = document.getElementById('procurement-form-open-btn');
+  if (!btn) return;
+  const url = getProcFormUrl();
+  btn.style.display = url ? '' : 'none';
 }
 
 function procUid() {
@@ -7362,6 +7380,10 @@ async function syncProcurementFromSheet() {
   if (!procState) procState = loadProcState();
   if (btn) { btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
   try {
+    if (!getProcSheetUrl()) {
+      setProcStatus('ℹ️ Вкажіть посилання на Google Таблицю плану закупівель (кнопка «Зберегти URL» вище), щоб завантажити позиції.', 'var(--amber)');
+      return;
+    }
     const csv = await fetchProcurementCsv();
     if (csv) {
       const parsed = parseProcurementCsv(csv);
@@ -7464,6 +7486,23 @@ function bindProcurementEvents() {
     if (url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
     else localStorage.removeItem(PROC_SHEET_URL_KEY);
     alert('URL Google Таблиці плану закупівель збережено.');
+    if (url) syncProcurementFromSheet();
+  });
+
+  // Форма плану закупівель (посилання задається в налаштуваннях)
+  document.getElementById('procurement-form-open-btn')?.addEventListener('click', () => {
+    const url = getProcFormUrl();
+    if (url) window.open(url, '_blank');
+  });
+
+  document.getElementById('proc-form-url-save-btn')?.addEventListener('click', () => {
+    const url = (document.getElementById('proc-form-url').value || '').trim();
+    if (url) localStorage.setItem(PROC_FORM_URL_KEY, url);
+    else localStorage.removeItem(PROC_FORM_URL_KEY);
+    updateProcFormButton();
+    const st = document.getElementById('proc-form-status');
+    if (st) st.textContent = url ? '✅ Посилання на форму збережено.' : 'Посилання на форму видалено.';
+    setTimeout(() => { if (st) st.textContent = ''; }, 3000);
   });
 
   document.getElementById('procurement-csv-import-btn')?.addEventListener('click', () => {
@@ -7514,6 +7553,10 @@ function renderProcurementWorkspace() {
 
   renderProcurementTable();
   updateProcGauge();
+  updateProcFormButton();
+
+  // Автосинхронізація при завантаженні вкладки — щоб дані оновлювались автоматично
+  if (getProcSheetUrl()) syncProcurementFromSheet();
 
   // Заголовок з поточним місяцем
   const title = document.getElementById('procurement-title');
