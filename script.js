@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.22';
+const APP_VERSION_FALLBACK = '9.23';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -6280,6 +6280,24 @@ document.addEventListener('DOMContentLoaded', () => {
   if (procSheetInput) {
     const savedSheetUrl = localStorage.getItem(PROC_SHEET_URL_KEY);
     if (savedSheetUrl) procSheetInput.value = savedSheetUrl;
+    // Автозбереження: посилання записується одразу при введенні
+    procSheetInput.addEventListener('input', () => {
+      const v = procSheetInput.value.trim();
+      if (v) localStorage.setItem(PROC_SHEET_URL_KEY, v);
+      else localStorage.removeItem(PROC_SHEET_URL_KEY);
+    });
+  }
+  const procSheetSaveBtn = document.getElementById('proc-sheet-url-save-btn');
+  if (procSheetSaveBtn) {
+    procSheetSaveBtn.addEventListener('click', () => {
+      const url = (document.getElementById('proc-sheet-url-settings').value || '').trim();
+      if (url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
+      else localStorage.removeItem(PROC_SHEET_URL_KEY);
+      const st = document.getElementById('proc-sheet-url-status');
+      if (st) st.textContent = url ? '✅ Посилання на таблицю збережено.' : 'Посилання на таблицю видалено.';
+      setTimeout(() => { if (st) st.textContent = ''; }, 3000);
+      if (url) syncProcurementFromSheet();
+    });
   }
 
   // ---- Форма плану закупівель (посилання на Google Форму) ----
@@ -7011,7 +7029,15 @@ function saveProcState() {
 }
 
 function getProcSheetUrl() {
-  return (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
+  const v = (localStorage.getItem(PROC_SHEET_URL_KEY) || '').trim();
+  if (v) return v;
+  // Підстраховка: значення з поля налаштувань, навіть якщо ще не натиснули «Зберегти»
+  const input = document.getElementById('proc-sheet-url-settings');
+  if (input) {
+    const iv = input.value.trim();
+    if (iv) return iv;
+  }
+  return '';
 }
 
 function getProcFormUrl() {
@@ -7486,17 +7512,6 @@ function bindProcurementEvents() {
     };
     reader.readAsText(file);
     e.target.value = '';
-  });
-
-  // URL таблиці плану закупівель (зберігається в налаштуваннях)
-  document.getElementById('proc-sheet-url-save-btn')?.addEventListener('click', () => {
-    const url = (document.getElementById('proc-sheet-url-settings').value || '').trim();
-    if (url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
-    else localStorage.removeItem(PROC_SHEET_URL_KEY);
-    const st = document.getElementById('proc-sheet-url-status');
-    if (st) st.textContent = url ? '✅ Посилання на таблицю збережено.' : 'Посилання на таблицю видалено.';
-    setTimeout(() => { if (st) st.textContent = ''; }, 3000);
-    if (url) syncProcurementFromSheet();
   });
 
   // Форма плану закупівель (посилання задається в налаштуваннях)
