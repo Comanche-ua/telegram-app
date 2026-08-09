@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.29';
+const APP_VERSION_FALLBACK = '9.30';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -4440,23 +4440,32 @@ function initOpsWorkspace() {
 }
 
 // ===== Штат Dashboard =====
-const SHTAT_IMPORTED_KEY = 'shtat_imported_data';
 const SHTAT_SHEET_URL_KEY = 'shtat_sheet_url';
 const SHTAT_FILTER_KEY = 'shtat_unit_filter';
 
+// Дані штату тримаємо ЛИШЕ в пам'яті сесії — у localStorage нічого не записуємо
+// (запит «штат не потрібно зберігати в пам'яті»). Кожне відкриття додатка
+// завантажує дані наново: з Google Таблиці (якщо вказано посилання) або
+// з вбудованого shtat-default.csv.
+let shtatSessionData = null;
 function loadImportedStaff() {
-  try { return JSON.parse(localStorage.getItem(SHTAT_IMPORTED_KEY)) || { units: [], totalPositions: 0, stats: null }; }
-  catch(e) { return { units: [], totalPositions: 0, stats: null }; }
+  if (!shtatSessionData) shtatSessionData = { units: [], totalPositions: 0, stats: null };
+  return shtatSessionData;
 }
-function saveImportedStaff(data) { localStorage.setItem(SHTAT_IMPORTED_KEY, JSON.stringify(data)); }
+function saveImportedStaff(data) { shtatSessionData = data; }
+// Прибираємо старі дані штату з localStorage (залишились від попередніх версій)
+function clearLegacyStaffStorage() {
+  try { localStorage.removeItem('shtat_imported_data'); } catch (e) {}
+}
 
 function getShtatSheetUrl() {
   const v = localStorage.getItem(SHTAT_SHEET_URL_KEY);
   return (v && v.trim()) ? v.trim() : '';
 }
 
-// Вбудовані дані штату (shtat-default.csv, згенерований з Штат.xlsx).
+// Вбудовані дані штату (shtat-default.csv — експорт аркуша «Штат» з Google Таблиці).
 // Використовуються, якщо Google Таблиця недоступна або посилання не вказане.
+// Дані завжди лишаються лише в пам'яті сесії — у localStorage не зберігаються.
 const DEFAULT_SHTAT_CSV_URL = './shtat-default.csv';
 
 async function loadDefaultShtatData() {
@@ -4699,18 +4708,47 @@ async function fetchStaffCsv(url, opts = {}) {
 
 
 
+// Повний CSV-парсер: підтримує лапки, подвійні лапки всередині поля
+// та переноси рядків усередині полів (експорт Google Таблиць)
 function parseCsvRows(csvText) {
-  const rows = csvText.split(/\r?\n/);
-  return rows.map(row => {
-    const cols = []; let cur = '', q = false;
-    for (const ch of row) { if (ch === '"') q = !q; else if (ch === ',' && !q) { cols.push(cur.trim()); cur = ''; } else cur += ch; }
-    cols.push(cur.trim()); return cols;
-  });
+  const rows = [];
+  let cols = [], cur = '', q = false;
+  const pushCol = () => { cols.push(cur.trim()); cur = ''; };
+  const pushRow = () => { pushCol(); rows.push(cols); cols = []; };
+  const text = String(csvText || '')
+    .replace(/^﻿/, '')        // BOM
+    .replace(/\r\n/g, '\n')        // CRLF → LF
+    .replace(/\r/g, '\n');         // старі Mac CR → LF
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; } else { q = false; }
+      } else { cur += ch; }
+    } else {
+      if (ch === '"') { q = true; }
+      else if (ch === ',') { pushCol(); }
+      else if (ch === '\n') { pushRow(); }
+      else { cur += ch; }
+    }
+  }
+  pushRow();
+  return rows;
 }
 
 function staffClean(s) { return (s || '').replace(/^["']|["']$/g, '').replace(/^[•\s]+|[•\s]+$/g, '').trim().replace(/\s+/g, ' '); }
 function staffIsVacant(name) { return !name || /^[-–—\s]*$/.test(name) || /vacant|вакант|вакансія|- В -|^-$|^–$/i.test(name); }
 function staffIsSummaryRow(s) { return /^(всього|вакантно|зайнято|у т\.ч\.|authorized)/i.test(s); }
+// Підсумкові блоки, що зустрічаються в колонці приміток Google-експорту:
+// «Бронь — 413\nПризовник (до 25 років) — 28...» та список некомплекту
+// «Заступник начальника загону - 1\nФахівець - 1...» — показувати не треба.
+function staffIsSummaryNote(note) {
+  const s = staffClean(note).toLowerCase();
+  if (s.startsWith('бронь') && (s.includes('призовник') || s.includes('відстрочк'))) return true;
+  const m = s.match(/ - \d+/g);
+  if (m && m.length >= 2) return true;
+  return false;
+}
 function staffIsHeaderRow(num, pos, person) {
   const joined = `${num} ${pos} ${person}`.toLowerCase();
   return joined.includes('№') && (joined.includes('посада') || joined.includes('підрозділ')) && joined.includes('піб');
@@ -4937,6 +4975,13 @@ function parseStandardStaffCSV(dataRows) {
       }
       const filled = !staffIsVacant(person);
       const category = staffNormCategory(categoryRaw);
+      // Примітка: у Google-експорті — колонка K (11-та); колонка I містить дату броні.
+      // У старому форматі (xlsx) примітка була в I — підхоплюємо її, якщо це не дата.
+      let note = staffClean(row[10]);
+      if (!note) {
+        const legacy = staffClean(row[8]);
+        if (legacy && !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(legacy)) note = legacy;
+      }
       const entry = {
         position: pos,
         name: person,
@@ -4947,7 +4992,7 @@ function parseStandardStaffCSV(dataRows) {
         sex: staffSexLabel(row[5]),
         birth: staffBirthDate(row[6]),
         military: staffMilitaryLabel(row[7]),
-        note: staffClean(row[8])
+        note: staffIsSummaryNote(note) ? '' : note
       };
       const key = currentSubName || '__ROOT__';
       if (!currentMainUnit.subs[key]) currentMainUnit.subs[key] = [];
@@ -5795,6 +5840,7 @@ function initShtatToolbar() {
 }
 
 function initShtatMode() {
+  clearLegacyStaffStorage();
   bindShtatSubtabs();
   initShtatToolbar();
   refreshShtatActiveView();
@@ -6566,7 +6612,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sheetsResetBtn) {
     sheetsResetBtn.addEventListener('click', () => {
       localStorage.removeItem(SHTAT_SHEET_URL_KEY);
-      localStorage.removeItem(SHTAT_IMPORTED_KEY);
+      saveImportedStaff({ units: [], totalPositions: 0, stats: null });
       localStorage.removeItem(SHTAT_FILTER_KEY);
       if (sheetsUrlInput) sheetsUrlInput.value = '';
       if (sheetsStatusSpan) sheetsStatusSpan.textContent = 'Скинуто';
