@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.25';
+const APP_VERSION_FALLBACK = '9.26';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -667,8 +667,8 @@ function silentTokenCheck() {
 }
 
 // ---- Google OAuth (Web) ----
-// drive.file — для синхронізації; cloud-platform — для голосового розпізнавання (Speech-to-Text); spreadsheets.readonly — для доступу до штатних таблиць
-const GOOGLE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/spreadsheets.readonly';
+// drive.file — для синхронізації; spreadsheets.readonly — для доступу до приватних таблиць (Штат)
+const GOOGLE_SCOPES = 'openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets.readonly';
 
 let gisTokenClient = null;
 
