@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deadline-tracker-v9.27';
+const CACHE_NAME = 'deadline-tracker-v9.28';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './themes.css',
   './base.css',
   './script.js',
+  './shtat-default.csv',
   './manifest.json',
   './logo-mark.svg',
   './deadline-alert.svg'

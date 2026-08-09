@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.27';
+const APP_VERSION_FALLBACK = '9.28';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -4455,6 +4455,23 @@ function getShtatSheetUrl() {
   return (v && v.trim()) ? v.trim() : '';
 }
 
+// Вбудовані дані штату (shtat-default.csv, згенерований з Штат.xlsx).
+// Використовуються, якщо Google Таблиця недоступна або посилання не вказане.
+const DEFAULT_SHTAT_CSV_URL = './shtat-default.csv';
+
+async function loadDefaultShtatData() {
+  try {
+    const resp = await fetch(DEFAULT_SHTAT_CSV_URL, { cache: 'no-cache' });
+    if (!resp.ok) return null;
+    const text = await resp.text();
+    const data = parseStaffCSV(text);
+    return (data && data.units.length) ? data : null;
+  } catch (e) {
+    console.warn('[Staff] Default data failed:', e.message);
+    return null;
+  }
+}
+
 function getStaffCsvUrls(url, opts = {}) {
   if (!url) return [];
   if (url.includes('script.google.com/macros')) return [url];
@@ -4911,7 +4928,7 @@ function parseStandardStaffCSV(dataRows) {
     }
 
     // Position row: col[0] is a digit number
-    if (num && /^\d+$/.test(num) && pos) {
+    if (num && /^\d+(\.\d+)?$/.test(num) && pos) {
       if (!currentMainUnit) {
         currentMainUnit = { name: 'Штатний розпис', subs: {} };
         currentSubName = '__ROOT__';
@@ -4966,7 +4983,7 @@ function detectStandardStaffFormat(dataRows) {
     // Google Sheets export: Row 0 col[0] starts with '№', col[1] has unit name
     if (i === 0 && /^№/.test(row[0]) && staffIsMainUnitName(row[1])) return true;
     // Any row has ДСНС or Вільний найм in col[3]
-    if ((row[3] === 'ДСНС' || /вільний найм/i.test(row[3])) && /^\d+$/.test(row[0])) return true;
+    if ((row[3] === 'ДСНС' || /вільний найм/i.test(row[3])) && /^\d+(\.\d+)?$/.test(row[0])) return true;
   }
   return false;
 }
@@ -5130,6 +5147,24 @@ async function refreshStaffFromSheets(options = {}) {
     return data;
   } catch (err) {
     let msg = err.message || String(err);
+
+    // ── Фолбек: якщо таблиця недоступна — показати вбудовані дані (shtat-default.csv) ──
+    try {
+      const fallback = await loadDefaultShtatData();
+      if (fallback) {
+        saveImportedStaff(fallback);
+        refreshShtatActiveView();
+        if (previewEl) previewEl.style.display = 'block';
+        if (!silent && statusEl) {
+          statusEl.style.whiteSpace = '';
+          statusEl.textContent = `ℹ️ Таблиця недоступна — показано вбудовані дані (${fallback.units.length} підрозділів, ${fallback.totalPositions} посад). Перевірте посилання у Налаштуваннях → Google Таблиці.`;
+          statusEl.style.color = 'var(--amber)';
+          statusEl.style.background = 'var(--amber-bg)';
+        }
+        console.warn('[Staff] Using embedded fallback data');
+        return fallback;
+      }
+    } catch (e2) {}
 
     // Provide actionable hints based on error type
     if (msg.includes('Failed to fetch') || msg.includes('fetch')) {
@@ -5768,10 +5803,17 @@ function initShtatMode() {
   bindShtatSubtabs();
   initShtatToolbar();
   refreshShtatActiveView();
-  // Якщо посилання збережене, але дані ще не завантажені — завантажити автоматично
-  if (getShtatSheetUrl() && !loadImportedStaff().units.length && !window.__shtatAutoLoaded) {
+  // Дані ще не завантажені — спробувати автоматично:
+  // з Google Таблиці (якщо є посилання) або з вбудованого shtat-default.csv
+  if (!loadImportedStaff().units.length && !window.__shtatAutoLoaded) {
     window.__shtatAutoLoaded = true;
-    refreshStaffFromSheets({ silent: true }).catch(() => {});
+    if (getShtatSheetUrl()) {
+      refreshStaffFromSheets({ silent: true }).catch(() => {});
+    } else {
+      loadDefaultShtatData().then(d => {
+        if (d) { saveImportedStaff(d); refreshShtatActiveView(); }
+      });
+    }
   }
 }
 
