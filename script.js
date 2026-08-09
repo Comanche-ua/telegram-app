@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.23';
+const APP_VERSION_FALLBACK = '9.24';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -6305,6 +6305,30 @@ document.addEventListener('DOMContentLoaded', () => {
   if (procFormInput) {
     const savedFormUrl = localStorage.getItem(PROC_FORM_URL_KEY);
     if (savedFormUrl) procFormInput.value = savedFormUrl;
+    // Автозбереження: посилання записується одразу при введенні
+    procFormInput.addEventListener('input', () => {
+      const v = procFormInput.value.trim();
+      if (v) localStorage.setItem(PROC_FORM_URL_KEY, v);
+      else localStorage.removeItem(PROC_FORM_URL_KEY);
+    });
+  }
+  const procFormSaveBtn = document.getElementById('proc-form-url-save-btn');
+  if (procFormSaveBtn) {
+    procFormSaveBtn.addEventListener('click', () => {
+      const url = (document.getElementById('proc-form-url').value || '').trim();
+      if (url) localStorage.setItem(PROC_FORM_URL_KEY, url);
+      else localStorage.removeItem(PROC_FORM_URL_KEY);
+      updateProcFormButton();
+      const st = document.getElementById('proc-form-status');
+      if (st) {
+        if (url && url.indexOf('docs.google.com/spreadsheets') > -1) {
+          st.textContent = '⚠️ Це схоже на Google Таблицю, а не на форму. Для таблиці плану закупівель є окреме поле вище.';
+        } else {
+          st.textContent = url ? '✅ Посилання на форму збережено.' : 'Посилання на форму видалено.';
+        }
+      }
+      setTimeout(() => { if (st) st.textContent = ''; }, 5000);
+    });
   }
 
   // Ініціалізація дашборду Штату
@@ -7402,6 +7426,24 @@ function setProcStatus(msg, color) {
   el.style.color = color || '';
 }
 
+// Відкриває налаштування на групі «Google Таблиці» і фокусує поле таблиці
+function openProcSheetSettings() {
+  openSettings();
+  document.querySelectorAll('.settings-nav-item').forEach(n => n.classList.toggle('active', n.dataset.group === 'sheets'));
+  document.querySelectorAll('.settings-group').forEach(g => g.classList.toggle('active', g.dataset.group === 'sheets'));
+  const panels = document.querySelector('.settings-panels');
+  if (panels) panels.scrollTop = 0;
+  const input = document.getElementById('proc-sheet-url-settings');
+  if (input) setTimeout(() => input.focus(), 150);
+}
+
+// Показує/ховає кнопку «⚙️ Вказати посилання на таблицю»
+function updateProcNoUrlHint() {
+  const btn = document.getElementById('procurement-no-url-btn');
+  if (!btn) return;
+  btn.style.display = getProcSheetUrl() ? 'none' : '';
+}
+
 function showProcCsvBox() {
   const box = document.getElementById('procurement-csv-box');
   if (box) box.style.display = 'block';
@@ -7414,7 +7456,13 @@ async function syncProcurementFromSheet() {
   if (btn) { btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
   try {
     if (!getProcSheetUrl()) {
-      setProcStatus('ℹ️ Вкажіть посилання на Google Таблицю плану закупівель у Налаштуваннях → Google Таблиці, щоб завантажити позиції.', 'var(--amber)');
+      let hint = '';
+      const formUrl = getProcFormUrl() || (document.getElementById('proc-form-url')?.value || '').trim();
+      if (formUrl && formUrl.indexOf('docs.google.com/spreadsheets') > -1) {
+        hint = ' Схоже, посилання на таблицю вставлене у поле «Форма плану закупівель» — перенесіть його у поле «Таблиця плану закупівель» вище.';
+      }
+      setProcStatus('ℹ️ Посилання на таблицю не знайдено.' + hint + ' Вкажіть його у Налаштуваннях → Google Таблиці.', 'var(--amber)');
+      updateProcNoUrlHint();
       return;
     }
     const csv = await fetchProcurementCsv();
@@ -7470,6 +7518,10 @@ function bindProcurementEvents() {
 
   document.getElementById('procurement-sync-btn')?.addEventListener('click', syncProcurementFromSheet);
 
+  // Кнопки налаштувань таблиці (шестерня та «Вказати посилання»)
+  document.getElementById('procurement-settings-btn')?.addEventListener('click', openProcSheetSettings);
+  document.getElementById('procurement-no-url-btn')?.addEventListener('click', openProcSheetSettings);
+
   document.getElementById('procurement-add-btn')?.addEventListener('click', () => {
     if (!procState) procState = loadProcState();
     procState.items.push({ id: procUid(), kekv: '', text: '', amount: '', procType: '', done: false });
@@ -7520,16 +7572,6 @@ function bindProcurementEvents() {
     if (url) window.open(url, '_blank');
   });
 
-  document.getElementById('proc-form-url-save-btn')?.addEventListener('click', () => {
-    const url = (document.getElementById('proc-form-url').value || '').trim();
-    if (url) localStorage.setItem(PROC_FORM_URL_KEY, url);
-    else localStorage.removeItem(PROC_FORM_URL_KEY);
-    updateProcFormButton();
-    const st = document.getElementById('proc-form-status');
-    if (st) st.textContent = url ? '✅ Посилання на форму збережено.' : 'Посилання на форму видалено.';
-    setTimeout(() => { if (st) st.textContent = ''; }, 3000);
-  });
-
   document.getElementById('procurement-csv-import-btn')?.addEventListener('click', () => {
     const csv = document.getElementById('procurement-csv-textarea').value;
     if (!csv.trim()) {
@@ -7575,6 +7617,7 @@ function renderProcurementWorkspace() {
   renderProcurementTable();
   updateProcGauge();
   updateProcFormButton();
+  updateProcNoUrlHint();
 
   // Автосинхронізація при завантаженні вкладки — щоб дані оновлювались автоматично
   if (getProcSheetUrl()) syncProcurementFromSheet();
