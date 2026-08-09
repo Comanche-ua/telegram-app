@@ -2857,6 +2857,31 @@ body.procurement-mode .procurement-workspace { display: block; }
 .proc-sum-pct-25 { color: #ffa726; font-weight: 700; }
 .proc-sum-pct-50 { color: #ffd54f; font-weight: 700; }
 .proc-sum-pct-75 { color: #4ade80; font-weight: 700; }
+/* Шкали виконання (0-100%) по кожному КЕКВ */
+.proc-kekv-title { flex: 1 1 100%; }
+.proc-kekv {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 230px;
+  min-width: 0;
+}
+.proc-kekv-head { font-size: 12px; color: var(--text3); }
+.proc-kekv-head > span { white-space: nowrap; }
+.proc-kekv-bar-row { display: flex; align-items: center; gap: 8px; }
+.proc-kekv-bar {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: var(--surface3);
+  overflow: hidden;
+}
+.proc-kekv-fill { height: 100%; border-radius: 4px; transition: width .35s ease; }
+.proc-kekv-fill-0  { background: #ff5a76; }
+.proc-kekv-fill-25 { background: #ffa726; }
+.proc-kekv-fill-50 { background: #ffd54f; }
+.proc-kekv-fill-75 { background: #4ade80; }
+.proc-kekv-pct { font-size: 11px; font-weight: 700; white-space: nowrap; }
 .proc-kekv {
   width: 66px;
   font-family: inherit;
@@ -3068,7 +3093,7 @@ body.procurement-mode .procurement-workspace { display: block; }
   /* Підсумки закупівель: рівні вертикальні абзаци для мобільних */
   .procurement-kekv-summary {
     flex-direction: column;
-    gap: 7px 0;
+    gap: 9px 0;
     padding: 10px 14px;
     line-height: 1.45;
   }
