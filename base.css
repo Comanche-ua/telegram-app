@@ -1908,6 +1908,79 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 12px;
 }
 .shtat-refresh-btn { white-space: nowrap; }
+/* ── Суб-вкладки: Штат / Некомплект / Військовий облік ── */
+.shtat-subtabs {
+  display: flex; gap: 6px; padding: 4px; margin-bottom: 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.shtat-subtab-btn {
+  flex: 1; padding: 9px 10px; border: none; border-radius: 10px; cursor: pointer;
+  background: transparent; color: var(--text2); font-size: 12px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all .15s ease;
+}
+.shtat-subtab-btn.active {
+  background: var(--accent); color: #fff;
+}
+.shtat-subtab-btn:active { transform: scale(.97); }
+.shtat-position-mil {
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; white-space: nowrap;
+}
+.shtat-position-mil.mil-bron { color: #3b82f6; background: rgba(59, 130, 246, .12); }
+.shtat-position-mil.mil-pryzovnyk { color: #f59e0b; background: rgba(245, 158, 11, .12); }
+.shtat-position-mil.mil-vidstrochka { color: #059669; background: rgba(5, 150, 105, .12); }
+.shtat-position-mil.mil-znyato { color: #64748b; background: rgba(100, 116, 139, .14); }
+.shtat-position-mil.mil-vyklyucheno { color: #94a3b8; background: rgba(148, 163, 184, .14); }
+.shtat-position-sex {
+  font-size: 10px; font-weight: 800; min-width: 18px; text-align: center;
+  padding: 2px 5px; border-radius: 6px; background: var(--surface3); color: var(--text2); white-space: nowrap;
+}
+.shtat-position-birth { font-size: 10px; color: var(--text3); white-space: nowrap; }
+.shtat-position-note { font-size: 10px; color: var(--text3); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.shtat-stat.dsns .shtat-stat-value { color: var(--blue); }
+.shtat-stat.vilnyi .shtat-stat-value { color: var(--amber); }
+.shtat-stat.male .shtat-stat-value { color: var(--blue); }
+.shtat-stat.female .shtat-stat-value { color: #ec4899; }
+.shtat-stat.unknown .shtat-stat-value { color: var(--text3); }
+.shtat-nekomplekt-tools { display: flex; justify-content: flex-end; }
+.shtat-copy-btn { white-space: nowrap; }
+.shtat-ok-box {
+  padding: 16px; border-radius: var(--radius-lg); text-align: center;
+  background: rgba(5, 150, 105, .08); border: 1px solid rgba(5, 150, 105, .25);
+  color: #059669; font-weight: 700; font-size: 13px;
+}
+.shtat-nekomplekt-list { display: flex; flex-direction: column; gap: 10px; }
+.shtat-mil-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.shtat-mil-chip {
+  padding: 7px 12px; border-radius: 99px; border: 1px solid var(--border); cursor: pointer;
+  background: var(--surface2); color: var(--text2); font-size: 11px; font-weight: 700; transition: all .15s ease;
+}
+.shtat-mil-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.shtat-mil-chip:active { transform: scale(.96); }
+.shtat-mil-group {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 12px 14px;
+}
+.shtat-mil-group-title {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 800; margin-bottom: 10px;
+}
+.shtat-mil-group-count {
+  font-size: 11px; font-weight: 700; color: var(--text3);
+  background: var(--surface2); padding: 2px 8px; border-radius: 99px;
+}
+.shtat-mil-person {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px; border-radius: 10px; background: var(--surface2);
+  margin-bottom: 8px;
+}
+.shtat-mil-person-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.shtat-mil-person-name { font-size: 13px; font-weight: 800; color: var(--text); }
+.shtat-mil-person-age {
+  font-size: 11px; font-weight: 700; color: var(--text3); background: var(--surface3);
+  padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+}
+.shtat-mil-person-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
+.shtat-mil-person-sub { font-size: 11px; color: var(--text3); }
 .shtat-analysis-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

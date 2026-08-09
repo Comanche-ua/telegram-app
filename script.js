@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.26';
+const APP_VERSION_FALLBACK = '9.27';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -4722,6 +4722,76 @@ function staffCategoryLabel(code) {
   return '—';
 }
 
+// ── Стать ──
+function staffSexLabel(raw) {
+  const s = staffClean(raw).toLowerCase();
+  if (s.startsWith('ч')) return 'Ч';
+  if (s.startsWith('ж')) return 'Ж';
+  return '';
+}
+function staffSexFull(raw) {
+  const s = staffSexLabel(raw);
+  return s === 'Ч' ? 'Чоловік' : (s === 'Ж' ? 'Жінка' : '');
+}
+
+// ── Дата народження: Excel-серійний номер (33710) або рядок "19.04.1992" ──
+function staffBirthDate(raw) {
+  const s = staffClean(raw);
+  if (!s) return '';
+  // Вже дата (крапки/слеші)
+  if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$/.test(s)) {
+    const m = s.split(/[./-]/);
+    if (m.length === 3 && m[2].length === 4) return `${m[2]}.${m[1].padStart(2, '0')}.${m[0].padStart(2, '0')}`;
+    if (m.length === 3 && m[2].length === 2) return `20${m[2]}.${m[1].padStart(2, '0')}.${m[0].padStart(2, '0')}`;
+    return s;
+  }
+  // Excel serial
+  const n = parseFloat(s);
+  if (!isNaN(n) && n > 20000 && n < 80000) {
+    const ms = (n - 25569) * 86400000;
+    const d = new Date(ms);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      if (y > 1920 && y < 2020) {
+        return `${y}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+      }
+    }
+  }
+  return s;
+}
+function staffBirthYear(raw) {
+  const b = staffBirthDate(raw);
+  const m = b.match(/^(\d{4})/);
+  return m ? m[1] : '';
+}
+
+// ── Статус військового обліку ──
+function staffMilitaryKey(raw) {
+  const s = staffClean(raw).toLowerCase();
+  if (s.includes('бронь')) return 'bron';
+  if (s.includes('призовник')) return 'pryzovnyk';
+  if (s.includes('відстрочк') || s.includes('вiдстрочк')) return 'vidstrochka';
+  if (s.includes('знято')) return 'znyato';
+  if (s.includes('виключен')) return 'vyklyucheno';
+  return '';
+}
+function staffMilitaryLabel(raw) {
+  const k = staffMilitaryKey(raw);
+  if (k === 'bron') return 'Бронь';
+  if (k === 'pryzovnyk') return 'Призовник (до 25)';
+  if (k === 'vidstrochka') return 'Має відстрочку';
+  if (k === 'znyato') return 'Знято з обліку';
+  if (k === 'vyklyucheno') return 'Виключено з обліку';
+  return '';
+}
+const MILITARY_META = [
+  { key: 'bron', label: 'Бронь', icon: '🛡️', color: '#3b82f6' },
+  { key: 'pryzovnyk', label: 'Призовники (до 25 років)', icon: '🎖️', color: '#f59e0b' },
+  { key: 'vidstrochka', label: 'Мають відстрочку', icon: '📄', color: '#059669' },
+  { key: 'znyato', label: 'Зняті з обліку', icon: '⚪', color: '#64748b' },
+  { key: 'vyklyucheno', label: 'Виключені з обліку', icon: '⚫', color: '#94a3b8' }
+];
+
 function computeStaffStats(units) {
   const stats = {
     dsns: { total: 0, filled: 0, vacant: 0 },
@@ -4850,7 +4920,18 @@ function parseStandardStaffCSV(dataRows) {
       }
       const filled = !staffIsVacant(person);
       const category = staffNormCategory(categoryRaw);
-      const entry = { position: pos, name: person, filled, category, rank, categoryRaw };
+      const entry = {
+        position: pos,
+        name: person,
+        filled,
+        category,
+        rank,
+        categoryRaw,
+        sex: staffSexLabel(row[5]),
+        birth: staffBirthDate(row[6]),
+        military: staffMilitaryLabel(row[7]),
+        note: staffClean(row[8])
+      };
       const key = currentSubName || '__ROOT__';
       if (!currentMainUnit.subs[key]) currentMainUnit.subs[key] = [];
       currentMainUnit.subs[key].push(entry);
@@ -5045,7 +5126,7 @@ async function refreshStaffFromSheets(options = {}) {
       statusEl.style.background = 'var(--green-bg)';
     }
 
-    renderShtatDashboard();
+    refreshShtatActiveView();
     return data;
   } catch (err) {
     let msg = err.message || String(err);
@@ -5200,12 +5281,17 @@ function setShtatFilterValue(value) {
 function renderShtatPositionRow(p) {
   const catLabel = staffCategoryLabel(p.category);
   const catClass = p.category === 'dsns' ? 'cat-dsns' : (p.category === 'vilnyi' ? 'cat-vilnyi' : '');
+  const sex = p.sex || '';
+  const mil = p.military || '';
   return `<div class="shtat-position-row ${p.filled ? '' : 'vacant'}">
     <span class="shtat-position-name">${escHtml(p.position)}</span>
     <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
+    ${mil ? `<span class="shtat-position-mil ${'mil-' + staffMilitaryKey(mil)}">${escHtml(mil)}</span>` : ''}
     <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
     <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
     ${p.rank ? `<span class="shtat-position-rank">${escHtml(p.rank)}</span>` : ''}
+    ${sex ? `<span class="shtat-position-sex">${escHtml(sex)}</span>` : ''}
+    ${p.birth ? `<span class="shtat-position-birth">${escHtml(p.birth)}</span>` : ''}
   </div>`;
 }
 
@@ -5394,6 +5480,272 @@ function toggleShtatUnit(idx) {
   if (card) card.classList.toggle('open');
 }
 
+// ── Суб-вкладки Штату: «Штат» / «Некомплект» / «Військовий облік» ──
+const SHTAT_SUBTAB_KEY = 'shtat_subtab';
+
+function getShtatSubtab() {
+  const v = localStorage.getItem(SHTAT_SUBTAB_KEY);
+  return (v === 'nekomplekt' || v === 'voblik' || v === 'shtat') ? v : 'shtat';
+}
+
+function switchShtatSubtab(tab) {
+  localStorage.setItem(SHTAT_SUBTAB_KEY, tab);
+  document.querySelectorAll('.shtat-subtab-btn').forEach(b => {
+    const active = b.dataset.shtatTab === tab;
+    b.classList.toggle('active', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  ['shtat', 'nekomplekt', 'voblik'].forEach(t => {
+    const panel = document.getElementById('shtat-tab-' + t);
+    if (panel) panel.style.display = t === tab ? '' : 'none';
+  });
+  refreshShtatActiveView();
+}
+
+function bindShtatSubtabs() {
+  document.querySelectorAll('.shtat-subtab-btn').forEach(b => {
+    if (b.dataset.shtatBound) return;
+    b.dataset.shtatBound = '1';
+    b.addEventListener('click', () => switchShtatSubtab(b.dataset.shtatTab));
+  });
+}
+
+// Рендерить активну суб-вкладку (також викликається після оновлення з таблиці)
+function refreshShtatActiveView() {
+  const tab = getShtatSubtab();
+  if (tab === 'nekomplekt') renderShtatNekomplekt();
+  else if (tab === 'voblik') renderShtatVoblik();
+  else renderShtatDashboard();
+}
+
+function shtatVisibleUnits() {
+  const data = loadImportedStaff();
+  const filterValue = getShtatFilterValue();
+  return filterValue === 'all'
+    ? data.units
+    : data.units.filter((_, i) => String(i) === filterValue);
+}
+
+function shtatEmptyBox(icon, title, sub) {
+  return `<div class="shtat-empty">
+    <div class="shtat-empty-icon">${icon}</div>
+    <div class="shtat-empty-title">${title}</div>
+    <div class="shtat-empty-sub">${sub}</div>
+  </div>`;
+}
+
+function fallbackCopyText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopyText(text));
+  } else {
+    fallbackCopyText(text);
+  }
+}
+
+// ── Суб-вкладка «Некомплект» ──
+function renderShtatNekomplekt() {
+  const container = document.getElementById('shtat-tab-nekomplekt');
+  if (!container) return;
+  const data = loadImportedStaff();
+  if (!data.units.length) {
+    container.innerHTML = shtatEmptyBox('⚠️', 'Некомплект',
+      'Завантажте таблицю Штат у розділі «📋 Штат», щоб побачити вакантні посади');
+    return;
+  }
+
+  const units = shtatVisibleUnits();
+  const vacant = [];
+  units.forEach(u => {
+    u.positions.forEach(p => {
+      if (!p.filled) vacant.push(Object.assign({}, p, { unit: u.name }));
+    });
+  });
+
+  const dsnsVac = vacant.filter(v => v.category === 'dsns').length;
+  const vilnyiVac = vacant.filter(v => v.category === 'vilnyi').length;
+  const unknownVac = vacant.length - dsnsVac - vilnyiVac;
+
+  const reportDate = new Date().toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  let report = `⚠️ НЕКОМПЛЕКТ — ${vacant.length} вакантних посад (на ${reportDate})\n`;
+  const byUnit = {};
+  units.forEach(u => {
+    const vacList = u.positions.filter(p => !p.filled);
+    if (!vacList.length) return;
+    byUnit[u.name] = vacList;
+    report += `\n${u.name} — ${vacList.length}:\n`;
+    vacList.forEach(v => {
+      const cat = staffCategoryLabel(v.category);
+      const note = v.note ? ` (${v.note})` : '';
+      report += `  • ${v.position} — ${cat}${note}\n`;
+    });
+  });
+
+  const copyBtn = vacant.length
+    ? `<button type="button" class="btn-secondary shtat-copy-btn" id="shtat-nekomplekt-copy">📋 Копіювати список</button>`
+    : '';
+
+  let html = `<div class="shtat-summary-cards">
+    <div class="shtat-stat vacant"><div class="shtat-stat-label">Вакантних посад</div><div class="shtat-stat-value">${vacant.length}</div><div class="shtat-stat-sub">по всіх підрозділах</div></div>
+    <div class="shtat-stat dsns"><div class="shtat-stat-label">ДСНС</div><div class="shtat-stat-value">${dsnsVac}</div><div class="shtat-stat-sub">вакансій</div></div>
+    <div class="shtat-stat vilnyi"><div class="shtat-stat-label">Вільний найм</div><div class="shtat-stat-value">${vilnyiVac}</div><div class="shtat-stat-sub">вакансій</div></div>
+    <div class="shtat-stat unknown"><div class="shtat-stat-label">Без категорії</div><div class="shtat-stat-value">${unknownVac}</div><div class="shtat-stat-sub">вакансій</div></div>
+  </div>
+  <div class="shtat-nekomplekt-tools">${copyBtn}</div>`;
+
+  if (!vacant.length) {
+    html += `<div class="shtat-ok-box">✅ Укомплектовано повністю — вакантних посад немає</div>`;
+  } else {
+    html += `<div class="shtat-nekomplekt-list">`;
+    Object.entries(byUnit).forEach(([unitName, positions]) => {
+      const pct = (() => { const u = units.find(x => x.name === unitName); return u && u.total ? Math.round(u.filled / u.total * 100) : 0; })();
+      html += `<div class="shtat-unit-card open">
+        <div class="shtat-unit-header">
+          <div class="shtat-unit-name">${escHtml(unitName)}</div>
+          <div class="shtat-unit-meta"><span class="shtat-rank-vac">${positions.length} вак.</span><span class="shtat-unit-cats">${pct}%</span></div>
+        </div>
+        <div class="shtat-unit-detail">`;
+      positions.forEach(p => {
+        const catLabel = staffCategoryLabel(p.category);
+        const catClass = p.category === 'dsns' ? 'cat-dsns' : (p.category === 'vilnyi' ? 'cat-vilnyi' : '');
+        html += `<div class="shtat-position-row vacant">
+          <span class="shtat-position-name">${escHtml(p.position)}</span>
+          <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
+          <span class="shtat-position-status vacant">Вакант</span>
+          <span class="shtat-position-person">—</span>
+          ${p.note ? `<span class="shtat-position-note">${escHtml(p.note)}</span>` : ''}
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+  const copyEl = document.getElementById('shtat-nekomplekt-copy');
+  if (copyEl) {
+    copyEl.addEventListener('click', () => {
+      copyTextToClipboard(report);
+      copyEl.textContent = '✅ Скопійовано';
+      setTimeout(() => { copyEl.textContent = '📋 Копіювати список'; }, 2000);
+    });
+  }
+}
+
+// ── Суб-вкладка «Військовий облік» ──
+const SHTAT_MIL_FILTER_KEY = 'shtat_mil_filter';
+
+function renderShtatVoblik() {
+  const container = document.getElementById('shtat-tab-voblik');
+  if (!container) return;
+  const data = loadImportedStaff();
+  if (!data.units.length) {
+    container.innerHTML = shtatEmptyBox('🪖', 'Військовий облік',
+      'Завантажте таблицю Штат у розділі «📋 Штат», щоб побачити облік особового складу');
+    return;
+  }
+
+  const units = shtatVisibleUnits();
+  const people = [];
+  units.forEach(u => {
+    u.positions.forEach(p => {
+      if (!p.filled) return; // лише зайняті посади
+      const milKey = staffMilitaryKey(p.military) || 'unknown';
+      const birthYear = staffBirthYear(p.birth);
+      const age = birthYear
+        ? Math.max(0, new Date().getFullYear() - parseInt(birthYear, 10))
+        : '';
+      people.push(Object.assign({}, p, { unit: u.name, milKey, age }));
+    });
+  });
+
+  const groups = {};
+  people.forEach(p => {
+    if (!groups[p.milKey]) groups[p.milKey] = [];
+    groups[p.milKey].push(p);
+  });
+
+  const males = people.filter(p => p.sex === 'Ч').length;
+  const females = people.filter(p => p.sex === 'Ж').length;
+
+  // Картки-зведення
+  let html = `<div class="shtat-summary-cards">
+    <div class="shtat-stat total"><div class="shtat-stat-label">На обліку</div><div class="shtat-stat-value">${people.length}</div><div class="shtat-stat-sub">зайнятих посад</div></div>
+    <div class="shtat-stat male"><div class="shtat-stat-label">Чоловіків</div><div class="shtat-stat-value">${males}</div><div class="shtat-stat-sub">особового складу</div></div>
+    <div class="shtat-stat female"><div class="shtat-stat-label">Жінок</div><div class="shtat-stat-value">${females}</div><div class="shtat-stat-sub">особового складу</div></div>
+    <div class="shtat-stat pct"><div class="shtat-stat-label">Бронь</div><div class="shtat-stat-value">${(groups.bron || []).length}</div><div class="shtat-stat-sub">заброньовано</div></div>
+  </div>
+  <div class="shtat-mil-chips">`;
+
+  // Чипси-фільтри
+  const activeMilFilter = localStorage.getItem(SHTAT_MIL_FILTER_KEY) || 'all';
+  const chipDefs = [{ key: 'all', label: `Усі (${people.length})` }].concat(
+    MILITARY_META.map(m => ({ key: m.key, label: `${m.icon} ${m.label} (${(groups[m.key] || []).length})` })),
+    [{ key: 'unknown', label: `Без статусу (${(groups.unknown || []).length})` }]
+  );
+  chipDefs.forEach(c => {
+    const isActive = activeMilFilter === c.key;
+    html += `<button type="button" class="shtat-mil-chip${isActive ? ' active' : ''}" data-mil-filter="${c.key}">${c.label}</button>`;
+  });
+  html += `</div>`;
+
+  // Список людей
+  const showAll = activeMilFilter === 'all';
+  const shown = Object.entries(groups)
+    .filter(([k]) => showAll || k === activeMilFilter)
+    .sort((a, b) => {
+      const ia = MILITARY_META.findIndex(m => m.key === a[0]);
+      const ib = MILITARY_META.findIndex(m => m.key === b[0]);
+      const da = ia === -1 ? 99 : ia;
+      const db = ib === -1 ? 99 : ib;
+      return da - db;
+    });
+
+  shown.forEach(([milKey, list]) => {
+    const meta = MILITARY_META.find(m => m.key === milKey);
+    const title = meta ? `${meta.icon} ${meta.label}` : '❓ Без статусу';
+    const color = meta ? meta.color : 'var(--text3)';
+    const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+    html += `<div class="shtat-mil-group">
+      <div class="shtat-mil-group-title"><span style="color:${color}">${title}</span><span class="shtat-mil-group-count">${list.length}</span></div>`;
+    sorted.forEach(p => {
+      html += `<div class="shtat-mil-person">
+        <div class="shtat-mil-person-head">
+          <span class="shtat-mil-person-name">${escHtml(p.name)}</span>
+          ${p.age !== '' ? `<span class="shtat-mil-person-age">${p.age} р.</span>` : ''}
+        </div>
+        <div class="shtat-mil-person-meta">
+          ${p.rank ? `<span>${escHtml(p.rank)}</span>` : ''}
+          ${p.sex ? `<span class="shtat-position-sex">${escHtml(p.sex)}</span>` : ''}
+          ${p.birth ? `<span>📅 ${escHtml(p.birth)}</span>` : ''}
+        </div>
+        <div class="shtat-mil-person-sub">${escHtml(p.position)} · ${escHtml(p.unit)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+
+  // Кліки по чипсах
+  container.querySelectorAll('.shtat-mil-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      localStorage.setItem(SHTAT_MIL_FILTER_KEY, chip.dataset.milFilter);
+      renderShtatVoblik();
+    });
+  });
+}
+
 function initShtatToolbar() {
   const filterSelect = document.getElementById('shtat-unit-filter');
   const refreshBtn = document.getElementById('shtat-refresh-btn');
@@ -5401,7 +5753,7 @@ function initShtatToolbar() {
     filterSelect.dataset.bound = '1';
     filterSelect.addEventListener('change', () => {
       setShtatFilterValue(filterSelect.value);
-      renderShtatDashboard();
+      refreshShtatActiveView();
     });
   }
   if (refreshBtn && !refreshBtn.dataset.bound) {
@@ -5413,8 +5765,9 @@ function initShtatToolbar() {
 }
 
 function initShtatMode() {
+  bindShtatSubtabs();
   initShtatToolbar();
-  renderShtatDashboard();
+  refreshShtatActiveView();
   // Якщо посилання збережене, але дані ще не завантажені — завантажити автоматично
   if (getShtatSheetUrl() && !loadImportedStaff().units.length && !window.__shtatAutoLoaded) {
     window.__shtatAutoLoaded = true;
