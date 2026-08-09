@@ -3099,6 +3099,8 @@ body.procurement-mode .procurement-workspace { display: block; }
     padding: 10px 14px;
     line-height: 1.45;
   }
+  /* У колонці flex-basis йде по висоті — скидаємо, щоб картки не розтягувались на 230px */
+  .pk-card { flex: 0 1 auto; }
   /* Закупівлі: таблиця → картки для мобільних */
   .procurement-table-wrap { overflow: visible; }
   .procurement-table { display: block; width: 100%; min-width: 0; }
