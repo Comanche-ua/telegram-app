@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.21';
+const APP_VERSION_FALLBACK = '9.22';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -6275,6 +6275,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ---- Таблиця плану закупівель (посилання на Google Таблицю) ----
+  const procSheetInput = document.getElementById('proc-sheet-url-settings');
+  if (procSheetInput) {
+    const savedSheetUrl = localStorage.getItem(PROC_SHEET_URL_KEY);
+    if (savedSheetUrl) procSheetInput.value = savedSheetUrl;
+  }
+
   // ---- Форма плану закупівель (посилання на Google Форму) ----
   const procFormInput = document.getElementById('proc-form-url');
   if (procFormInput) {
@@ -7381,7 +7388,7 @@ async function syncProcurementFromSheet() {
   if (btn) { btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
   try {
     if (!getProcSheetUrl()) {
-      setProcStatus('ℹ️ Вкажіть посилання на Google Таблицю плану закупівель (кнопка «Зберегти URL» вище), щоб завантажити позиції.', 'var(--amber)');
+      setProcStatus('ℹ️ Вкажіть посилання на Google Таблицю плану закупівель у Налаштуваннях → Google Таблиці, щоб завантажити позиції.', 'var(--amber)');
       return;
     }
     const csv = await fetchProcurementCsv();
@@ -7481,11 +7488,14 @@ function bindProcurementEvents() {
     e.target.value = '';
   });
 
-  document.getElementById('procurement-url-save-btn')?.addEventListener('click', () => {
-    const url = document.getElementById('procurement-sheet-url').value.trim();
+  // URL таблиці плану закупівель (зберігається в налаштуваннях)
+  document.getElementById('proc-sheet-url-save-btn')?.addEventListener('click', () => {
+    const url = (document.getElementById('proc-sheet-url-settings').value || '').trim();
     if (url) localStorage.setItem(PROC_SHEET_URL_KEY, url);
     else localStorage.removeItem(PROC_SHEET_URL_KEY);
-    alert('URL Google Таблиці плану закупівель збережено.');
+    const st = document.getElementById('proc-sheet-url-status');
+    if (st) st.textContent = url ? '✅ Посилання на таблицю збережено.' : 'Посилання на таблицю видалено.';
+    setTimeout(() => { if (st) st.textContent = ''; }, 3000);
     if (url) syncProcurementFromSheet();
   });
 
@@ -7546,10 +7556,6 @@ function renderProcurementWorkspace() {
   if (!procState) procState = loadProcState();
   bindProcurementEvents();
   buildGaugeStatic('proc');
-
-  // URL-поле
-  const urlInput = document.getElementById('procurement-sheet-url');
-  if (urlInput) urlInput.value = getProcSheetUrl();
 
   renderProcurementTable();
   updateProcGauge();
