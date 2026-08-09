@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.28';
+const APP_VERSION_FALLBACK = '9.29';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -5319,14 +5319,19 @@ function renderShtatPositionRow(p) {
   const sex = p.sex || '';
   const mil = p.military || '';
   return `<div class="shtat-position-row ${p.filled ? '' : 'vacant'}">
-    <span class="shtat-position-name">${escHtml(p.position)}</span>
-    <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
-    ${mil ? `<span class="shtat-position-mil ${'mil-' + staffMilitaryKey(mil)}">${escHtml(mil)}</span>` : ''}
-    <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓' : 'Вакант'}</span>
-    <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
-    ${p.rank ? `<span class="shtat-position-rank">${escHtml(p.rank)}</span>` : ''}
-    ${sex ? `<span class="shtat-position-sex">${escHtml(sex)}</span>` : ''}
-    ${p.birth ? `<span class="shtat-position-birth">${escHtml(p.birth)}</span>` : ''}
+    <div class="shtat-position-head">
+      <span class="shtat-position-name">${escHtml(p.position)}</span>
+      <span class="shtat-position-status ${p.filled ? 'filled' : 'vacant'}">${p.filled ? '✓ Зайнято' : 'Вакант'}</span>
+    </div>
+    <div class="shtat-position-meta">
+      <span class="shtat-position-person">${p.filled ? escHtml(p.name) : '—'}</span>
+      <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
+      ${mil ? `<span class="shtat-position-mil ${'mil-' + staffMilitaryKey(mil)}">${escHtml(mil)}</span>` : ''}
+      ${p.rank ? `<span class="shtat-position-rank">${escHtml(p.rank)}</span>` : ''}
+      ${sex ? `<span class="shtat-position-sex">${escHtml(sex)}</span>` : ''}
+      ${p.birth ? `<span class="shtat-position-birth">${escHtml(p.birth)}</span>` : ''}
+      ${p.note ? `<span class="shtat-position-note">${escHtml(p.note)}</span>` : ''}
+    </div>
   </div>`;
 }
 
@@ -5650,17 +5655,7 @@ function renderShtatNekomplekt() {
           <div class="shtat-unit-meta"><span class="shtat-rank-vac">${positions.length} вак.</span><span class="shtat-unit-cats">${pct}%</span></div>
         </div>
         <div class="shtat-unit-detail">`;
-      positions.forEach(p => {
-        const catLabel = staffCategoryLabel(p.category);
-        const catClass = p.category === 'dsns' ? 'cat-dsns' : (p.category === 'vilnyi' ? 'cat-vilnyi' : '');
-        html += `<div class="shtat-position-row vacant">
-          <span class="shtat-position-name">${escHtml(p.position)}</span>
-          <span class="shtat-position-cat ${catClass}">${escHtml(catLabel)}</span>
-          <span class="shtat-position-status vacant">Вакант</span>
-          <span class="shtat-position-person">—</span>
-          ${p.note ? `<span class="shtat-position-note">${escHtml(p.note)}</span>` : ''}
-        </div>`;
-      });
+      positions.forEach(p => { html += renderShtatPositionRow(p); });
       html += `</div></div>`;
     });
     html += `</div>`;

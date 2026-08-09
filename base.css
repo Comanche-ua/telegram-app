@@ -1907,14 +1907,14 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   flex: 1; min-width: 180px; max-width: 520px; padding: 8px 10px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-size: 12px;
 }
-.shtat-refresh-btn { white-space: nowrap; }
+.shtat-refresh-btn { white-space: nowrap; margin-left: auto; }
 /* ── Суб-вкладки: Штат / Некомплект / Військовий облік ── */
 .shtat-subtabs {
   display: flex; gap: 6px; padding: 4px; margin-bottom: 14px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
 }
 .shtat-subtab-btn {
-  flex: 1; padding: 9px 10px; border: none; border-radius: 10px; cursor: pointer;
+  flex: 1 1 0; min-width: 0; padding: 9px 10px; border: none; border-radius: 10px; cursor: pointer;
   background: transparent; color: var(--text2); font-size: 12px; font-weight: 700;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: all .15s ease;
 }
@@ -1935,7 +1935,7 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
   padding: 2px 5px; border-radius: 6px; background: var(--surface3); color: var(--text2); white-space: nowrap;
 }
 .shtat-position-birth { font-size: 10px; color: var(--text3); white-space: nowrap; }
-.shtat-position-note { font-size: 10px; color: var(--text3); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.shtat-position-note { font-size: 10px; color: var(--text3); font-style: italic; }
 .shtat-stat.dsns .shtat-stat-value { color: var(--blue); }
 .shtat-stat.vilnyi .shtat-stat-value { color: var(--amber); }
 .shtat-stat.male .shtat-stat-value { color: var(--blue); }
@@ -1957,12 +1957,13 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
 .shtat-mil-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .shtat-mil-chip:active { transform: scale(.96); }
 .shtat-mil-group {
+  display: flex; flex-direction: column; gap: 8px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 14px;
 }
 .shtat-mil-group-title {
   display: flex; align-items: center; justify-content: space-between;
-  font-size: 13px; font-weight: 800; margin-bottom: 10px;
+  font-size: 13px; font-weight: 800;
 }
 .shtat-mil-group-count {
   font-size: 11px; font-weight: 700; color: var(--text3);
@@ -1971,7 +1972,6 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
 .shtat-mil-person {
   display: flex; flex-direction: column; gap: 3px;
   padding: 10px 12px; border-radius: 10px; background: var(--surface2);
-  margin-bottom: 8px;
 }
 .shtat-mil-person-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .shtat-mil-person-name { font-size: 13px; font-weight: 800; color: var(--text); }
@@ -2040,14 +2040,17 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
 }
 .shtat-unit-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px 12px;
   padding: 14px 16px;
   cursor: pointer;
 }
-.shtat-unit-name { font-size: 14px; font-weight: 700; }
-.shtat-unit-count { font-size: 12px; color: var(--text2); font-weight: 600; }
+.shtat-unit-name { font-size: 14px; font-weight: 700; flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+.shtat-unit-meta { flex: 0 0 auto; }
+.shtat-unit-bar-wrap { flex: 1 1 140px; min-width: 60px; max-width: 260px; height: 6px; border-radius: 99px; background: var(--surface3); overflow: hidden; }
+.shtat-unit-count { font-size: 12px; color: var(--text2); font-weight: 600; flex: 0 0 auto; }
 .shtat-unit-chevron { color: var(--text3); transition: transform .2s ease; font-size: 11px; }
 .shtat-unit-card.open .shtat-unit-chevron { transform: rotate(180deg); }
 .shtat-unit-detail { padding: 0 16px 14px; display: none; }
@@ -2055,17 +2058,23 @@ body.app-locked > *:not(.lock-screen) { display: none !important; }
 .shtat-unit-subsection { margin: 10px 0 6px; font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; }
 .shtat-position-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
 }
 .shtat-position-row:last-child { border-bottom: none; }
-.shtat-position-name { color: var(--text); }
-.shtat-position-person { color: var(--text2); font-size: 12px; }
-.shtat-position-row.vacant .shtat-position-person { color: var(--red); font-weight: 600; }
+.shtat-position-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.shtat-position-name { color: var(--text); font-weight: 600; min-width: 0; flex: 1; overflow-wrap: break-word; }
+.shtat-position-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.shtat-position-person { color: var(--text2); font-size: 12px; font-weight: 700; }
+.shtat-position-row.vacant .shtat-position-person { color: var(--text3); font-weight: 600; }
+.shtat-position-status {
+  font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 99px;
+  white-space: nowrap; flex: 0 0 auto;
+}
+.shtat-position-status.filled { color: #059669; background: rgba(5, 150, 105, .12); }
+.shtat-position-status.vacant { color: var(--red); background: rgba(239, 68, 68, .12); }
 .shtat-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -3155,4 +3164,14 @@ body.procurement-mode .procurement-workspace { display: block; }
   }
   /* У колонці flex-basis йде по висоті — скидаємо, щоб картки не розтягувались на 230px */
   .pk-card { flex: 0 1 auto; }
+  /* Штат: суб-вкладки — рівні клітинки, текст переноситься */
+  .shtat-subtabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .shtat-subtab-btn { white-space: normal; line-height: 1.15; padding: 9px 4px; font-size: 11px; }
+  /* Штат: шапка підрозділу — назва, потім мета+лічильник, потім бар на всю ширину */
+  .shtat-unit-name { flex: 1 1 100%; }
+  .shtat-unit-meta { order: 2; }
+  .shtat-unit-count { order: 2; }
+  .shtat-unit-bar-wrap { flex: 1 1 100%; order: 3; max-width: none; }
+  /* Штат: рядки рейтингу укомплектованості */
+  .shtat-rank-row { grid-template-columns: minmax(0, 1fr) 1fr auto; gap: 8px; }
 }
