@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.24';
+const APP_VERSION_FALLBACK = '9.25';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -6300,36 +6300,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---- Форма плану закупівель (посилання на Google Форму) ----
-  const procFormInput = document.getElementById('proc-form-url');
-  if (procFormInput) {
-    const savedFormUrl = localStorage.getItem(PROC_FORM_URL_KEY);
-    if (savedFormUrl) procFormInput.value = savedFormUrl;
-    // Автозбереження: посилання записується одразу при введенні
-    procFormInput.addEventListener('input', () => {
-      const v = procFormInput.value.trim();
-      if (v) localStorage.setItem(PROC_FORM_URL_KEY, v);
-      else localStorage.removeItem(PROC_FORM_URL_KEY);
-    });
-  }
-  const procFormSaveBtn = document.getElementById('proc-form-url-save-btn');
-  if (procFormSaveBtn) {
-    procFormSaveBtn.addEventListener('click', () => {
-      const url = (document.getElementById('proc-form-url').value || '').trim();
-      if (url) localStorage.setItem(PROC_FORM_URL_KEY, url);
-      else localStorage.removeItem(PROC_FORM_URL_KEY);
-      updateProcFormButton();
-      const st = document.getElementById('proc-form-status');
-      if (st) {
-        if (url && url.indexOf('docs.google.com/spreadsheets') > -1) {
-          st.textContent = '⚠️ Це схоже на Google Таблицю, а не на форму. Для таблиці плану закупівель є окреме поле вище.';
-        } else {
-          st.textContent = url ? '✅ Посилання на форму збережено.' : 'Посилання на форму видалено.';
-        }
-      }
-      setTimeout(() => { if (st) st.textContent = ''; }, 5000);
-    });
-  }
+  // Прибирання застарілого ключа посилання на форму (більше не використовується)
+  try { localStorage.removeItem('procurement_plan_form_url'); } catch (e) { /* ignore */ }
 
   // Ініціалізація дашборду Штату
   initShtatMode();
@@ -7032,7 +7004,6 @@ async function renderPmmWorkspace() {
 // ============================================================
 const PROC_DATA_KEY = 'procurement_plan_data_v1';
 const PROC_SHEET_URL_KEY = 'procurement_plan_sheet_url';
-const PROC_FORM_URL_KEY = 'procurement_plan_form_url';
 
 let procState = null; // { items: [{id, kekv, text, amount, procType, done}] }
 let procEventsBound = false;
@@ -7062,18 +7033,6 @@ function getProcSheetUrl() {
     if (iv) return iv;
   }
   return '';
-}
-
-function getProcFormUrl() {
-  return (localStorage.getItem(PROC_FORM_URL_KEY) || '').trim();
-}
-
-// Показує/ховає кнопку «Відкрити форму» залежно від збереженого посилання
-function updateProcFormButton() {
-  const btn = document.getElementById('procurement-form-open-btn');
-  if (!btn) return;
-  const url = getProcFormUrl();
-  btn.style.display = url ? '' : 'none';
 }
 
 function procUid() {
@@ -7456,12 +7415,7 @@ async function syncProcurementFromSheet() {
   if (btn) { btn.classList.add('loading'); btn.textContent = '🔄 Завантаження…'; }
   try {
     if (!getProcSheetUrl()) {
-      let hint = '';
-      const formUrl = getProcFormUrl() || (document.getElementById('proc-form-url')?.value || '').trim();
-      if (formUrl && formUrl.indexOf('docs.google.com/spreadsheets') > -1) {
-        hint = ' Схоже, посилання на таблицю вставлене у поле «Форма плану закупівель» — перенесіть його у поле «Таблиця плану закупівель» вище.';
-      }
-      setProcStatus('ℹ️ Посилання на таблицю не знайдено.' + hint + ' Вкажіть його у Налаштуваннях → Google Таблиці.', 'var(--amber)');
+      setProcStatus('ℹ️ Посилання на таблицю не знайдено. Вкажіть його у Налаштуваннях → Google Таблиці.', 'var(--amber)');
       updateProcNoUrlHint();
       return;
     }
@@ -7566,12 +7520,6 @@ function bindProcurementEvents() {
     e.target.value = '';
   });
 
-  // Форма плану закупівель (посилання задається в налаштуваннях)
-  document.getElementById('procurement-form-open-btn')?.addEventListener('click', () => {
-    const url = getProcFormUrl();
-    if (url) window.open(url, '_blank');
-  });
-
   document.getElementById('procurement-csv-import-btn')?.addEventListener('click', () => {
     const csv = document.getElementById('procurement-csv-textarea').value;
     if (!csv.trim()) {
@@ -7616,7 +7564,6 @@ function renderProcurementWorkspace() {
 
   renderProcurementTable();
   updateProcGauge();
-  updateProcFormButton();
   updateProcNoUrlHint();
 
   // Автосинхронізація при завантаженні вкладки — щоб дані оновлювались автоматично
