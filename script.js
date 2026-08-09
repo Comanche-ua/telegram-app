@@ -1,6 +1,6 @@
 // ===== Workspace State =====
 // Версія застосунку (показується у верхній панелі; основний пріоритет — URL script.js ?v=)
-const APP_VERSION_FALLBACK = '9.18';
+const APP_VERSION_FALLBACK = '9.20';
 const APP_SCRIPT_SRC = (document.currentScript && document.currentScript.src) || '';
 
 let workspaces = {};          // { [id]: { name: string, items: Item[] } }
@@ -7296,13 +7296,13 @@ function renderProcurementTable() {
   items.forEach((item, idx) => {
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td class="proc-num" data-label="№">' + (item.done ? '<span class="proc-num-done" title="Виконано">✓</span>' : (idx + 1)) + '</td>' +
-      '<td class="proc-text-cell" data-label="Предмет закупівлі"><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
-      '<td class="proc-kekv-cell" data-label="КЕКВ"><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
-      '<td class="proc-amount-cell" data-label="Вартість, грн"><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
-      '<td class="proc-type-cell" data-label="Тип угоди">' + procTypeSelectHtml(item) + '</td>' +
-      '<td class="proc-check-cell" data-label=""><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
-      '<td class="proc-del-cell" data-label=""><button class="proc-del" title="Видалити">×</button></td>';
+      '<td class="proc-num">' + (item.done ? '<span class="proc-num-done" title="Виконано">✓</span>' : (idx + 1)) + '</td>' +
+      '<td><input type="text" class="proc-kekv" value="' + procEscapeAttr(item.kekv || '') + '" placeholder="КЕКВ"></td>' +
+      '<td><input type="text" class="proc-text" value="' + procEscapeAttr(item.text) + '" placeholder="Предмет закупівлі…"></td>' +
+      '<td><input type="text" inputmode="decimal" class="proc-amount" value="' + procEscapeAttr(item.amount || '') + '" placeholder="0,00"></td>' +
+      '<td>' + procTypeSelectHtml(item) + '</td>' +
+      '<td><input type="checkbox" class="proc-check" ' + (item.done ? 'checked' : '') + '></td>' +
+      '<td><button class="proc-del" title="Видалити">×</button></td>';
 
     const textInput = tr.querySelector('.proc-text');
     textInput.addEventListener('input', e => { item.text = e.target.value; });
