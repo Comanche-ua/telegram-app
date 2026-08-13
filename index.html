@@ -11,11 +11,14 @@
 <link rel="icon" href="logo-mark.svg" type="image/svg+xml">
 <title>Контроль дедлайнів</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="themes.css?v=1.2">
-<link rel="stylesheet" href="base.css?v=2.16">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Етап 5: legacy script.js видалено — вся логіка портована в src/modules/ -->
 
+
+  <script type="module" crossorigin src="./assets/index-CSpo7Oab.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/react-_SDClmCM.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-CvHYXDvx.css">
 </head>
 <body data-theme="binance">
 
@@ -734,7 +737,7 @@
     </div>
 </div>
 
-<script src="script.js?v=9.30"></script>
+<div id="react-root"></div>
 <datalist id="assignees-datalist"></datalist>
 <script>
   if ('serviceWorker' in navigator) {
